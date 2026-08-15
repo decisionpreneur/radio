@@ -57,6 +57,31 @@ test("Cloudflare newline license list rejects missing keys", async () => {
   assert.equal(body.error, "license_key_not_listed");
 });
 
+test("Cloudflare manual list does not shadow configured Lemon paid keys", async () => {
+  const response = await handleLicenseRequest(context({
+    body: { licenseKey: "paid-key", email: "buyer@example.com", instanceName: "radio-test" },
+    env: {
+      RADIO_LICENSE_KEYS: "manual-key",
+      RADIO_LEMONSQUEEZY_PRODUCT_ID: "4"
+    }
+  }), "activate", {
+    fetcher: async () => Response.json({
+      activated: true,
+      error: null,
+      license_key: { status: "active", expires_at: null },
+      instance: { id: "instance-1" },
+      meta: {
+        product_id: 4,
+        customer_email: "buyer@example.com"
+      }
+    })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.unlocked, true);
+  assert.equal(body.provider, "lemonsqueezy");
+});
+
 test("Lemon Squeezy activation checks active status, email, product, and variant", async () => {
   const response = await handleLicenseRequest(context({
     body: { licenseKey: "paid-key", email: "Buyer@Example.com", instanceName: "radio-test" },

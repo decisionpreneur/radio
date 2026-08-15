@@ -37,15 +37,26 @@ export async function handleLicenseRequest(context, action, options = {}) {
   }
 
   const listVerdict = await verifyCloudflareKeyList(context.env, licenseKey, "RADIO_LICENSE_KEYS");
-  if (listVerdict.configured) {
+  if (listVerdict.configured && listVerdict.unlocked) {
     return json({
-      ok: listVerdict.unlocked,
-      unlocked: listVerdict.unlocked,
+      ok: true,
+      unlocked: true,
       provider: "cloudflare-list",
-      licenseStatus: listVerdict.unlocked ? "active" : null,
-      instanceId: listVerdict.unlocked ? instanceId || instanceName : null,
-      error: listVerdict.unlocked ? null : "license_key_not_listed"
-    }, listVerdict.unlocked ? 200 : 403);
+      licenseStatus: "active",
+      instanceId: instanceId || instanceName,
+      error: null
+    });
+  }
+  const lemonConfigured = hasLemonConstraint(context.env);
+  if (listVerdict.configured && !lemonConfigured) {
+    return json({
+      ok: false,
+      unlocked: false,
+      provider: "cloudflare-list",
+      licenseStatus: null,
+      instanceId: null,
+      error: "license_key_not_listed"
+    }, 403);
   }
 
   const providerResponse = await requestLemonLicense({
@@ -215,6 +226,13 @@ function timingSafeEqualHex(left, right) {
 
 function requiresEmail(env) {
   return normalizeText(env.RADIO_LICENSE_REQUIRE_EMAIL) !== "0";
+}
+
+function hasLemonConstraint(env) {
+  return Boolean(
+    normalizeText(env.RADIO_LEMONSQUEEZY_PRODUCT_ID) ||
+    normalizeText(env.RADIO_LEMONSQUEEZY_VARIANT_ID)
+  );
 }
 
 function normalizeKey(value) {

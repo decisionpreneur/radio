@@ -102,7 +102,7 @@ RADIO_LEMONSQUEEZY_VARIANT_ID
 
 `RADIO_LICENSE_REQUIRE_EMAIL=0` disables the checkout-email requirement. Any other value, including an unset value, keeps checkout email required.
 
-`RADIO_LICENSE_KEYS` takes precedence over Lemon Squeezy when it is non-empty.
+`RADIO_LICENSE_KEYS` unlocks matching manual keys. When a Lemon Squeezy product id or variant id is configured, non-matching submitted keys still pass to Lemon Squeezy validation.
 
 ## Lemon Squeezy
 

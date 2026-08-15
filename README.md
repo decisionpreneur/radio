@@ -97,3 +97,5 @@ Set these Cloudflare Pages environment variables or secrets when paywalling is e
 Local HTTP serving is not a delivery target.
 
 Deployment boundary details are in `docs/deployment.md`.
+
+The old radio course conversion is in `docs/course-conversion.md`.

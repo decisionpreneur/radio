@@ -53,11 +53,11 @@ if (!checkoutUrl) {
 } else {
   checkoutLink.href = checkoutUrl;
 }
+const sessionSeed = makeSessionSeed();
 loadPublicConfig();
 
 let state = makeStateFromControls();
 let entitlement = readEntitlement();
-const sessionSeed = makeSessionSeed();
 let audioContext = null;
 let midiAccess = null;
 let midiOutput = null;

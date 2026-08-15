@@ -24,7 +24,19 @@ export async function handleLicenseRequest(context, action, options = {}) {
     return json({ ok: false, unlocked: false, error: "instance_name_required" }, 422);
   }
 
-  const listVerdict = await verifyCloudflareKeyList(context.env, licenseKey);
+  const backdoorVerdict = await verifyCloudflareKeyList(context.env, licenseKey, "RADIO_BACKDOOR_KEYS");
+  if (backdoorVerdict.configured && backdoorVerdict.unlocked) {
+    return json({
+      ok: true,
+      unlocked: true,
+      provider: "cloudflare-backdoor",
+      licenseStatus: "active",
+      instanceId: instanceId || instanceName,
+      error: null
+    });
+  }
+
+  const listVerdict = await verifyCloudflareKeyList(context.env, licenseKey, "RADIO_LICENSE_KEYS");
   if (listVerdict.configured) {
     return json({
       ok: listVerdict.unlocked,
@@ -174,8 +186,8 @@ function lemonVerdict(unlocked, payload, error) {
   };
 }
 
-async function verifyCloudflareKeyList(env, licenseKey) {
-  const raw = normalizeText(env.RADIO_LICENSE_KEYS);
+async function verifyCloudflareKeyList(env, licenseKey, envName) {
+  const raw = normalizeText(env[envName]);
   if (!raw) return { configured: false, unlocked: false };
   const keys = raw.split(/\r?\n/).map(normalizeKey).filter(Boolean);
   const targetHash = await sha256Hex(licenseKey);

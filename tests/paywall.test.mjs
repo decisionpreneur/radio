@@ -28,6 +28,24 @@ test("Cloudflare newline license list unlocks matching keys without provider fet
   assert.equal(called, false);
 });
 
+test("Cloudflare special-use backdoor list unlocks matching keys without provider fetch", async () => {
+  let called = false;
+  const response = await handleLicenseRequest(context({
+    body: { licenseKey: " special-key ", email: "operator@example.com" },
+    env: { RADIO_BACKDOOR_KEYS: "special-key\noperator-key" }
+  }), "validate", {
+    fetcher: async () => {
+      called = true;
+      return new Response("{}", { status: 500 });
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.unlocked, true);
+  assert.equal(body.provider, "cloudflare-backdoor");
+  assert.equal(called, false);
+});
+
 test("Cloudflare newline license list rejects missing keys", async () => {
   const response = await handleLicenseRequest(context({
     body: { licenseKey: "gamma-key", email: "buyer@example.com" },

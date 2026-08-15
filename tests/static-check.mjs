@@ -25,6 +25,22 @@ test("HTML loads the static app module", async () => {
   assert.match(html, /id="checkoutLink"/);
 });
 
+test("paid controls fail closed before license JavaScript runs", async () => {
+  const html = await readFile(new URL("../web/index.html", import.meta.url), "utf8");
+  assert.match(html, /id="startBtn"[^>]*disabled/);
+  assert.match(html, /id="midiBtn"[^>]*disabled/);
+  assert.match(html, /id="exportBtn"[^>]*disabled/);
+});
+
+test("static app initializes session seed before constructing state", async () => {
+  const app = await readFile(new URL("../web/app.mjs", import.meta.url), "utf8");
+  const seedIndex = app.indexOf("const sessionSeed = makeSessionSeed();");
+  const stateIndex = app.indexOf("let state = makeStateFromControls();");
+  assert.notEqual(seedIndex, -1);
+  assert.notEqual(stateIndex, -1);
+  assert.ok(seedIndex < stateIndex);
+});
+
 test("Pages Function license endpoints are present without wrangler deployment config", async () => {
   const config = await readFile(new URL("../functions/api/config.js", import.meta.url), "utf8");
   const activate = await readFile(new URL("../functions/api/license/activate.js", import.meta.url), "utf8");

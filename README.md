@@ -48,6 +48,30 @@ The full test runner includes the Z3 invariant check.
 
 Unchosen tuneables randomize by default. A blank control means the shared engine receives no value for that tuneable and derives it from the current seed.
 
+## Instrument Set
+
+The lean version is constrained to every visible lane label in the attached drum-lane screenshot:
+
+- A5
+- E2
+- Ride Cup Gen Purpose
+- Ride Gen Purpose
+- Crash Gen Purpose 2
+- Crash Gen Purpose
+- Tom High Gen Purpose
+- Hihat Open Gen Purpose 2
+- Tom High-Mid Gen Purpose
+- Hihat Open Gen Purpose
+- Tom Low-Mid Gen Purpose
+- Hihat Closed Gen Purpose
+- Tom Low Gen Purpose
+- Snare Gen Purpose 3
+- Snare Gen Purpose 2
+- Snare Gen Purpose
+- Rim Sidestick Gen Purpose
+- Kick Tight Gen Purpose
+- B0
+
 ## Artifact Target
 
 Generated binaries and manual-check artifacts go under:

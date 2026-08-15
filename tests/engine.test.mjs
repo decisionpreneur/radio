@@ -197,6 +197,46 @@ test("delayed replacement cadence converges to regenerated meter representation"
   assert.ok(state.voices.some((voice) => voice.id === state.previousBaseVoiceId));
 });
 
+test("twenty-meter resolving-sequence scenario rethinks selected basis and regenerates representation", () => {
+  const state = createInitialState({
+    seed: "twenty-meter-verbatim-scenario",
+    patternCount: 20,
+    meterCount: 20,
+    meterStart: 1,
+    baseMeter: 1,
+    baseBpm: 120,
+    cycleLengthKind: "resolving-sequences",
+    cycleLength: 3,
+    basisPolicy: "next",
+    meterTiming: "shared-bar-polyrhythm",
+    replacementCadence: "one-per-bar"
+  });
+  assert.deepEqual(state.voices.map((voice) => voice.meter), Array.from({ length: 20 }, (_, index) => index + 1));
+  assert.equal(sectionSeconds(state), resolvingSeconds(state) * 3);
+
+  const selected = state.voices.find((voice) => voice.meter === 2);
+  const selectedBeforeBpm = voiceBpm(state, selected);
+  let next = advanceCycle(state);
+
+  assert.notEqual(next.baseVoiceId, state.baseVoiceId);
+  assert.equal(next.baseVoiceId, selected.id);
+  assert.equal(next.baseMeter, 2);
+  assert.equal(next.baseBpm, selectedBeforeBpm);
+  assert.equal(voiceBpm(next, next.voices.find((voice) => voice.id === selected.id)), selectedBeforeBpm);
+  assert.ok(next.voices.some((voice) => voice.id === state.baseVoiceId && voice.meter === 1));
+  assert.equal(next.pendingReplacements.length, 18);
+
+  while (next.pendingReplacements.length) {
+    next = applyNextReplacement(next);
+  }
+
+  assert.equal(next.pendingReplacements.length, 0);
+  assert.deepEqual(
+    next.voices.map((voice) => voice.meter).slice().sort((a, b) => a - b),
+    Array.from({ length: 20 }, (_, index) => index + 1)
+  );
+});
+
 test("resolvingSeconds stays independent of cycle length unit", () => {
   const bars = createInitialState({
     seed: "resolve-bars",

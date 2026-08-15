@@ -13,24 +13,14 @@ Lean browser-live polymetric polymodulation instrument for an eternal drum patte
 
 The lean version has no backend and no database. Donation is a configurable outbound link in the static page. Later paywalling is documented as a Cloudflare Worker signed-token path.
 
-## Run
+## Verify
 
 ```powershell
-node --test C:\git\radio\tests\engine.test.mjs
+node --test C:\git\radio\tests\engine.test.mjs C:\git\radio\tests\static-check.mjs
 ```
 
 ```powershell
 node C:\git\radio\scripts\generate-demo.mjs
-```
-
-```powershell
-python -m http.server 8787 --directory C:\git\radio\web
-```
-
-Open:
-
-```text
-http://127.0.0.1:8787/
 ```
 
 ## Lean Controls
@@ -84,10 +74,8 @@ C:\Users\j\Dropbox\Musica\radio\polymetric-polymodulation
 
 ## Cloudflare Target
 
-The repo is static-first for Cloudflare Pages. The config uses `pages_build_output_dir = "./web"`, matching current Cloudflare Pages Wrangler configuration. A Worker can be added later only when paywall enforcement is implemented.
+The delivery target is Cloudflare Pages or Cloudflare Workers Pages. The config uses `pages_build_output_dir = "./web"`. A Worker can be added later only when paywall enforcement is implemented.
 
-Sources used for Cloudflare direction:
+Local HTTP serving is not a delivery target.
 
-- [Cloudflare Pages Wrangler configuration](https://developers.cloudflare.com/pages/functions/wrangler-configuration/)
-- [Cloudflare Workers static assets](https://developers.cloudflare.com/workers/static-assets/)
-- [Cloudflare Workers KV](https://developers.cloudflare.com/kv/)
+Deployment boundary details are in `docs/deployment.md`.

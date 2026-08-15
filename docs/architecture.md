@@ -18,7 +18,7 @@
 
 ## No Backend Lean Version
 
-The lean version is static. It can be served by Cloudflare Pages or any static server.
+The lean version is static. The delivery target is Cloudflare Pages or Cloudflare Workers Pages.
 
 No user account, payment state, or entitlement state is stored by the app.
 

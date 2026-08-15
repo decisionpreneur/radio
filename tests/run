@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -eu
+
+root=${0%/tests/run}
+if [ -z "$root" ] || [ "$root" = "$0" ]; then
+  root=.
+fi
+
+node --test "$root/tests/engine.test.mjs" "$root/tests/static-check.mjs"

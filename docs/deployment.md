@@ -51,10 +51,13 @@ Current inspected state:
 wrangler: not on PATH
 npx --yes wrangler@latest --version: 4.123.0
 npx --yes wrangler@latest whoami: not authenticated
+npx --yes wrangler@latest pages deploy web --project-name radio --branch master: failed before upload; non-interactive Wrangler requires CLOUDFLARE_API_TOKEN
 CLOUDFLARE_API_TOKEN: absent
 CF_API_TOKEN: absent
 CLOUDFLARE_ACCOUNT_ID: absent
 CF_ACCOUNT_ID: absent
+Cloudflare plugin: installed and enabled; exposes skills, not a writable Cloudflare Pages/Workers app connector
+Sites connector: writable production hosting connector available; no existing owned site for radio
 ```
 
 The current exact upload command shape for this static target is:

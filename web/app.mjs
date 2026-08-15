@@ -13,6 +13,7 @@ import {
   activateLicense,
   clearEntitlement,
   entitlementUnlocks,
+  fetchPublicConfig,
   getOrCreateInstanceName,
   makeEntitlement,
   readEntitlement,
@@ -52,6 +53,7 @@ if (!checkoutUrl) {
 } else {
   checkoutLink.href = checkoutUrl;
 }
+loadPublicConfig();
 
 let state = makeStateFromControls();
 let entitlement = readEntitlement();
@@ -192,6 +194,14 @@ async function validateExistingEntitlement() {
     entitlement = null;
   }
   updatePaywallUi();
+}
+
+async function loadPublicConfig() {
+  const config = await fetchPublicConfig();
+  if (config.checkoutUrl) {
+    checkoutLink.href = config.checkoutUrl;
+    checkoutLink.hidden = false;
+  }
 }
 
 function requireUnlocked() {

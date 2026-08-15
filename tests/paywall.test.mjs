@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { handleLicenseRequest } from "../src/license-worker.mjs";
+import { publicConfig } from "../src/public-config-worker.mjs";
 import {
   entitlementUnlocks,
+  fetchPublicConfig,
   makeEntitlement,
   normalizeEmail,
   normalizeLicenseKey
@@ -109,6 +111,24 @@ test("paywall entitlement helpers normalize and expire local entitlement", () =>
   assert.equal(entitlement.email, "buyer@example.com");
   assert.equal(entitlementUnlocks(entitlement, Date.parse("2026-01-01T00:00:00.000Z")), true);
   assert.equal(entitlementUnlocks({ ...entitlement, expiresAt: "2020-01-01T00:00:00.000Z" }), false);
+});
+
+test("public config exposes only an https checkout url", async () => {
+  assert.deepEqual(publicConfig({ RADIO_CHECKOUT_URL: "https://checkout.example/buy" }), {
+    checkoutUrl: "https://checkout.example/buy"
+  });
+  assert.deepEqual(publicConfig({ RADIO_CHECKOUT_URL: "http://checkout.example/buy" }), {
+    checkoutUrl: ""
+  });
+  assert.deepEqual(publicConfig({}), { checkoutUrl: "" });
+
+  const config = await fetchPublicConfig(async (url, init) => {
+    assert.equal(url, "/api/config");
+    assert.equal(init.method, "GET");
+    assert.equal(init.cache, "no-store");
+    return Response.json({ checkoutUrl: "https://checkout.example/buy?x=1" });
+  });
+  assert.equal(config.checkoutUrl, "https://checkout.example/buy?x=1");
 });
 
 function context({ body, env, method = "POST" }) {

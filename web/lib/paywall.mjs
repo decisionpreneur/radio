@@ -54,6 +54,25 @@ export async function validateLicense(entitlement, fetcher = globalThis.fetch) {
   return requestLicense("/api/license/validate", body, fetcher);
 }
 
+export async function fetchPublicConfig(fetcher = globalThis.fetch) {
+  try {
+    const response = await fetcher("/api/config", {
+      method: "GET",
+      headers: {
+        Accept: "application/json"
+      },
+      cache: "no-store"
+    });
+    if (!response.ok) return {};
+    const payload = await response.json();
+    return {
+      checkoutUrl: normalizeHttpsUrl(payload?.checkoutUrl)
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function makeEntitlement({ licenseKey, email, verdict }) {
   return {
     unlocked: verdict.unlocked === true,
@@ -76,6 +95,17 @@ export function normalizeLicenseKey(value) {
 
 export function normalizeEmail(value) {
   return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeHttpsUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
 }
 
 async function requestLicense(url, body, fetcher) {

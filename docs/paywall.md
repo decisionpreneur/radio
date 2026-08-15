@@ -94,6 +94,7 @@ Environment variables:
 
 ```text
 RADIO_LICENSE_KEYS
+RADIO_CHECKOUT_URL
 RADIO_LICENSE_REQUIRE_EMAIL
 RADIO_LEMONSQUEEZY_PRODUCT_ID
 RADIO_LEMONSQUEEZY_VARIANT_ID
@@ -139,10 +140,10 @@ The Function hashes the submitted key and each configured key with SHA-256 befor
 
 ## Checkout And Donation
 
-`web/index.html` has two configurable outbound link slots:
+The app has two configurable outbound link slots:
 
 ```text
-data-checkout-url
+RADIO_CHECKOUT_URL
 data-donation-url
 ```
 

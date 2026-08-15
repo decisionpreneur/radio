@@ -9,6 +9,7 @@ Lean browser-live polymetric polymodulation instrument for an eternal drum patte
 - MIDI file encoder/export path: `web/lib/midi-file.mjs`
 - Static paywall client: `web/lib/paywall.mjs`
 - Cloudflare Pages Function license endpoints: `functions/api/license`
+- Cloudflare Pages Function public checkout config: `functions/api/config`
 - Node test path: `tests/engine.test.mjs`
 - Demo artifact generator: `scripts/generate-demo.mjs`
 
@@ -88,6 +89,7 @@ Use repository `decisionpreneur/radio`, production branch `master`, build comman
 Set these Cloudflare Pages environment variables or secrets when paywalling is enabled:
 
 - `RADIO_LICENSE_KEYS`: newline-separated license-key allowlist.
+- `RADIO_CHECKOUT_URL`: hosted checkout URL shown by the app.
 - `RADIO_LICENSE_REQUIRE_EMAIL`: `0` only when checkout email should not be required.
 - `RADIO_LEMONSQUEEZY_PRODUCT_ID`: optional Lemon Squeezy product id constraint.
 - `RADIO_LEMONSQUEEZY_VARIANT_ID`: optional Lemon Squeezy variant id constraint.

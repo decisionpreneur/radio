@@ -26,8 +26,10 @@ test("HTML loads the static app module", async () => {
 });
 
 test("Pages Function license endpoints are present without wrangler deployment config", async () => {
+  const config = await readFile(new URL("../functions/api/config.js", import.meta.url), "utf8");
   const activate = await readFile(new URL("../functions/api/license/activate.js", import.meta.url), "utf8");
   const validate = await readFile(new URL("../functions/api/license/validate.js", import.meta.url), "utf8");
+  assert.match(config, /onRequestGet/);
   assert.match(activate, /onRequestPost/);
   assert.match(validate, /onRequestPost/);
   await assert.rejects(access(new URL("../wrangler.toml", import.meta.url)));

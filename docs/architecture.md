@@ -34,6 +34,8 @@ The export path writes tempo meta events at section boundaries. MIDI notes are r
 
 ## Cloudflare
 
-`wrangler.toml` is for Cloudflare Pages static deployment.
+Cloudflare Pages deployment is configured through dashboard Git integration, not through Wrangler direct upload and not through a repo CI/CD workflow.
+
+The static app directory is `web`.
 
 Cloudflare Workers Static Assets are a later option if entitlement checks must run before serving premium assets. The lean version does not use a Worker.

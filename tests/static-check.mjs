@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
-test("Cloudflare Pages config points at static web output", async () => {
-  const config = await readFile(new URL("../wrangler.toml", import.meta.url), "utf8");
-  assert.match(config, /^pages_build_output_dir = "\.\/web"$/m);
+test("Cloudflare Pages Git integration points at static web output", async () => {
+  const deployment = await readFile(new URL("../docs/deployment.md", import.meta.url), "utf8");
+  assert.match(deployment, /Connect to Git/);
+  assert.match(deployment, /Build output directory: web/);
+  await assert.rejects(access(new URL("../wrangler.toml", import.meta.url)));
+  await assert.rejects(access(new URL("../.github/workflows/tests.yml", import.meta.url)));
 });
 
 test("static app imports only deployable web-local modules", async () => {

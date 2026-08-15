@@ -9,10 +9,8 @@ Lean browser-live polymetric polymodulation instrument for an eternal drum patte
 - MIDI file encoder/export path: `web/lib/midi-file.mjs`
 - Node test path: `tests/engine.test.mjs`
 - Demo artifact generator: `scripts/generate-demo.mjs`
-- Cloudflare Pages config: `wrangler.toml`
-- Component CI workflow: `.github/workflows/tests.yml`
 
-The lean version has no backend and no database. Donation is a configurable outbound link in the static page. Later paywalling is documented as a Cloudflare Worker signed-token path.
+The lean version has no backend, no database, no Cloudflare API deploy path, and no repo CI/CD workflow. Donation is a configurable outbound link in the static page. Paywall enforcement is not implemented in the lean version; later paywalling is documented as a Cloudflare Worker signed-token path.
 
 ## Verify
 
@@ -81,7 +79,11 @@ C:\Users\j\Dropbox\Musica\radio\polymetric-polymodulation
 
 ## Cloudflare Target
 
-The delivery target is Cloudflare Pages or Cloudflare Workers Pages. The config uses `pages_build_output_dir = "./web"`. A Worker can be added later only when paywall enforcement is implemented.
+The delivery target is Cloudflare Pages Git integration configured in the Cloudflare dashboard.
+
+Use repository `decisionpreneur/radio`, production branch `master`, build command blank, and build output directory `web`.
+
+A Worker can be added later only when paywall enforcement is implemented.
 
 Local HTTP serving is not a delivery target.
 

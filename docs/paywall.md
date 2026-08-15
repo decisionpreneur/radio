@@ -6,11 +6,13 @@ The current app uses a static donation link slot in `web/index.html`.
 
 No backend means no durable server-side entitlement state.
 
+No active paywall enforcement is implemented in the lean version.
+
 ## Where Paywall Data Can Live
 
 With no backend and no database, secure durable paywall state cannot live inside the static app. Anything stored only in frontend JavaScript or browser local storage can be copied or modified by the user.
 
-A backendless-looking Cloudflare-only path is possible with a Worker:
+A later backendless-looking Cloudflare-only path is possible with a Worker:
 
 - Payment provider remains the payment source of truth.
 - Cloudflare Worker holds the signing secret.

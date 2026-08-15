@@ -21,6 +21,8 @@ Each voice has:
 - `instrument`
 - `velocity`
 
+Unchosen configuration fields are generated from the current seed. In the browser UI, a blank numeric control or a `random` select entry means the field is unchosen.
+
 ## Pattern Roles
 
 `start-only`:

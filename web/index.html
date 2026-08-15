@@ -19,6 +19,7 @@
           <button id="randomBtn" type="button">Randomize</button>
           <button id="midiBtn" type="button">MIDI</button>
           <button id="exportBtn" type="button">Export</button>
+          <a id="checkoutLink" href="#" data-checkout-url="">License</a>
           <a id="donateLink" href="#" data-donation-url="">Donate</a>
         </div>
       </section>
@@ -27,39 +28,40 @@
         <form id="controls" class="panel">
           <label>
             Seed
-            <input id="seed" name="seed" value="radio-live">
+            <input id="seed" name="seed" placeholder="random">
           </label>
           <label>
             Base BPM
-            <input id="baseBpm" name="baseBpm" type="number" min="20" max="300" value="127">
+            <input id="baseBpm" name="baseBpm" type="number" min="20" max="300" placeholder="random">
           </label>
           <label>
             Base meter
-            <input id="baseMeter" name="baseMeter" type="number" min="1" max="64" value="1">
+            <input id="baseMeter" name="baseMeter" type="number" min="1" max="64" placeholder="random">
           </label>
           <label>
             Patterns
-            <input id="patternCount" name="patternCount" type="number" min="2" max="64" value="20">
+            <input id="patternCount" name="patternCount" type="number" min="2" max="64" placeholder="random">
           </label>
           <label>
             Start-only
-            <input id="startOnlyCount" name="startOnlyCount" type="number" min="0" max="64" value="4">
+            <input id="startOnlyCount" name="startOnlyCount" type="number" min="0" max="64" placeholder="random">
           </label>
           <label>
             Pulses
-            <input id="pulseCount" name="pulseCount" type="number" min="0" max="64" value="5">
+            <input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="random">
           </label>
           <label>
             First number
-            <input id="meterStart" name="meterStart" type="number" min="1" max="64" value="1">
+            <input id="meterStart" name="meterStart" type="number" min="1" max="64" placeholder="random">
           </label>
           <label>
             Cycle length
-            <input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" value="3">
+            <input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" placeholder="random">
           </label>
           <label>
             Cycle unit
             <select id="cycleLengthKind" name="cycleLengthKind">
+              <option value="">random</option>
               <option value="resolving-sequences">resolving sequences</option>
               <option value="bars">bars</option>
             </select>
@@ -67,6 +69,7 @@
           <label>
             Basis
             <select id="basisPolicy" name="basisPolicy">
+              <option value="">random</option>
               <option value="next">next</option>
               <option value="random">random</option>
               <option value="closest">closest</option>
@@ -76,6 +79,7 @@
           <label>
             Meter timing
             <select id="meterTiming" name="meterTiming">
+              <option value="">random</option>
               <option value="shared-bar-polyrhythm">shared-bar-polyrhythm</option>
               <option value="same-pulse-polymeter">same-pulse-polymeter</option>
             </select>
@@ -83,6 +87,7 @@
           <label>
             Strong beat
             <select id="strongBeatMode" name="strongBeatMode">
+              <option value="">random</option>
               <option value="every-beat">every beat</option>
               <option value="downbeat-only">downbeat only</option>
             </select>
@@ -90,6 +95,7 @@
           <label>
             Replacement
             <select id="replacementCadence" name="replacementCadence">
+              <option value="">random</option>
               <option value="immediate">immediate</option>
               <option value="one-per-bar">one per bar</option>
               <option value="one-per-resolving-sequence">one per resolving sequence</option>
@@ -105,6 +111,21 @@
               <option value="">none</option>
             </select>
           </label>
+          <section id="paywall" class="paywall">
+            <label>
+              License key
+              <input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false">
+            </label>
+            <label>
+              Checkout email
+              <input id="licenseEmail" name="licenseEmail" type="email" autocomplete="email">
+            </label>
+            <div class="paywall-actions">
+              <button id="unlockBtn" type="button">Unlock</button>
+              <button id="clearLicenseBtn" type="button">Clear</button>
+            </div>
+            <p id="paywallStatus">locked</p>
+          </section>
         </form>
 
         <section class="work">

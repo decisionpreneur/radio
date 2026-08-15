@@ -58,7 +58,8 @@ h1 {
 }
 
 button,
-#donateLink {
+#donateLink,
+#checkoutLink {
   min-height: 34px;
   border: 1px solid #55594d;
   border-radius: 6px;
@@ -72,8 +73,14 @@ button,
 }
 
 button:hover,
-#donateLink:hover {
+#donateLink:hover,
+#checkoutLink:hover {
   border-color: #d7b458;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .layout {
@@ -110,6 +117,26 @@ select {
   padding: 6px 8px;
   color: #f2efe7;
   background: #141511;
+}
+
+.paywall {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #3d4238;
+  border-radius: 6px;
+  background: #1b1d16;
+}
+
+.paywall-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#paywallStatus {
+  margin: 0;
+  color: #d7b458;
+  font-size: 12px;
 }
 
 .work {

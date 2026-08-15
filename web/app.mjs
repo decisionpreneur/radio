@@ -9,6 +9,16 @@ import {
   voiceBpm
 } from "./lib/engine.mjs";
 import { encodeMidiFile } from "./lib/midi-file.mjs";
+import {
+  activateLicense,
+  clearEntitlement,
+  entitlementUnlocks,
+  getOrCreateInstanceName,
+  makeEntitlement,
+  readEntitlement,
+  validateLicense,
+  writeEntitlement
+} from "./lib/paywall.mjs";
 
 const controls = document.querySelector("#controls");
 const statusEl = document.querySelector("#status");
@@ -22,6 +32,12 @@ const midiBtn = document.querySelector("#midiBtn");
 const exportBtn = document.querySelector("#exportBtn");
 const midiOutputSelect = document.querySelector("#midiOutput");
 const donateLink = document.querySelector("#donateLink");
+const checkoutLink = document.querySelector("#checkoutLink");
+const licenseKeyInput = document.querySelector("#licenseKey");
+const licenseEmailInput = document.querySelector("#licenseEmail");
+const unlockBtn = document.querySelector("#unlockBtn");
+const clearLicenseBtn = document.querySelector("#clearLicenseBtn");
+const paywallStatus = document.querySelector("#paywallStatus");
 
 const donationUrl = donateLink.dataset.donationUrl;
 if (!donationUrl) {
@@ -30,13 +46,24 @@ if (!donationUrl) {
   donateLink.href = donationUrl;
 }
 
+const checkoutUrl = checkoutLink.dataset.checkoutUrl;
+if (!checkoutUrl) {
+  checkoutLink.hidden = true;
+} else {
+  checkoutLink.href = checkoutUrl;
+}
+
 let state = makeStateFromControls();
+let entitlement = readEntitlement();
+const sessionSeed = makeSessionSeed();
 let audioContext = null;
 let midiAccess = null;
 let midiOutput = null;
 let timer = null;
 let live = null;
 
+updatePaywallUi();
+validateExistingEntitlement();
 draw();
 
 controls.addEventListener("input", () => {
@@ -46,6 +73,7 @@ controls.addEventListener("input", () => {
 });
 
 startBtn.addEventListener("click", async () => {
+  if (!requireUnlocked()) return;
   await startLive();
 });
 
@@ -62,6 +90,7 @@ randomBtn.addEventListener("click", () => {
 });
 
 midiBtn.addEventListener("click", async () => {
+  if (!requireUnlocked()) return;
   await connectMidi();
 });
 
@@ -70,6 +99,7 @@ midiOutputSelect.addEventListener("change", () => {
 });
 
 exportBtn.addEventListener("click", () => {
+  if (!requireUnlocked()) return;
   const sections = readNumber("exportSections");
   const rendered = renderArrangement(makeStateFromControls(), { sectionCount: sections, ppq: 480 });
   const midi = encodeMidiFile(rendered);
@@ -80,6 +110,17 @@ exportBtn.addEventListener("click", () => {
   link.download = "radio-polymetric-export.mid";
   link.click();
   URL.revokeObjectURL(url);
+});
+
+unlockBtn.addEventListener("click", async () => {
+  await unlockWithLicense();
+});
+
+clearLicenseBtn.addEventListener("click", () => {
+  clearEntitlement();
+  entitlement = null;
+  stopLive();
+  updatePaywallUi();
 });
 
 async function startLive() {
@@ -96,6 +137,76 @@ async function startLive() {
   statusEl.textContent = "playing";
   draw();
   timer = window.setInterval(tick, 25);
+}
+
+async function unlockWithLicense() {
+  const licenseKey = licenseKeyInput.value;
+  const email = licenseEmailInput.value;
+  if (!licenseKey.trim() || !email.trim()) {
+    paywallStatus.textContent = "license key and checkout email required";
+    return;
+  }
+  paywallStatus.textContent = "checking license";
+  unlockBtn.disabled = true;
+  try {
+    const verdict = await activateLicense({
+      licenseKey,
+      email,
+      instanceName: getOrCreateInstanceName()
+    });
+    if (!verdict.unlocked) {
+      paywallStatus.textContent = verdict.error ?? "license rejected";
+      return;
+    }
+    entitlement = makeEntitlement({ licenseKey, email, verdict });
+    writeEntitlement(entitlement);
+    licenseKeyInput.value = "";
+    updatePaywallUi();
+  } catch {
+    paywallStatus.textContent = "license check failed";
+  } finally {
+    unlockBtn.disabled = false;
+  }
+}
+
+async function validateExistingEntitlement() {
+  if (!entitlementUnlocks(entitlement)) {
+    updatePaywallUi();
+    return;
+  }
+  try {
+    const verdict = await validateLicense(entitlement);
+    if (!verdict.unlocked) {
+      clearEntitlement();
+      entitlement = null;
+    } else {
+      entitlement = makeEntitlement({
+        licenseKey: entitlement.licenseKey,
+        email: entitlement.email,
+        verdict
+      });
+      writeEntitlement(entitlement);
+    }
+  } catch {
+    clearEntitlement();
+    entitlement = null;
+  }
+  updatePaywallUi();
+}
+
+function requireUnlocked() {
+  if (entitlementUnlocks(entitlement)) return true;
+  paywallStatus.textContent = "license required";
+  return false;
+}
+
+function updatePaywallUi() {
+  const unlocked = entitlementUnlocks(entitlement);
+  startBtn.disabled = !unlocked;
+  midiBtn.disabled = !unlocked;
+  exportBtn.disabled = !unlocked;
+  clearLicenseBtn.disabled = !unlocked;
+  paywallStatus.textContent = unlocked ? "unlocked" : "locked";
 }
 
 function stopLive() {
@@ -236,20 +347,20 @@ async function connectMidi() {
 
 function makeStateFromControls() {
   return createInitialState({
-    seed: value("seed"),
-    baseBpm: readNumber("baseBpm"),
-    baseMeter: readNumber("baseMeter"),
-    patternCount: readNumber("patternCount"),
-    startOnlyCount: readNumber("startOnlyCount"),
-    pulseCount: readNumber("pulseCount"),
-    meterStart: readNumber("meterStart"),
-    meterCount: readNumber("patternCount"),
-    cycleLength: readNumber("cycleLength"),
-    cycleLengthKind: value("cycleLengthKind"),
-    basisPolicy: value("basisPolicy"),
-    meterTiming: value("meterTiming"),
-    strongBeatMode: value("strongBeatMode"),
-    replacementCadence: value("replacementCadence")
+    seed: value("seed") || sessionSeed,
+    baseBpm: readOptionalNumber("baseBpm"),
+    baseMeter: readOptionalNumber("baseMeter"),
+    patternCount: readOptionalNumber("patternCount"),
+    startOnlyCount: readOptionalNumber("startOnlyCount"),
+    pulseCount: readOptionalNumber("pulseCount"),
+    meterStart: readOptionalNumber("meterStart"),
+    meterCount: readOptionalNumber("patternCount"),
+    cycleLength: readOptionalNumber("cycleLength"),
+    cycleLengthKind: optionalValue("cycleLengthKind"),
+    basisPolicy: optionalValue("basisPolicy"),
+    meterTiming: optionalValue("meterTiming"),
+    strongBeatMode: optionalValue("strongBeatMode"),
+    replacementCadence: optionalValue("replacementCadence")
   });
 }
 
@@ -346,8 +457,21 @@ function value(id) {
   return document.querySelector(`#${id}`).value;
 }
 
+function optionalValue(id) {
+  return value(id) || undefined;
+}
+
+function readOptionalNumber(id) {
+  const current = value(id);
+  return current === "" ? undefined : Number(current);
+}
+
 function readNumber(id) {
   return Number(value(id));
+}
+
+function makeSessionSeed() {
+  return `radio-${crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`;
 }
 
 function escapeHtml(text) {

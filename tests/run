@@ -6,4 +6,4 @@ if [ -z "$root" ] || [ "$root" = "$0" ]; then
   root=.
 fi
 
-node --test "$root/tests/engine.test.mjs" "$root/tests/logical-invariant.test.mjs" "$root/tests/static-check.mjs"
+node --test "$root/tests/engine.test.mjs" "$root/tests/logical-invariant.test.mjs" "$root/tests/paywall.test.mjs" "$root/tests/static-check.mjs"

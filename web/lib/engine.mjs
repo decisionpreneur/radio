@@ -42,23 +42,31 @@ export function createInitialState(input = {}) {
 }
 
 export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.seed) {
+  const patternCountInput = hasValue(input.patternCount)
+    ? input.patternCount
+    : randomInt(rng, 3, 20);
   const patternCount = clampNumber(
-    input.patternCount ?? randomInt(rng, 3, 20),
+    patternCountInput,
     2,
     64
   );
-  const baseBpm = clampNumber(input.baseBpm ?? randomInt(rng, 72, 156), 20, 300);
-  const meterStart = clampNumber(input.meterStart ?? 1, 1, 64);
-  const meterCount = clampNumber(input.meterCount ?? patternCount, 1, 64);
+  const baseMeter = hasValue(input.baseMeter) ? clampNumber(input.baseMeter, 1, 64) : undefined;
+  const baseBpm = clampNumber(hasValue(input.baseBpm) ? input.baseBpm : randomInt(rng, 72, 156), 20, 300);
+  const meterStart = clampNumber(
+    hasValue(input.meterStart) ? input.meterStart : (baseMeter ?? randomInt(rng, 1, 20)),
+    1,
+    64
+  );
+  const meterCount = clampNumber(hasValue(input.meterCount) ? input.meterCount : patternCount, 1, 64);
   const maxSpecial = patternCount;
   const startOnlyCount = clampNumber(
-    input.startOnlyCount ?? randomInt(rng, 0, Math.floor(maxSpecial / 3)),
+    hasValue(input.startOnlyCount) ? input.startOnlyCount : randomInt(rng, 0, Math.floor(maxSpecial / 3)),
     0,
     maxSpecial
   );
   const remainingAfterStartOnly = maxSpecial - startOnlyCount;
   const pulseCount = clampNumber(
-    input.pulseCount ?? randomInt(rng, 0, Math.floor(remainingAfterStartOnly / 2)),
+    hasValue(input.pulseCount) ? input.pulseCount : randomInt(rng, 0, Math.floor(remainingAfterStartOnly / 2)),
     0,
     remainingAfterStartOnly
   );
@@ -69,17 +77,17 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     startOnlyCount,
     pulseCount,
     baseBpm,
-    baseMeter: input.baseMeter,
+    baseMeter,
     meterStart,
     meterCount,
     customMeters: Array.isArray(input.customMeters) ? input.customMeters.map(Number).filter(Number.isFinite) : null,
-    meterTiming: ensureMember(input.meterTiming, METER_TIMING_MODES, "shared-bar-polyrhythm"),
-    cycleLengthKind: ensureMember(input.cycleLengthKind, CYCLE_LENGTH_KINDS, "resolving-sequences"),
-    cycleLength: clampNumber(input.cycleLength ?? randomInt(rng, 1, 4), 1, 4096),
+    meterTiming: ensureMemberOrRandom(input.meterTiming, METER_TIMING_MODES, rng),
+    cycleLengthKind: ensureMemberOrRandom(input.cycleLengthKind, CYCLE_LENGTH_KINDS, rng),
+    cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
-    replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "immediate"),
-    strongBeatMode: ensureMember(input.strongBeatMode, STRONG_BEAT_MODES, "every-beat"),
-    noteDurationSeconds: clampNumber(input.noteDurationSeconds ?? 0.08, 0.01, 2)
+    replacementCadence: ensureMemberOrRandom(input.replacementCadence, REPLACEMENT_CADENCES, rng),
+    strongBeatMode: ensureMemberOrRandom(input.strongBeatMode, STRONG_BEAT_MODES, rng),
+    noteDurationSeconds: clampNumber(hasValue(input.noteDurationSeconds) ? input.noteDurationSeconds : 0.08, 0.01, 2)
   };
 }
 
@@ -95,10 +103,11 @@ export function buildMeterValues(config) {
   while (unique.length < config.patternCount) {
     unique.push(unique[unique.length - 1] + 1);
   }
-  if (config.baseMeter && unique.includes(config.baseMeter)) {
-    const baseIndex = unique.indexOf(config.baseMeter);
-    unique.splice(baseIndex, 1);
-    unique.unshift(config.baseMeter);
+  if (config.baseMeter) {
+    const baseMeter = Math.max(1, Math.floor(Number(config.baseMeter)));
+    const baseIndex = unique.indexOf(baseMeter);
+    if (baseIndex >= 0) unique.splice(baseIndex, 1);
+    unique.unshift(baseMeter);
   }
   return unique;
 }
@@ -449,9 +458,17 @@ function ensureMember(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
 
+function ensureMemberOrRandom(value, allowed, rng) {
+  return allowed.includes(value) ? value : pick(rng, allowed);
+}
+
 function normalizeBasisPolicy(value, rng) {
   const corrected = BASIS_POLICY_TYPOS[value] ?? value;
   return ensureMember(corrected, BASIS_POLICIES, pick(rng, BASIS_POLICIES));
+}
+
+function hasValue(value) {
+  return value !== undefined && value !== null && value !== "";
 }
 
 function clampNumber(value, min, max) {

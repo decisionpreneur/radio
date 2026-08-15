@@ -4,11 +4,16 @@ import {
   advanceCycle,
   applyNextReplacement,
   assertInstrumentsWithinLeanSet,
+  BASIS_POLICIES,
   createInitialState,
+  CYCLE_LENGTH_KINDS,
   generateSectionEvents,
+  METER_TIMING_MODES,
+  REPLACEMENT_CADENCES,
   renderArrangement,
   resolvingSeconds,
   sectionSeconds,
+  STRONG_BEAT_MODES,
   voiceBpm
 } from "../web/lib/engine.mjs";
 import { encodeMidiFile } from "../web/lib/midi-file.mjs";
@@ -70,6 +75,32 @@ test("next basis follows configured meter order instead of protected old-base sl
   assert.equal(second.baseMeter, 2);
   assert.equal(third.baseMeter, 3);
 });
+
+test("blank UI-style controls use seeded random defaults and preserve chosen base meter", () => {
+  const state = createInitialState({
+    seed: "blank-controls",
+    baseMeter: 1,
+    patternCount: "",
+    startOnlyCount: "",
+    pulseCount: "",
+    meterStart: "",
+    cycleLength: "",
+    cycleLengthKind: "",
+    basisPolicy: "",
+    meterTiming: "",
+    replacementCadence: "",
+    strongBeatMode: ""
+  });
+  assert.equal(state.baseMeter, 1);
+  assert.equal(state.voices[0].meter, 1);
+  assert.ok(state.config.patternCount >= 2);
+  assert.ok(BASIS_POLICIES.includes(state.config.basisPolicy));
+  assert.ok(CYCLE_LENGTH_KINDS.includes(state.config.cycleLengthKind));
+  assert.ok(METER_TIMING_MODES.includes(state.config.meterTiming));
+  assert.ok(REPLACEMENT_CADENCES.includes(state.config.replacementCadence));
+  assert.ok(STRONG_BEAT_MODES.includes(state.config.strongBeatMode));
+});
+
 
 test("single-pattern input is clamped because new basis cannot equal previous basis", () => {
   const state = createInitialState({

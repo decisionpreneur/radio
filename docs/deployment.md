@@ -11,6 +11,10 @@ preferably without backend or db at all (but where paywalling stores its data th
 ```
 
 ```text
+i think lincences \n sepratated list can be stored in cloudflare thus keeping it frontend only
+```
+
+```text
 for cicd and deployment conventions see infra and hardlinksdb reference
 ```
 
@@ -36,6 +40,7 @@ The `radio` repository contains generic component material:
 
 - static browser app under `web`
 - shared algorithm modules under `web/lib`
+- Cloudflare Pages Functions under `functions`
 - component tests under `tests`
 - artifact generator under `scripts`
 
@@ -47,6 +52,7 @@ This component repository does not contain:
 - Cloudflare account ids
 - Wrangler direct-upload configuration
 - GitHub Actions or other repo CI/CD workflows
+- payment-provider secrets
 
 ## Required Remote Delivery
 
@@ -96,13 +102,34 @@ Build output directory: web
 Root directory:
 ```
 
-The empty `Build command` field means no project build step is required. The `web` output directory is the static app directory that Cloudflare Pages uploads.
+The empty `Build command` field means no project build step is required. The `web` output directory is the static app directory that Cloudflare Pages uploads. The root `functions` directory is deployed by Cloudflare Pages as Pages Functions.
+
+Paywall environment:
+
+```text
+RADIO_LICENSE_KEYS=
+RADIO_LICENSE_REQUIRE_EMAIL=
+RADIO_LEMONSQUEEZY_PRODUCT_ID=
+RADIO_LEMONSQUEEZY_VARIANT_ID=
+```
+
+Use either `RADIO_LICENSE_KEYS` as a newline-separated Cloudflare-side license list or Lemon Squeezy product/variant constraints. Do not commit live license keys or payment-provider account values into this repository.
 
 Cloudflare documentation checked:
 
 - https://developers.cloudflare.com/pages/configuration/git-integration/
 - https://developers.cloudflare.com/pages/get-started/git-integration/
 - https://developers.cloudflare.com/pages/framework-guides/deploy-anything/
+- https://developers.cloudflare.com/pages/functions/
+- https://developers.cloudflare.com/pages/functions/get-started/
+- https://developers.cloudflare.com/pages/functions/bindings/
+
+Lemon Squeezy documentation checked:
+
+- https://docs.lemonsqueezy.com/api/license-api
+- https://docs.lemonsqueezy.com/api/license-api/activate-license-key
+- https://docs.lemonsqueezy.com/api/license-api/validate-license-key
+- https://docs.lemonsqueezy.com/guides/tutorials/license-keys
 
 ## Rejected Deployment Paths
 
@@ -113,6 +140,8 @@ Do not use these for this lean deployment:
 - GitHub Actions deployment
 - GitLab CI deployment
 - local HTTP server as delivery
+- repository-stored license keys
+- repository-stored provider secrets
 
 ## Component Verification
 

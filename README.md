@@ -7,15 +7,17 @@ Lean browser-live polymetric polymodulation instrument for an eternal drum patte
 - Static browser app: `web/index.html`
 - Shared algorithm engine: `web/lib/engine.mjs`
 - MIDI file encoder/export path: `web/lib/midi-file.mjs`
+- Static paywall client: `web/lib/paywall.mjs`
+- Cloudflare Pages Function license endpoints: `functions/api/license`
 - Node test path: `tests/engine.test.mjs`
 - Demo artifact generator: `scripts/generate-demo.mjs`
 
-The lean version has no backend, no database, no Cloudflare API deploy path, and no repo CI/CD workflow. Donation is a configurable outbound link in the static page. Paywall enforcement is not implemented in the lean version; later paywalling is documented as a Cloudflare Worker signed-token path.
+The lean version has no database, no Cloudflare API deploy path, and no repo CI/CD workflow. Donation and checkout are configurable outbound links in the static page. Paywall validation runs through Cloudflare Pages Functions with either Lemon Squeezy license keys or a newline-separated Cloudflare environment license list.
 
 ## Verify
 
 ```powershell
-node --test C:\git\radio\tests\engine.test.mjs C:\git\radio\tests\static-check.mjs
+node --test C:\git\radio\tests\engine.test.mjs C:\git\radio\tests\logical-invariant.test.mjs C:\git\radio\tests\paywall.test.mjs C:\git\radio\tests\static-check.mjs
 ```
 
 ```powershell
@@ -43,7 +45,7 @@ The full test runner includes the Z3 invariant check.
 - base meter
 - MIDI export section count
 
-Unchosen values can be randomized from the app.
+Unchosen tuneables randomize by default. A blank control means the shared engine receives no value for that tuneable and derives it from the current seed.
 
 ## Instrument Set
 
@@ -81,9 +83,14 @@ C:\Users\j\Dropbox\Musica\radio\polymetric-polymodulation
 
 The delivery target is Cloudflare Pages Git integration configured in the Cloudflare dashboard.
 
-Use repository `decisionpreneur/radio`, production branch `master`, build command blank, and build output directory `web`.
+Use repository `decisionpreneur/radio`, production branch `master`, build command blank, build output directory `web`, and the repository `functions` directory for Pages Functions.
 
-A Worker can be added later only when paywall enforcement is implemented.
+Set these Cloudflare Pages environment variables or secrets when paywalling is enabled:
+
+- `RADIO_LICENSE_KEYS`: newline-separated license-key allowlist.
+- `RADIO_LICENSE_REQUIRE_EMAIL`: `0` only when checkout email should not be required.
+- `RADIO_LEMONSQUEEZY_PRODUCT_ID`: optional Lemon Squeezy product id constraint.
+- `RADIO_LEMONSQUEEZY_VARIANT_ID`: optional Lemon Squeezy variant id constraint.
 
 Local HTTP serving is not a delivery target.
 

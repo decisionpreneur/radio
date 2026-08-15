@@ -1,36 +1,149 @@
-# Donation And Paywall Direction
+# Paywall
 
-## Lean Donation Version
+## Verbatim Prompt Sources
 
-The current app uses a static donation link slot in `web/index.html`.
+```text
+preferably without backend or db at all (but where paywalling stores its data then??) to use cf workers/pages nothiong more
+```
 
-No backend means no durable server-side entitlement state.
+```text
+tech-wise it should aim at lean donation-based with further paywalling
+```
 
-No active paywall enforcement is implemented in the lean version.
+```text
+ok what is the most lean paywall enablement? can paywalling be delegated to stripe paypal etc without ruining lean-frontend-only?
+```
 
-## Where Paywall Data Can Live
+```text
+ok propose the leanest solution preferably if some saas handles paywolling for us
+```
 
-With no backend and no database, secure durable paywall state cannot live inside the static app. Anything stored only in frontend JavaScript or browser local storage can be copied or modified by the user.
+```text
+for percentage commision not fixed payment
+```
 
-A later backendless-looking Cloudflare-only path is possible with a Worker:
+```text
+uruguay jursidiction supported preferable but not a must
+```
 
-- Payment provider remains the payment source of truth.
-- Cloudflare Worker holds the signing secret.
-- The user receives a signed entitlement token after payment.
-- The browser stores that signed token locally.
-- The Worker verifies the token before serving premium assets or enabling premium endpoints.
+```text
+licence key is ok
+```
 
-This path stores entitlement data in the signed token, not in an app database.
+```text
+i think lincences \n sepratated list can be stored in cloudflare thus keeping it frontend only
+```
 
-## When KV Or D1 Becomes Necessary
+```text
+yeah just the leanest possible
+```
 
-Use Cloudflare KV or D1 only if a later version needs:
+```text
+implement radio with paywall
+```
 
-- revocation
-- cross-device account state
-- quotas
-- team seats
-- server-visible customer history
-- recoverable purchases without a user-held token
+## Implemented Shape
 
-KV is read-heavy and eventually consistent. D1 is the database path when relational entitlement state is required.
+The app gates live playback, MIDI output, and MIDI export behind a license key.
+
+The static page still renders the controls and preview. The paid path starts when a license key and checkout email are submitted to:
+
+```text
+/api/license/activate
+```
+
+The browser revalidates a stored entitlement through:
+
+```text
+/api/license/validate
+```
+
+## Where Paywall Data Lives
+
+No app database is used.
+
+Two sources are supported:
+
+- Lemon Squeezy stores orders, license keys, license status, customer email, product id, variant id, and license instances.
+- Cloudflare Pages environment variable `RADIO_LICENSE_KEYS` can hold a newline-separated license-key list.
+
+The browser stores only its local entitlement copy:
+
+- license key
+- checkout email
+- provider
+- license status
+- instance id
+- expiry
+- product id
+- variant id
+- customer email
+- last check time
+
+## Cloudflare Pages Functions
+
+Files:
+
+- `functions/api/license/activate.js`
+- `functions/api/license/validate.js`
+- `src/license-worker.mjs`
+
+The Functions use `context.env` for Cloudflare-side values.
+
+Environment variables:
+
+```text
+RADIO_LICENSE_KEYS
+RADIO_LICENSE_REQUIRE_EMAIL
+RADIO_LEMONSQUEEZY_PRODUCT_ID
+RADIO_LEMONSQUEEZY_VARIANT_ID
+```
+
+`RADIO_LICENSE_REQUIRE_EMAIL=0` disables the checkout-email requirement. Any other value, including an unset value, keeps checkout email required.
+
+`RADIO_LICENSE_KEYS` takes precedence over Lemon Squeezy when it is non-empty.
+
+## Lemon Squeezy
+
+Activation request:
+
+```text
+POST https://api.lemonsqueezy.com/v1/licenses/activate
+```
+
+Validation request:
+
+```text
+POST https://api.lemonsqueezy.com/v1/licenses/validate
+```
+
+The Function accepts a license only when:
+
+- provider response says activated or valid
+- license status is `active`
+- checkout email matches when Lemon Squeezy returns customer email
+- product id matches `RADIO_LEMONSQUEEZY_PRODUCT_ID` when configured
+- variant id matches `RADIO_LEMONSQUEEZY_VARIANT_ID` when configured
+
+## Cloudflare License List
+
+`RADIO_LICENSE_KEYS` format:
+
+```text
+first-license-key
+second-license-key
+third-license-key
+```
+
+The Function hashes the submitted key and each configured key with SHA-256 before comparison.
+
+## Checkout And Donation
+
+`web/index.html` has two configurable outbound link slots:
+
+```text
+data-checkout-url
+data-donation-url
+```
+
+If either value is empty, that link is hidden by the app.

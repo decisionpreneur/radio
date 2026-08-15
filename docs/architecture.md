@@ -8,19 +8,33 @@
 
 `web/lib/instruments.mjs` contains the lean instrument set from the attached drum-lane screenshot.
 
+`web/lib/paywall.mjs` contains browser-side license-key activation, validation, and local entitlement persistence.
+
 `web/app.mjs` is the live browser surface. It uses:
 
 - Web Audio for local drum preview.
 - Web MIDI when the browser exposes MIDI output access.
 - The shared engine for every live cycle and export.
+- The paywall module to gate live playback, MIDI output, and MIDI export.
 
 `scripts/generate-demo.mjs` renders a finite MIDI file for DAW/manual checks under the Dropbox radio artifact folder.
 
-## No Backend Lean Version
+`functions/api/license` contains Cloudflare Pages Functions for paywall validation.
 
-The lean version is static. The delivery target is Cloudflare Pages or Cloudflare Workers Pages.
+## Lean Paywall Version
 
-No user account, payment state, or entitlement state is stored by the app.
+The browser app is static. The delivery target is Cloudflare Pages with Pages Functions.
+
+Paywall state is not stored in an app database.
+
+Unchosen tuneables randomize by default. Blank controls pass no value for that tuneable into the shared engine.
+
+Supported entitlement sources:
+
+- Lemon Squeezy license key API.
+- Cloudflare Pages environment variable `RADIO_LICENSE_KEYS` as a newline-separated license-key list.
+
+The browser stores the activated license key, checkout email, license instance id, and expiry in local storage so the same browser can revalidate against the Pages Function.
 
 ## Live Scheduling
 
@@ -38,4 +52,4 @@ Cloudflare Pages deployment is configured through dashboard Git integration, not
 
 The static app directory is `web`.
 
-Cloudflare Workers Static Assets are a later option if entitlement checks must run before serving premium assets. The lean version does not use a Worker.
+The Pages Function directory is `functions`.

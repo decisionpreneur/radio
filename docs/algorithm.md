@@ -83,7 +83,7 @@ resolvingBaseBars = lcm(activeMeters) / baseMeter
 
 Candidates exclude the current base voice and exclude the current base meter.
 
-`next` selects the next remaining voice in current voice order.
+`next` selects the next remaining candidate in configured meter order.
 
 `random` selects one remaining candidate from the seeded generator.
 
@@ -144,4 +144,10 @@ Wolfram result for the equality:
 
 ```text
 True
+```
+
+Runnable coverage:
+
+```text
+tests/logical-invariant.test.mjs
 ```

@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   advanceCycle,
+  applyNextReplacement,
   assertInstrumentsWithinLeanSet,
   createInitialState,
   generateSectionEvents,
   renderArrangement,
+  resolvingSeconds,
+  sectionSeconds,
   voiceBpm
 } from "../web/lib/engine.mjs";
 import { encodeMidiFile } from "../web/lib/midi-file.mjs";
@@ -68,6 +71,53 @@ test("next basis follows configured meter order instead of protected old-base sl
   assert.equal(third.baseMeter, 3);
 });
 
+test("single-pattern input is clamped because new basis cannot equal previous basis", () => {
+  const state = createInitialState({
+    seed: "minimum",
+    patternCount: 1,
+    basisPolicy: "next"
+  });
+  assert.equal(state.config.patternCount, 2);
+  assert.equal(state.voices.length, 2);
+  const next = advanceCycle(state);
+  assert.notEqual(next.baseVoiceId, state.baseVoiceId);
+});
+
+test("basis policies closest, farthest, and farmost typo resolve to eligible non-current bases", () => {
+  const closest = createInitialState({
+    seed: "closest",
+    patternCount: 4,
+    customMeters: [1, 2, 4, 8],
+    baseMeter: 4,
+    baseBpm: 120,
+    basisPolicy: "closest",
+    meterTiming: "shared-bar-polyrhythm"
+  });
+  const farthest = createInitialState({
+    seed: "farthest",
+    patternCount: 4,
+    customMeters: [1, 2, 4, 8],
+    baseMeter: 4,
+    baseBpm: 120,
+    basisPolicy: "farthest",
+    meterTiming: "shared-bar-polyrhythm"
+  });
+  const typo = createInitialState({
+    seed: "farmost",
+    patternCount: 4,
+    customMeters: [1, 2, 4, 8],
+    baseMeter: 4,
+    baseBpm: 120,
+    basisPolicy: "farmost",
+    meterTiming: "shared-bar-polyrhythm"
+  });
+
+  assert.equal(advanceCycle(closest).baseMeter, 2);
+  assert.equal(advanceCycle(farthest).baseMeter, 8);
+  assert.equal(typo.config.basisPolicy, "farthest");
+  assert.equal(advanceCycle(typo).baseMeter, 8);
+});
+
 test("selected basis keeps its absolute pulse BPM through transition", () => {
   const state = createInitialState({
     seed: "invariant",
@@ -95,6 +145,50 @@ test("old base survives one new cycle", () => {
   });
   const next = advanceCycle(state);
   assert.ok(next.voices.some((voice) => voice.id === state.baseVoiceId));
+});
+
+test("delayed replacement cadence converges to regenerated meter representation", () => {
+  let state = createInitialState({
+    seed: "cadence",
+    patternCount: 6,
+    baseMeter: 1,
+    basisPolicy: "next",
+    replacementCadence: "one-per-bar"
+  });
+  state = advanceCycle(state);
+  assert.ok(state.pendingReplacements.length > 0);
+  const pendingCount = state.pendingReplacements.length;
+  for (let index = 0; index < pendingCount; index += 1) {
+    state = applyNextReplacement(state);
+  }
+  assert.equal(state.pendingReplacements.length, 0);
+  assert.equal(new Set(state.voices.map((voice) => voice.meter)).size, state.config.patternCount);
+  assert.ok(state.voices.some((voice) => voice.id === state.previousBaseVoiceId));
+});
+
+test("resolvingSeconds stays independent of cycle length unit", () => {
+  const bars = createInitialState({
+    seed: "resolve-bars",
+    patternCount: 4,
+    customMeters: [1, 2, 3, 4],
+    baseMeter: 1,
+    baseBpm: 120,
+    cycleLengthKind: "bars",
+    cycleLength: 3,
+    meterTiming: "same-pulse-polymeter"
+  });
+  const resolving = createInitialState({
+    seed: "resolve-sequences",
+    patternCount: 4,
+    customMeters: [1, 2, 3, 4],
+    baseMeter: 1,
+    baseBpm: 120,
+    cycleLengthKind: "resolving-sequences",
+    cycleLength: 3,
+    meterTiming: "same-pulse-polymeter"
+  });
+  assert.equal(resolvingSeconds(bars), resolvingSeconds(resolving));
+  assert.notEqual(sectionSeconds(bars), sectionSeconds(resolving));
 });
 
 test("section events and midi encoder produce a standard midi header", () => {

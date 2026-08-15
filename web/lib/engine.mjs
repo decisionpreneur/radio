@@ -6,6 +6,7 @@ export const METER_TIMING_MODES = Object.freeze(["shared-bar-polyrhythm", "same-
 export const CYCLE_LENGTH_KINDS = Object.freeze(["bars", "resolving-sequences"]);
 export const REPLACEMENT_CADENCES = Object.freeze(["immediate", "one-per-bar", "one-per-resolving-sequence"]);
 export const STRONG_BEAT_MODES = Object.freeze(["every-beat", "downbeat-only"]);
+const BASIS_POLICY_TYPOS = Object.freeze({ farmost: "farthest" });
 
 const EPSILON = 1e-9;
 
@@ -43,7 +44,7 @@ export function createInitialState(input = {}) {
 export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.seed) {
   const patternCount = clampNumber(
     input.patternCount ?? randomInt(rng, 3, 20),
-    1,
+    2,
     64
   );
   const baseBpm = clampNumber(input.baseBpm ?? randomInt(rng, 72, 156), 20, 300);
@@ -75,7 +76,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     meterTiming: ensureMember(input.meterTiming, METER_TIMING_MODES, "shared-bar-polyrhythm"),
     cycleLengthKind: ensureMember(input.cycleLengthKind, CYCLE_LENGTH_KINDS, "resolving-sequences"),
     cycleLength: clampNumber(input.cycleLength ?? randomInt(rng, 1, 4), 1, 4096),
-    basisPolicy: ensureMember(input.basisPolicy, BASIS_POLICIES, pick(rng, BASIS_POLICIES)),
+    basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
     replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "immediate"),
     strongBeatMode: ensureMember(input.strongBeatMode, STRONG_BEAT_MODES, "every-beat"),
     noteDurationSeconds: clampNumber(input.noteDurationSeconds ?? 0.08, 0.01, 2)
@@ -166,6 +167,10 @@ export function sectionBaseBars(state) {
     ? resolvingBaseBars(state)
     : 1;
   return unit * state.config.cycleLength;
+}
+
+export function resolvingSeconds(state) {
+  return resolvingBaseBars(state) * baseBarSeconds(state);
 }
 
 export function sectionSeconds(state) {
@@ -442,6 +447,11 @@ function sortEvents(a, b) {
 
 function ensureMember(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
+}
+
+function normalizeBasisPolicy(value, rng) {
+  const corrected = BASIS_POLICY_TYPOS[value] ?? value;
+  return ensureMember(corrected, BASIS_POLICIES, pick(rng, BASIS_POLICIES));
 }
 
 function clampNumber(value, min, max) {

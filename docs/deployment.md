@@ -26,6 +26,7 @@ The `radio` repository contains generic component material:
 - shared algorithm modules under `web/lib`
 - generic Cloudflare Pages configuration in `wrangler.toml`
 - component tests under `tests`
+- component CI under `.github/workflows/tests.yml`
 - artifact generator under `scripts`
 
 Environment-specific CI/CD orchestration, credentials, account identifiers, private host targeting, and deployment values belong outside this component repository.
@@ -48,11 +49,21 @@ Current inspected state:
 
 ```text
 wrangler: not on PATH
+npx --yes wrangler@latest --version: 4.123.0
+npx --yes wrangler@latest whoami: not authenticated
 CLOUDFLARE_API_TOKEN: absent
 CF_API_TOKEN: absent
 CLOUDFLARE_ACCOUNT_ID: absent
 CF_ACCOUNT_ID: absent
 ```
+
+The current exact upload command shape for this static target is:
+
+```text
+npx --yes wrangler@latest pages deploy web --project-name radio --branch master
+```
+
+This follows Cloudflare Pages direct upload through Wrangler.
 
 ## Component Verification
 
@@ -61,3 +72,5 @@ tests/run
 ```
 
 This runs the Node component tests and the static Cloudflare Pages readiness check.
+
+The component CI workflow runs `tests/run` on `push` and `pull_request`, matching the reference component-repository convention where generic component tests live with the component source.

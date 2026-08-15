@@ -10,6 +10,7 @@ Lean browser-live polymetric polymodulation instrument for an eternal drum patte
 - Node test path: `tests/engine.test.mjs`
 - Demo artifact generator: `scripts/generate-demo.mjs`
 - Cloudflare Pages config: `wrangler.toml`
+- Component CI workflow: `.github/workflows/tests.yml`
 
 The lean version has no backend and no database. Donation is a configurable outbound link in the static page. Later paywalling is documented as a Cloudflare Worker signed-token path.
 
@@ -20,8 +21,14 @@ node --test C:\git\radio\tests\engine.test.mjs C:\git\radio\tests\static-check.m
 ```
 
 ```powershell
+bash C:\git\radio\tests\run
+```
+
+```powershell
 node C:\git\radio\scripts\generate-demo.mjs
 ```
+
+The full test runner includes the Z3 invariant check.
 
 ## Lean Controls
 

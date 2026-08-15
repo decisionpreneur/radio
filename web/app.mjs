@@ -4,6 +4,7 @@ import {
   createInitialState,
   generateEventsInWindow,
   renderArrangement,
+  resolvingSeconds,
   sectionSeconds,
   voiceBpm
 } from "./lib/engine.mjs";
@@ -149,8 +150,7 @@ function applyCadence(now) {
     draw();
   }
   if (live.state.config.replacementCadence === "one-per-resolving-sequence") {
-    const resolvingSeconds = sectionSeconds({ ...live.state, config: { ...live.state.config, cycleLength: 1 } });
-    const resolveIndex = Math.floor(local / resolvingSeconds);
+    const resolveIndex = Math.floor(local / resolvingSeconds(live.state));
     if (resolveIndex > live.lastReplacementResolve) {
       live.state = applyNextReplacement(live.state);
       live.lastReplacementResolve = resolveIndex;

@@ -17,6 +17,7 @@ import {
   voiceBpm
 } from "../web/lib/engine.mjs";
 import { encodeMidiFile } from "../web/lib/midi-file.mjs";
+import { DRUM_LANES } from "../web/lib/instruments.mjs";
 
 test("start-only and pulse role counts are represented", () => {
   const state = createInitialState({
@@ -45,6 +46,28 @@ test("instrument selection stays inside screenshot lane set", () => {
     pulseCount: 6
   });
   assert.equal(assertInstrumentsWithinLeanSet(state), true);
+});
+
+test("instrument set uses only named playable screenshot lanes", () => {
+  assert.deepEqual(DRUM_LANES.map((lane) => lane.name), [
+    "Ride Cup Gen Purpose",
+    "Ride Gen Purpose",
+    "Crash Gen Purpose 2",
+    "Crash Gen Purpose",
+    "Tom High Gen Purpose",
+    "Hihat Open Gen Purpose 2",
+    "Tom High-Mid Gen Purpose",
+    "Hihat Open Gen Purpose",
+    "Tom Low-Mid Gen Purpose",
+    "Hihat Closed Gen Purpose",
+    "Tom Low Gen Purpose",
+    "Snare Gen Purpose 3",
+    "Snare Gen Purpose 2",
+    "Snare Gen Purpose",
+    "Rim Sidestick Gen Purpose",
+    "Kick Tight Gen Purpose"
+  ]);
+  assert.deepEqual(DRUM_LANES.map((lane) => lane.note), Array.from({ length: 16 }, (_, index) => 51 - index));
 });
 
 test("next basis cannot equal previous basis", () => {

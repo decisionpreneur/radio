@@ -50,10 +50,8 @@ Unchosen tuneables randomize by default. A blank control means the shared engine
 
 ## Instrument Set
 
-The lean version is constrained to every visible lane label in the attached drum-lane screenshot:
+The lean version is constrained to the named playable lanes visible between the note-only `E2` and `B0` row labels in the attached drum-lane screenshot:
 
-- A5
-- E2
 - Ride Cup Gen Purpose
 - Ride Gen Purpose
 - Crash Gen Purpose 2
@@ -70,7 +68,6 @@ The lean version is constrained to every visible lane label in the attached drum
 - Snare Gen Purpose
 - Rim Sidestick Gen Purpose
 - Kick Tight Gen Purpose
-- B0
 
 ## Artifact Target
 

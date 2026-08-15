@@ -5,6 +5,7 @@ import { publicConfig } from "../src/public-config-worker.mjs";
 import {
   entitlementUnlocks,
   fetchPublicConfig,
+  licenseErrorMessage,
   makeEntitlement,
   normalizeEmail,
   normalizeLicenseKey
@@ -154,6 +155,13 @@ test("paywall entitlement helpers normalize and expire local entitlement", () =>
   assert.equal(entitlement.email, "buyer@example.com");
   assert.equal(entitlementUnlocks(entitlement, Date.parse("2026-01-01T00:00:00.000Z")), true);
   assert.equal(entitlementUnlocks({ ...entitlement, expiresAt: "2020-01-01T00:00:00.000Z" }), false);
+});
+
+test("license error codes render as precise UI copy", () => {
+  assert.equal(licenseErrorMessage("checkout_email_required"), "payment email required");
+  assert.equal(licenseErrorMessage("checkout_email_mismatch"), "payment email mismatch");
+  assert.equal(licenseErrorMessage("license_key_not_listed"), "license key not listed");
+  assert.equal(licenseErrorMessage("unknown_provider_error"), "unknown provider error");
 });
 
 test("public config exposes only an https checkout url", async () => {

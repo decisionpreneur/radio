@@ -46,7 +46,7 @@ implement radio with paywall
 
 The app gates live playback, MIDI output, and MIDI export behind a license key.
 
-The static page still renders the controls and preview. The paid path starts when a license key and checkout email are submitted to:
+The static page still renders the controls and preview. The paid path starts when a license key and payment email are submitted to:
 
 ```text
 /api/license/activate
@@ -70,7 +70,7 @@ Two sources are supported:
 The browser stores only its local entitlement copy:
 
 - license key
-- checkout email
+- payment email
 - provider
 - license status
 - instance id
@@ -100,7 +100,7 @@ RADIO_LEMONSQUEEZY_PRODUCT_ID
 RADIO_LEMONSQUEEZY_VARIANT_ID
 ```
 
-`RADIO_LICENSE_REQUIRE_EMAIL=0` disables the checkout-email requirement. Any other value, including an unset value, keeps checkout email required.
+`RADIO_LICENSE_REQUIRE_EMAIL=0` disables the payment-email requirement. Any other value, including an unset value, keeps payment email required.
 
 `RADIO_LICENSE_KEYS` unlocks matching manual keys. When a Lemon Squeezy product id or variant id is configured, non-matching submitted keys still pass to Lemon Squeezy validation.
 
@@ -122,7 +122,7 @@ The Function accepts a license only when:
 
 - provider response says activated or valid
 - license status is `active`
-- checkout email matches when Lemon Squeezy returns customer email
+- payment email matches when Lemon Squeezy returns customer email
 - product id matches `RADIO_LEMONSQUEEZY_PRODUCT_ID` when configured
 - variant id matches `RADIO_LEMONSQUEEZY_VARIANT_ID` when configured
 

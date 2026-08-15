@@ -23,6 +23,8 @@ test("HTML loads the static app module", async () => {
   assert.match(html, /id="patternCount"[^>]+min="2"/);
   assert.match(html, /id="licenseKey"/);
   assert.match(html, /id="checkoutLink"/);
+  assert.match(html, />Subscribe<\/a>/);
+  assert.match(html, /Payment email/);
 });
 
 test("paid controls fail closed before license JavaScript runs", async () => {

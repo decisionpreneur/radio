@@ -34,7 +34,7 @@ Supported entitlement sources:
 - Lemon Squeezy license key API.
 - Cloudflare Pages environment variable `RADIO_LICENSE_KEYS` as a newline-separated license-key list.
 
-The browser stores the activated license key, checkout email, license instance id, and expiry in local storage so the same browser can revalidate against the Pages Function.
+The browser stores the activated license key, payment email, license instance id, and expiry in local storage so the same browser can revalidate against the Pages Function.
 
 ## Live Scheduling
 

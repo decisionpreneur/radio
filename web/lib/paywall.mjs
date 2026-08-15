@@ -1,5 +1,25 @@
 export const ENTITLEMENT_STORAGE_KEY = "radio.entitlement.v1";
 export const INSTANCE_STORAGE_KEY = "radio.instance.v1";
+const LICENSE_ERROR_MESSAGES = {
+  checkout_email_mismatch: "payment email mismatch",
+  checkout_email_required: "payment email required",
+  invalid_json: "license request invalid",
+  invalid_license_response: "license response invalid",
+  instance_name_required: "license instance required",
+  license_check_failed: "license check failed",
+  license_key_not_listed: "license key not listed",
+  license_key_required: "license key required",
+  license_not_active: "license not active",
+  license_not_valid: "license not valid",
+  license_provider_error: "license provider error",
+  license_provider_unreachable: "license provider unreachable",
+  license_rejected: "license rejected",
+  license_request_failed: "license request failed",
+  license_required: "license required",
+  method_not_allowed: "license method not allowed",
+  product_mismatch: "product mismatch",
+  variant_mismatch: "variant mismatch"
+};
 
 export function readEntitlement(storage = globalThis.localStorage) {
   try {
@@ -95,6 +115,12 @@ export function normalizeLicenseKey(value) {
 
 export function normalizeEmail(value) {
   return String(value ?? "").trim().toLowerCase();
+}
+
+export function licenseErrorMessage(error) {
+  const code = String(error ?? "license_rejected").trim();
+  if (!code) return LICENSE_ERROR_MESSAGES.license_rejected;
+  return LICENSE_ERROR_MESSAGES[code] ?? code.replaceAll("_", " ");
 }
 
 function normalizeHttpsUrl(value) {

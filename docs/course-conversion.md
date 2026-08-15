@@ -44,6 +44,19 @@ Old-course dependency evidence in the transcripts:
 
 The extracted course document also contained a WMMail task script requiring a station visit, a social-network share, a before/after like count report, and a social profile link. The extracted HTML payment page used an SMSCoin donation script.
 
+## Old-Course Heuristic Value
+
+The old course is useful only as launch-order heuristics:
+
+- create a reachable product endpoint before promotion
+- make the station/product URL the central object
+- keep monetization setup separate from content setup
+- verify the buyer admission path after payment setup
+
+The old course is not useful as provider or traffic implementation material. Its specific services, payment scripts, paid-task traffic, and social mechanics stay excluded by the conversion rule below.
+
+The old raw materials remain historical source material only. They are not runtime assets, launch dependencies, UI sources, or payment sources for this repo.
+
 ## Conversion Rule
 
 The converted course is no longer a tutorial for a third-party hosted station, Runet task traffic, Runet social sharing, manual wallets, or SMS payment scripts.
@@ -216,7 +229,7 @@ RADIO_LEMONSQUEEZY_VARIANT_ID=
 
 - Unlicensed browser: live playback, MIDI output, and export stay locked.
 - Checkout link is visible only when `RADIO_CHECKOUT_URL` is configured.
-- Paid user submits checkout email plus license key.
+- Paid user submits payment email plus license key.
 - `/api/license/activate` returns an active entitlement.
 - The app plays after entitlement validation.
 - `/api/license/validate` preserves access for the same stored entitlement.

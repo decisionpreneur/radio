@@ -14,13 +14,17 @@
           <p id="status">stopped</p>
         </div>
         <div class="actions">
-          <button id="startBtn" type="button" disabled>Start</button>
-          <button id="stopBtn" type="button">Stop</button>
-          <button id="randomBtn" type="button">Randomize</button>
-          <button id="midiBtn" type="button" disabled>MIDI</button>
-          <button id="exportBtn" type="button" disabled>Export</button>
-          <a id="checkoutLink" href="#" data-checkout-url="">License</a>
-          <a id="donateLink" href="#" data-donation-url="">Donate</a>
+          <div class="transport-actions">
+            <button id="startBtn" type="button" disabled>Start</button>
+            <button id="stopBtn" type="button">Stop</button>
+            <button id="randomBtn" type="button">Randomize</button>
+            <button id="midiBtn" type="button" disabled>MIDI Out</button>
+            <button id="exportBtn" type="button" disabled>Export MIDI</button>
+          </div>
+          <div class="commerce-actions">
+            <a id="checkoutLink" href="#" data-checkout-url="">Subscribe</a>
+            <a id="donateLink" href="#" data-donation-url="">Donate</a>
+          </div>
         </div>
       </section>
 
@@ -117,7 +121,7 @@
               <input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false">
             </label>
             <label>
-              Checkout email
+              Payment email
               <input id="licenseEmail" name="licenseEmail" type="email" autocomplete="email">
             </label>
             <div class="paywall-actions">

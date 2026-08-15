@@ -87,7 +87,7 @@ Set these Cloudflare Pages environment variables or secrets when paywalling is e
 
 - `RADIO_LICENSE_KEYS`: newline-separated license-key allowlist.
 - `RADIO_CHECKOUT_URL`: hosted checkout URL shown by the app.
-- `RADIO_LICENSE_REQUIRE_EMAIL`: `0` only when checkout email should not be required.
+- `RADIO_LICENSE_REQUIRE_EMAIL`: `0` only when payment email should not be required.
 - `RADIO_LEMONSQUEEZY_PRODUCT_ID`: optional Lemon Squeezy product id constraint.
 - `RADIO_LEMONSQUEEZY_VARIANT_ID`: optional Lemon Squeezy variant id constraint.
 
@@ -96,3 +96,5 @@ Local HTTP serving is not a delivery target.
 Deployment boundary details are in `docs/deployment.md`.
 
 The old radio course conversion is in `docs/course-conversion.md`.
+
+UI, UX, copy, and design source notes are in `docs/ui-copy-design.md`.

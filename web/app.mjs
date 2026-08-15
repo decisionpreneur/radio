@@ -15,6 +15,7 @@ import {
   entitlementUnlocks,
   fetchPublicConfig,
   getOrCreateInstanceName,
+  licenseErrorMessage,
   makeEntitlement,
   readEntitlement,
   validateLicense,
@@ -145,7 +146,9 @@ async function unlockWithLicense() {
   const licenseKey = licenseKeyInput.value;
   const email = licenseEmailInput.value;
   if (!licenseKey.trim() || !email.trim()) {
-    paywallStatus.textContent = "license key and checkout email required";
+    paywallStatus.textContent = !licenseKey.trim() && !email.trim()
+      ? "license key and payment email required"
+      : licenseErrorMessage(!licenseKey.trim() ? "license_key_required" : "checkout_email_required");
     return;
   }
   paywallStatus.textContent = "checking license";
@@ -157,7 +160,7 @@ async function unlockWithLicense() {
       instanceName: getOrCreateInstanceName()
     });
     if (!verdict.unlocked) {
-      paywallStatus.textContent = verdict.error ?? "license rejected";
+      paywallStatus.textContent = licenseErrorMessage(verdict.error);
       return;
     }
     entitlement = makeEntitlement({ licenseKey, email, verdict });
@@ -165,7 +168,7 @@ async function unlockWithLicense() {
     licenseKeyInput.value = "";
     updatePaywallUi();
   } catch {
-    paywallStatus.textContent = "license check failed";
+    paywallStatus.textContent = licenseErrorMessage("license_check_failed");
   } finally {
     unlockBtn.disabled = false;
   }
@@ -206,7 +209,7 @@ async function loadPublicConfig() {
 
 function requireUnlocked() {
   if (entitlementUnlocks(entitlement)) return true;
-  paywallStatus.textContent = "license required";
+  paywallStatus.textContent = licenseErrorMessage("license_required");
   return false;
 }
 

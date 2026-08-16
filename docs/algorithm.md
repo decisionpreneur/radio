@@ -55,11 +55,13 @@ All meters fit inside the same base bar duration. Voice pulse BPM is:
 voiceBpm = baseBpm * voiceMeter / baseMeter
 ```
 
-This is the default because `closest` and `farthest` basis choices have concrete BPM distance.
+This is the lean browser default because `closest` and `farthest` basis choices have concrete BPM distance and cycle lengths stay usable for live playback.
 
 `same-pulse-polymeter`:
 
 All voices share the same pulse duration. Different meters create different bar lengths. Resolving length is based on the least common multiple of the active meters.
+
+`same-pulse-polymeter` remains an engine-level option only, not a lean UI tuneable.
 
 ## Cycle Length
 

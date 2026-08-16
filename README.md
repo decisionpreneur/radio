@@ -37,7 +37,6 @@ The full test runner includes the Z3 invariant check.
 - start-only patterns
 - pulse patterns
 - meter source as first natural numbers
-- meter timing mode
 - cycle length in bars or resolving sequences
 - next tempo-basis policy: next, random, closest, farthest
 - replacement cadence: immediate, one per bar, one per resolving sequence

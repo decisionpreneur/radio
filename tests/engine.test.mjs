@@ -110,7 +110,6 @@ test("blank UI-style controls use seeded random defaults and preserve chosen bas
     cycleLength: "",
     cycleLengthKind: "",
     basisPolicy: "",
-    meterTiming: "",
     replacementCadence: ""
   });
   assert.equal(state.baseMeter, 1);
@@ -118,7 +117,7 @@ test("blank UI-style controls use seeded random defaults and preserve chosen bas
   assert.ok(state.config.patternCount >= 2);
   assert.ok(BASIS_POLICIES.includes(state.config.basisPolicy));
   assert.ok(CYCLE_LENGTH_KINDS.includes(state.config.cycleLengthKind));
-  assert.ok(METER_TIMING_MODES.includes(state.config.meterTiming));
+  assert.equal(state.config.meterTiming, "shared-bar-polyrhythm");
   assert.ok(REPLACEMENT_CADENCES.includes(state.config.replacementCadence));
   assert.equal(state.config.strongBeatMode, "every-beat");
 });

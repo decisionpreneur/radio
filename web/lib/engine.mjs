@@ -81,7 +81,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     meterStart,
     meterCount,
     customMeters: Array.isArray(input.customMeters) ? input.customMeters.map(Number).filter(Number.isFinite) : null,
-    meterTiming: ensureMemberOrRandom(input.meterTiming, METER_TIMING_MODES, rng),
+    meterTiming: ensureMember(input.meterTiming, METER_TIMING_MODES, "shared-bar-polyrhythm"),
     cycleLengthKind: ensureMemberOrRandom(input.cycleLengthKind, CYCLE_LENGTH_KINDS, rng),
     cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),

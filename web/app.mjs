@@ -369,7 +369,6 @@ function makeStateFromControls() {
     cycleLength: readOptionalNumber("cycleLength"),
     cycleLengthKind: optionalValue("cycleLengthKind"),
     basisPolicy: optionalValue("basisPolicy"),
-    meterTiming: optionalValue("meterTiming"),
     replacementCadence: optionalValue("replacementCadence")
   });
 }

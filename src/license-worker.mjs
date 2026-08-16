@@ -17,12 +17,6 @@ export async function handleLicenseRequest(context, action, options = {}) {
   if (!licenseKey) {
     return json({ ok: false, unlocked: false, error: "license_key_required" }, 422);
   }
-  if (requiresEmail(context.env) && !email) {
-    return json({ ok: false, unlocked: false, error: "checkout_email_required" }, 422);
-  }
-  if (action === "activate" && !instanceName) {
-    return json({ ok: false, unlocked: false, error: "instance_name_required" }, 422);
-  }
 
   const backdoorVerdict = await verifyCloudflareKeyList(context.env, licenseKey, "RADIO_BACKDOOR_KEYS");
   if (backdoorVerdict.configured && backdoorVerdict.unlocked) {
@@ -34,6 +28,12 @@ export async function handleLicenseRequest(context, action, options = {}) {
       instanceId: instanceId || instanceName,
       error: null
     });
+  }
+  if (requiresEmail(context.env) && !email) {
+    return json({ ok: false, unlocked: false, error: "checkout_email_required" }, 422);
+  }
+  if (action === "activate" && !instanceName) {
+    return json({ ok: false, unlocked: false, error: "instance_name_required" }, 422);
   }
 
   const listVerdict = await verifyCloudflareKeyList(context.env, licenseKey, "RADIO_LICENSE_KEYS");

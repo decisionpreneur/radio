@@ -145,10 +145,8 @@ async function startLive() {
 async function unlockWithLicense() {
   const licenseKey = licenseKeyInput.value;
   const email = licenseEmailInput.value;
-  if (!licenseKey.trim() || !email.trim()) {
-    paywallStatus.textContent = !licenseKey.trim() && !email.trim()
-      ? "license key and payment email required"
-      : licenseErrorMessage(!licenseKey.trim() ? "license_key_required" : "checkout_email_required");
+  if (!licenseKey.trim()) {
+    paywallStatus.textContent = licenseErrorMessage("license_key_required");
     return;
   }
   paywallStatus.textContent = "checking license";

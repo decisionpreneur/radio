@@ -47,6 +47,43 @@ test("Cloudflare special-use backdoor list unlocks matching keys without provide
   assert.equal(called, false);
 });
 
+test("Cloudflare special-use backdoor list does not require payment email", async () => {
+  let called = false;
+  const response = await handleLicenseRequest(context({
+    body: { licenseKey: " special-key " },
+    env: { RADIO_BACKDOOR_KEYS: "special-key\noperator-key" }
+  }), "activate", {
+    fetcher: async () => {
+      called = true;
+      return new Response("{}", { status: 500 });
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.unlocked, true);
+  assert.equal(body.provider, "cloudflare-backdoor");
+  assert.equal(body.instanceId, "radio-browser");
+  assert.equal(called, false);
+});
+
+test("non-backdoor keys still require payment email", async () => {
+  let called = false;
+  const response = await handleLicenseRequest(context({
+    body: { licenseKey: " paid-key " },
+    env: { RADIO_BACKDOOR_KEYS: "special-key", RADIO_LEMONSQUEEZY_PRODUCT_ID: "4" }
+  }), "activate", {
+    fetcher: async () => {
+      called = true;
+      return Response.json({});
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 422);
+  assert.equal(body.unlocked, false);
+  assert.equal(body.error, "checkout_email_required");
+  assert.equal(called, false);
+});
+
 test("Cloudflare newline license list rejects missing keys", async () => {
   const response = await handleLicenseRequest(context({
     body: { licenseKey: "gamma-key", email: "buyer@example.com" },

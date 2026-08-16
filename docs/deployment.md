@@ -108,13 +108,14 @@ Paywall environment:
 
 ```text
 RADIO_LICENSE_KEYS=
+RADIO_SPECIAL_USE_KEYS=
 RADIO_CHECKOUT_URL=
 RADIO_LICENSE_REQUIRE_EMAIL=
 RADIO_LEMONSQUEEZY_PRODUCT_ID=
 RADIO_LEMONSQUEEZY_VARIANT_ID=
 ```
 
-Use `RADIO_LICENSE_KEYS` as a newline-separated Cloudflare-side manual license list, and use Lemon Squeezy product/variant constraints for hosted-checkout paid keys. `RADIO_CHECKOUT_URL` is the hosted checkout URL shown by the app. Do not commit live license keys or payment-provider account values into this repository.
+Use `RADIO_LICENSE_KEYS` as a newline-separated Cloudflare-side manual license list, use `RADIO_SPECIAL_USE_KEYS` as a newline-separated special-use license list, and use Lemon Squeezy product/variant constraints for hosted-checkout paid keys. `RADIO_CHECKOUT_URL` is the hosted checkout URL shown by the app. Do not commit live license keys or payment-provider account values into this repository.
 
 Cloudflare documentation checked:
 

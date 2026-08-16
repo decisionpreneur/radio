@@ -94,6 +94,7 @@ Environment variables:
 
 ```text
 RADIO_LICENSE_KEYS
+RADIO_SPECIAL_USE_KEYS
 RADIO_CHECKOUT_URL
 RADIO_LICENSE_REQUIRE_EMAIL
 RADIO_LEMONSQUEEZY_PRODUCT_ID
@@ -103,6 +104,8 @@ RADIO_LEMONSQUEEZY_VARIANT_ID
 `RADIO_LICENSE_REQUIRE_EMAIL=0` disables the payment-email requirement. Any other value, including an unset value, keeps payment email required.
 
 `RADIO_LICENSE_KEYS` unlocks matching manual keys. When a Lemon Squeezy product id or variant id is configured, non-matching submitted keys still pass to Lemon Squeezy validation.
+
+`RADIO_SPECIAL_USE_KEYS` unlocks matching special-use keys before the payment-email requirement.
 
 ## Lemon Squeezy
 
@@ -135,6 +138,8 @@ first-license-key
 second-license-key
 third-license-key
 ```
+
+`RADIO_SPECIAL_USE_KEYS` uses the same newline-separated format.
 
 The Function hashes the submitted key and each configured key with SHA-256 before comparison.
 

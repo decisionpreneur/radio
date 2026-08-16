@@ -101,6 +101,7 @@ Paywall:
 - Primary lean provider shape: hosted checkout plus license key validation.
 - Implemented external provider: Lemon Squeezy license API.
 - Implemented fallback: Cloudflare Pages environment variable `RADIO_LICENSE_KEYS` as a newline-separated allowlist.
+- Implemented special-use fallback: Cloudflare Pages environment variable `RADIO_SPECIAL_USE_KEYS` as a newline-separated allowlist.
 - No app database.
 - No committed license keys.
 - No committed payment-provider secrets.
@@ -213,6 +214,7 @@ Root directory:
 ```text
 RADIO_CHECKOUT_URL=
 RADIO_LICENSE_KEYS=
+RADIO_SPECIAL_USE_KEYS=
 RADIO_LICENSE_REQUIRE_EMAIL=
 RADIO_LEMONSQUEEZY_PRODUCT_ID=
 RADIO_LEMONSQUEEZY_VARIANT_ID=
@@ -237,6 +239,7 @@ RADIO_LEMONSQUEEZY_VARIANT_ID=
 8. Operate the fallback:
 
 - Add a paid or comped license key to `RADIO_LICENSE_KEYS` when provider-side activation is delayed.
+- Add a special-use key to `RADIO_SPECIAL_USE_KEYS` when special access must avoid payment-email requirement.
 - Remove the key from `RADIO_LICENSE_KEYS` when access must end.
 - Keep the newline list in Cloudflare environment only.
 

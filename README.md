@@ -84,6 +84,7 @@ Use repository `decisionpreneur/radio`, production branch `master`, build comman
 Set these Cloudflare Pages environment variables or secrets when paywalling is enabled:
 
 - `RADIO_LICENSE_KEYS`: newline-separated license-key allowlist.
+- `RADIO_SPECIAL_USE_KEYS`: newline-separated special-use license-key allowlist.
 - `RADIO_CHECKOUT_URL`: hosted checkout URL shown by the app.
 - `RADIO_LICENSE_REQUIRE_EMAIL`: `0` only when payment email should not be required.
 - `RADIO_LEMONSQUEEZY_PRODUCT_ID`: optional Lemon Squeezy product id constraint.

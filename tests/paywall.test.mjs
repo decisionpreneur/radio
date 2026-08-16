@@ -66,6 +66,25 @@ test("Cloudflare special-use backdoor list does not require payment email", asyn
   assert.equal(called, false);
 });
 
+test("Cloudflare special-use key list unlocks without overwriting the original encrypted list", async () => {
+  let called = false;
+  const response = await handleLicenseRequest(context({
+    body: { licenseKey: " fresh-special-key " },
+    env: { RADIO_SPECIAL_USE_KEYS: "fresh-special-key" }
+  }), "activate", {
+    fetcher: async () => {
+      called = true;
+      return new Response("{}", { status: 500 });
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.unlocked, true);
+  assert.equal(body.provider, "cloudflare-backdoor");
+  assert.equal(body.instanceId, "radio-browser");
+  assert.equal(called, false);
+});
+
 test("non-backdoor keys still require payment email", async () => {
   let called = false;
   const response = await handleLicenseRequest(context({

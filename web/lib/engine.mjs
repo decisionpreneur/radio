@@ -85,7 +85,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     cycleLengthKind: ensureMemberOrRandom(input.cycleLengthKind, CYCLE_LENGTH_KINDS, rng),
     cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
-    replacementCadence: ensureMemberOrRandom(input.replacementCadence, REPLACEMENT_CADENCES, rng),
+    replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "one-per-bar"),
     strongBeatMode: ensureMember(input.strongBeatMode, STRONG_BEAT_MODES, "every-beat"),
     noteDurationSeconds: clampNumber(hasValue(input.noteDurationSeconds) ? input.noteDurationSeconds : 0.08, 0.01, 2)
   };

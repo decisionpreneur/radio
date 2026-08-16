@@ -368,8 +368,7 @@ function makeStateFromControls() {
     meterCount: readOptionalNumber("patternCount"),
     cycleLength: readOptionalNumber("cycleLength"),
     cycleLengthKind: optionalValue("cycleLengthKind"),
-    basisPolicy: optionalValue("basisPolicy"),
-    replacementCadence: optionalValue("replacementCadence")
+    basisPolicy: optionalValue("basisPolicy")
   });
 }
 

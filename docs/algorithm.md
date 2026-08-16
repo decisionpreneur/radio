@@ -111,6 +111,8 @@ Let selected voice `S` be chosen.
 
 The old base remains through the new cycle. At the next basis change, it becomes replaceable unless it is selected as the new base.
 
+Lean browser playback uses `one-per-bar` replacement. `immediate` and `one-per-resolving-sequence` remain engine-level options only.
+
 ## Invariant Check
 
 For `shared-bar-polyrhythm`, selected voice BPM before transition:

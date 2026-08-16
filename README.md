@@ -39,7 +39,6 @@ The full test runner includes the Z3 invariant check.
 - meter source as first natural numbers
 - cycle length in bars or resolving sequences
 - next tempo-basis policy: next, random, closest, farthest
-- replacement cadence: immediate, one per bar, one per resolving sequence
 - seed
 - base BPM
 - base meter

@@ -17,7 +17,7 @@ const state = createInitialState({
   cycleLengthKind: "bars",
   cycleLength: 4,
   basisPolicy: "next",
-  replacementCadence: "immediate",
+  replacementCadence: "one-per-bar",
   meterTiming: "shared-bar-polyrhythm"
 });
 

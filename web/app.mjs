@@ -128,8 +128,8 @@ clearLicenseBtn.addEventListener("click", () => {
 
 async function startLive() {
   state = makeStateFromControls();
-  audioContext = audioContext ?? new AudioContext();
-  if (audioContext.state !== "running") await audioContext.resume();
+  audioContext = audioContext ?? new (window.AudioContext || window.webkitAudioContext)();
+  await audioContext.resume();
   live = {
     state,
     sectionStart: audioContext.currentTime + 0.08,
@@ -139,6 +139,7 @@ async function startLive() {
   };
   statusEl.textContent = "playing";
   draw();
+  tick();
   timer = window.setInterval(tick, 25);
 }
 

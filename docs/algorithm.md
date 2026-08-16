@@ -37,6 +37,8 @@ Unchosen configuration fields are generated from the current seed. In the browse
 1 1 1 ... 1
 ```
 
+The lean browser UI uses `every-beat` pulse interpretation so live playback keeps producing audible events after the initial window. `downbeat-only` remains an engine-level option only, not a lean UI tuneable.
+
 `binary`:
 
 ```text

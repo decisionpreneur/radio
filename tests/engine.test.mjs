@@ -7,13 +7,13 @@ import {
   BASIS_POLICIES,
   createInitialState,
   CYCLE_LENGTH_KINDS,
+  generateEventsInWindow,
   generateSectionEvents,
   METER_TIMING_MODES,
   REPLACEMENT_CADENCES,
   renderArrangement,
   resolvingSeconds,
   sectionSeconds,
-  STRONG_BEAT_MODES,
   voiceBpm
 } from "../web/lib/engine.mjs";
 import { encodeMidiFile } from "../web/lib/midi-file.mjs";
@@ -111,8 +111,7 @@ test("blank UI-style controls use seeded random defaults and preserve chosen bas
     cycleLengthKind: "",
     basisPolicy: "",
     meterTiming: "",
-    replacementCadence: "",
-    strongBeatMode: ""
+    replacementCadence: ""
   });
   assert.equal(state.baseMeter, 1);
   assert.equal(state.voices[0].meter, 1);
@@ -121,7 +120,7 @@ test("blank UI-style controls use seeded random defaults and preserve chosen bas
   assert.ok(CYCLE_LENGTH_KINDS.includes(state.config.cycleLengthKind));
   assert.ok(METER_TIMING_MODES.includes(state.config.meterTiming));
   assert.ok(REPLACEMENT_CADENCES.includes(state.config.replacementCadence));
-  assert.ok(STRONG_BEAT_MODES.includes(state.config.strongBeatMode));
+  assert.equal(state.config.strongBeatMode, "every-beat");
 });
 
 
@@ -258,6 +257,32 @@ test("twenty-meter resolving-sequence scenario rethinks selected basis and regen
     next.voices.map((voice) => voice.meter).slice().sort((a, b) => a - b),
     Array.from({ length: 20 }, (_, index) => index + 1)
   );
+});
+
+test("lean live defaults keep producing events after the initial hit window", () => {
+  const state = createInitialState({
+    seed: "probe",
+    baseBpm: 100,
+    patternCount: 20,
+    startOnlyCount: 4,
+    pulseCount: 4,
+    cycleLength: 3,
+    cycleLengthKind: "resolving-sequences"
+  });
+  const first = generateEventsInWindow(state, {
+    fromSeconds: 0,
+    toSeconds: 1,
+    sectionStartSeconds: 0,
+    maxEvents: 1000
+  });
+  const second = generateEventsInWindow(state, {
+    fromSeconds: 1,
+    toSeconds: 2,
+    sectionStartSeconds: 0,
+    maxEvents: 1000
+  });
+  assert.ok(first.events.length > 0);
+  assert.ok(second.events.length > 0);
 });
 
 test("resolvingSeconds stays independent of cycle length unit", () => {

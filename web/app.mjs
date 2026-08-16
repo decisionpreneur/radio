@@ -370,7 +370,6 @@ function makeStateFromControls() {
     cycleLengthKind: optionalValue("cycleLengthKind"),
     basisPolicy: optionalValue("basisPolicy"),
     meterTiming: optionalValue("meterTiming"),
-    strongBeatMode: optionalValue("strongBeatMode"),
     replacementCadence: optionalValue("replacementCadence")
   });
 }

@@ -25,6 +25,7 @@ export function createInitialState(input = {}) {
       cycleIndex: 0
     });
   });
+  ensureOpeningHit(voices);
   const baseVoice = voices[0];
 
   return {
@@ -440,6 +441,11 @@ function cloneVoice(voice) {
     pattern: voice.pattern.slice(),
     instrument: { ...voice.instrument }
   };
+}
+
+function ensureOpeningHit(voices) {
+  if (!voices.length || voices.some((voice) => voice.pattern[0] === 1)) return;
+  voices[0].pattern[0] = 1;
 }
 
 function countRoles(voices) {

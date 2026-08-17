@@ -283,6 +283,20 @@ test("lean live defaults keep producing events after the initial hit window", ()
   assert.ok(second.events.length > 0);
 });
 
+test("default random states schedule an opening audible event", () => {
+  for (let index = 0; index < 500; index += 1) {
+    const state = createInitialState({ seed: `opening-${index}` });
+    const firstWindow = generateEventsInWindow(state, {
+      fromSeconds: 0,
+      toSeconds: 0.35,
+      sectionStartSeconds: 0,
+      maxEvents: 1000
+    });
+    assert.ok(firstWindow.events.length > 0, `opening-${index}`);
+    assert.equal(firstWindow.events[0].localSeconds, 0, `opening-${index}`);
+  }
+});
+
 test("resolvingSeconds stays independent of cycle length unit", () => {
   const bars = createInitialState({
     seed: "resolve-bars",

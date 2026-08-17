@@ -60,6 +60,7 @@ loadPublicConfig();
 let state = makeStateFromControls();
 let entitlement = readEntitlement();
 let audioContext = null;
+let masterInput = null;
 let midiAccess = null;
 let midiOutput = null;
 let timer = null;
@@ -77,7 +78,12 @@ controls.addEventListener("input", () => {
 
 startBtn.addEventListener("click", async () => {
   if (!requireUnlocked()) return;
-  await startLive();
+  try {
+    await startLive();
+  } catch {
+    stopLive();
+    statusEl.textContent = "audio unavailable";
+  }
 });
 
 stopBtn.addEventListener("click", () => {
@@ -128,8 +134,7 @@ clearLicenseBtn.addEventListener("click", () => {
 
 async function startLive() {
   state = makeStateFromControls();
-  audioContext = audioContext ?? new (window.AudioContext || window.webkitAudioContext)();
-  await audioContext.resume();
+  await ensureAudioContext();
   live = {
     state,
     sectionStart: audioContext.currentTime + 0.08,
@@ -137,9 +142,9 @@ async function startLive() {
     lastReplacementResolve: -1,
     scheduled: new Set()
   };
-  statusEl.textContent = "playing";
   draw();
   tick();
+  statusEl.textContent = live.scheduled.size ? "playing" : "waiting for hit";
   timer = window.setInterval(tick, 25);
 }
 
@@ -291,6 +296,7 @@ function playEvent(event, when) {
     output.send([0x89, event.note, 0], timestamp + event.durationSeconds * 1000);
   }
   playAudio(event, when);
+  statusEl.textContent = "playing";
 }
 
 function playAudio(event, when) {
@@ -318,7 +324,7 @@ function drumSine(when, frequency, duration, gainValue) {
   osc.frequency.exponentialRampToValueAtTime(Math.max(20, frequency * 0.45), when + duration);
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-  osc.connect(gain).connect(audioContext.destination);
+  osc.connect(gain).connect(masterInput);
   osc.start(when);
   osc.stop(when + duration + 0.02);
 }
@@ -336,9 +342,24 @@ function noiseHit(when, duration, gainValue, frequency) {
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
   source.buffer = buffer;
-  source.connect(filter).connect(gain).connect(audioContext.destination);
+  source.connect(filter).connect(gain).connect(masterInput);
   source.start(when);
   source.stop(when + duration + 0.02);
+}
+
+async function ensureAudioContext() {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) throw new Error("AudioContext unavailable");
+  audioContext = audioContext ?? new AudioContextCtor();
+  if (!masterInput) {
+    const compressor = audioContext.createDynamicsCompressor();
+    const masterGain = audioContext.createGain();
+    masterGain.gain.value = 0.95;
+    compressor.connect(masterGain).connect(audioContext.destination);
+    masterInput = compressor;
+  }
+  await audioContext.resume();
+  if (audioContext.state !== "running") throw new Error("AudioContext not running");
 }
 
 async function connectMidi() {

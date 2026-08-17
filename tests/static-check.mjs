@@ -43,6 +43,27 @@ test("static app initializes session seed before constructing state", async () =
   assert.ok(seedIndex < stateIndex);
 });
 
+test("live playback reports playing only after scheduling an audio event", async () => {
+  const app = await readFile(new URL("../web/app.mjs", import.meta.url), "utf8");
+  const startLiveIndex = app.indexOf("async function startLive()");
+  const tickIndex = app.indexOf("  tick();", startLiveIndex);
+  const playingIndex = app.indexOf('statusEl.textContent = live.scheduled.size ? "playing" : "waiting for hit";', startLiveIndex);
+  assert.notEqual(startLiveIndex, -1);
+  assert.notEqual(tickIndex, -1);
+  assert.notEqual(playingIndex, -1);
+  assert.ok(tickIndex < playingIndex);
+  assert.match(app, /if \(audioContext\.state !== "running"\) throw new Error\("AudioContext not running"\);/);
+  assert.doesNotMatch(app.slice(startLiveIndex, playingIndex), /statusEl\.textContent = "playing"/);
+});
+
+test("web audio nodes route through a master output graph", async () => {
+  const app = await readFile(new URL("../web/app.mjs", import.meta.url), "utf8");
+  assert.match(app, /let masterInput = null;/);
+  assert.match(app, /compressor\.connect\(masterGain\)\.connect\(audioContext\.destination\);/);
+  assert.match(app, /osc\.connect\(gain\)\.connect\(masterInput\);/);
+  assert.match(app, /source\.connect\(filter\)\.connect\(gain\)\.connect\(masterInput\);/);
+});
+
 test("Pages Function license endpoints are present without wrangler deployment config", async () => {
   const config = await readFile(new URL("../functions/api/config.js", import.meta.url), "utf8");
   const activate = await readFile(new URL("../functions/api/license/activate.js", import.meta.url), "utf8");

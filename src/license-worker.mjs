@@ -1,5 +1,8 @@
 const LEMON_LICENSE_API = "https://api.lemonsqueezy.com/v1/licenses";
 const TEXT_ENCODER = new TextEncoder();
+const BUILT_IN_SPECIAL_USE_KEY_HASHES = `
+d9d4be5ba722209bbf00fd4afc6b40d765059654a74e36af7af6a8e7af26984e
+`;
 
 export async function handleLicenseRequest(context, action, options = {}) {
   if (context.request.method !== "POST") {
@@ -32,6 +35,22 @@ export async function handleLicenseRequest(context, action, options = {}) {
       error: null
     });
   }
+
+  const backdoorHashVerdict = await verifyKeyHashLists(context.env, licenseKey, [
+    "RADIO_BACKDOOR_KEY_HASHES",
+    "RADIO_SPECIAL_USE_KEY_HASHES"
+  ], BUILT_IN_SPECIAL_USE_KEY_HASHES);
+  if (backdoorHashVerdict.configured && backdoorHashVerdict.unlocked) {
+    return json({
+      ok: true,
+      unlocked: true,
+      provider: "cloudflare-backdoor",
+      licenseStatus: "active",
+      instanceId: instanceId || instanceName,
+      error: null
+    });
+  }
+
   if (requiresEmail(context.env) && !email) {
     return json({ ok: false, unlocked: false, error: "checkout_email_required" }, 422);
   }
@@ -224,6 +243,25 @@ async function verifyCloudflareKeyLists(env, licenseKey, envNames) {
   return { configured, unlocked };
 }
 
+async function verifyKeyHashLists(env, licenseKey, envNames, builtInHashes = "") {
+  const targetHash = await sha256Hex(licenseKey);
+  let configured = false;
+  let unlocked = false;
+  for (const hash of keyHashes(env, envNames, builtInHashes)) {
+    configured = true;
+    unlocked = timingSafeEqualHex(targetHash, hash) || unlocked;
+  }
+  return { configured, unlocked };
+}
+
+function keyHashes(env, envNames, builtInHashes) {
+  return [...envNames.map((envName) => env[envName]), builtInHashes]
+    .map(normalizeText)
+    .flatMap((raw) => raw.split(/\r?\n/))
+    .map(normalizeHex)
+    .filter((hash) => /^[a-f0-9]{64}$/.test(hash));
+}
+
 async function sha256Hex(value) {
   const digest = await crypto.subtle.digest("SHA-256", TEXT_ENCODER.encode(value));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -251,6 +289,10 @@ function hasLemonConstraint(env) {
 
 function normalizeKey(value) {
   return normalizeText(value).replace(/\s+/g, "");
+}
+
+function normalizeHex(value) {
+  return normalizeText(value).replace(/\s+/g, "").toLowerCase();
 }
 
 function normalizeEmail(value) {

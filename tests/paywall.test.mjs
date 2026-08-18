@@ -85,6 +85,26 @@ test("Cloudflare special-use key list unlocks without overwriting the original e
   assert.equal(called, false);
 });
 
+test("Cloudflare special-use hash list unlocks without payment email or provider fetch", async () => {
+  let called = false;
+  const hash = await sha256Hex("hashed-special-key");
+  const response = await handleLicenseRequest(context({
+    body: { licenseKey: " hashed-special-key " },
+    env: { RADIO_SPECIAL_USE_KEY_HASHES: hash }
+  }), "activate", {
+    fetcher: async () => {
+      called = true;
+      return new Response("{}", { status: 500 });
+    }
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.unlocked, true);
+  assert.equal(body.provider, "cloudflare-backdoor");
+  assert.equal(body.instanceId, "radio-browser");
+  assert.equal(called, false);
+});
+
 test("non-backdoor keys still require payment email", async () => {
   let called = false;
   const response = await handleLicenseRequest(context({
@@ -247,4 +267,9 @@ function context({ body, env, method = "POST" }) {
     }),
     env
   };
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

@@ -16,6 +16,7 @@ export function createInitialState(input = {}) {
   const config = normalizeConfig(input, rng, seed);
   const meters = buildMeterValues(config);
   const roles = buildRoles(config, rng);
+  const pickBalancedLane = createLanePicker(rng, config.kitPool);
   const voices = meters.slice(0, config.patternCount).map((meter, index) => {
     return createVoice({
       id: `v${index + 1}`,
@@ -23,6 +24,7 @@ export function createInitialState(input = {}) {
       role: roles[index],
       rng,
       cycleIndex: 0,
+      lane: pickBalancedLane(),
       kitPool: config.kitPool
     });
   });
@@ -403,6 +405,11 @@ function buildReplacementVoices({ previousState, preserved, cycleIndex, rng }) {
   const usedMeters = new Set(preserved.map((voice) => voice.meter));
   const meters = buildMeterValues(config).filter((meter) => !usedMeters.has(meter));
   const preservedRoleCounts = countRoles(preserved);
+  const pickBalancedLane = createLanePicker(
+    rng,
+    config.kitPool,
+    preserved.map((voice) => voice.instrument)
+  );
   const roleList = [];
   for (let i = 0; i < Math.max(0, config.startOnlyCount - preservedRoleCounts["start-only"]); i += 1) {
     roleList.push("start-only");
@@ -425,6 +432,7 @@ function buildReplacementVoices({ previousState, preserved, cycleIndex, rng }) {
       role,
       rng,
       cycleIndex,
+      lane: pickBalancedLane(),
       kitPool: config.kitPool
     });
     finalVoices.push(voice);
@@ -453,6 +461,27 @@ function cloneVoice(voice) {
 function ensureOpeningHit(voices) {
   if (!voices.length || voices.some((voice) => voice.pattern[0] === 1)) return;
   voices[0].pattern[0] = 1;
+}
+
+function createLanePicker(rng, kitPool, usedLanes = []) {
+  const allowedKitIds = normalizeKitPool(kitPool);
+  const allAllowed = ALL_LANES.filter((lane) => allowedKitIds.includes(lane.kitId));
+  const used = new Set(usedLanes.map(laneKey));
+  let lanes = [];
+  return () => {
+    if (!lanes.length) {
+      const unused = allAllowed.filter((lane) => !used.has(laneKey(lane)));
+      if (!unused.length) used.clear();
+      lanes = shuffled(rng, unused.length ? unused : allAllowed);
+    }
+    const lane = lanes.shift();
+    used.add(laneKey(lane));
+    return lane;
+  };
+}
+
+function laneKey(lane) {
+  return `${lane.kitId}:${lane.name}`;
 }
 
 function countRoles(voices) {

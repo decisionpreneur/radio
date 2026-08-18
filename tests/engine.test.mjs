@@ -17,7 +17,7 @@ import {
   voiceBpm
 } from "../web/lib/engine.mjs";
 import { encodeMidiFile } from "../web/lib/midi-file.mjs";
-import { DRUM_LANES, ETHNIC_PERCUSSION_LANES, KITS } from "../web/lib/instruments.mjs";
+import { ALL_LANES, DRUM_LANES, ETHNIC_PERCUSSION_LANES, KITS } from "../web/lib/instruments.mjs";
 
 test("start-only and pulse role counts are represented", () => {
   const state = createInitialState({
@@ -105,6 +105,41 @@ test("default generation gives each track a kit from the full kit pool", () => {
   assert.equal(kitIds.has("normal-drumset"), true);
   assert.equal(kitIds.has("ethnic-percussion-kit"), true);
   assert.equal(state.voices.every((voice) => voice.kit === voice.instrument.kitName), true);
+});
+
+test("random generation spreads instrument lanes before repeating them", () => {
+  const fullPool = createInitialState({
+    seed: "spread-full-pool",
+    patternCount: ALL_LANES.length,
+    startOnlyCount: 0,
+    pulseCount: 0
+  });
+  const fullPoolKeys = fullPool.voices.map((voice) => `${voice.kitId}:${voice.instrument.name}`);
+  assert.equal(new Set(fullPoolKeys).size, ALL_LANES.length);
+
+  const normalOnly = createInitialState({
+    seed: "spread-normal-only",
+    patternCount: DRUM_LANES.length,
+    startOnlyCount: 0,
+    pulseCount: 0,
+    kitPool: "normal-drumset"
+  });
+  const normalKeys = normalOnly.voices.map((voice) => `${voice.kitId}:${voice.instrument.name}`);
+  assert.equal(new Set(normalKeys).size, DRUM_LANES.length);
+});
+
+test("replacement generation preserves instrument spread after a basis change", () => {
+  const state = createInitialState({
+    seed: "spread-replacement",
+    patternCount: 20,
+    startOnlyCount: 2,
+    pulseCount: 4,
+    basisPolicy: "next",
+    replacementCadence: "immediate"
+  });
+  const next = advanceCycle(state);
+  const laneKeys = next.voices.map((voice) => `${voice.kitId}:${voice.instrument.name}`);
+  assert.equal(new Set(laneKeys).size, next.voices.length);
 });
 
 test("selected kit pool constrains generated and replacement tracks", () => {

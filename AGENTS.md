@@ -1,5 +1,3 @@
-# Repository Instructions
+# Repository Skill Routing
 
-
-- For repository-related service signups, use only the email explicitly supplied by the active user prompt when an email is required.
-- For repository-related service signups, use a generated password and store it in the explicitly requested browser/profile when the active user prompt requests password storage.
+Use the technical-execution skill for moved repository-related service signup conventions. The exact prior text is preserved there.

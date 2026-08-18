@@ -18,7 +18,7 @@ The lean version has no database, no Cloudflare API deploy path, and no repo CI/
 ## Verify
 
 ```powershell
-node --test tests/engine.test.mjs tests/logical-invariant.test.mjs tests/paywall.test.mjs tests/static-check.mjs
+node --test tests/engine.test.mjs tests/logical-invariant.test.mjs tests/paywall.test.mjs tests/static-check.mjs tests/browser-sound-smoke.mjs
 ```
 
 ```powershell

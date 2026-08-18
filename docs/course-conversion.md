@@ -31,7 +31,7 @@ i think lincences \n sepratated list can be stored in cloudflare thus keeping it
 The converted source material is the transcribed old radio course under:
 
 ```text
-C:\Users\j\Dropbox\Musica\radio\course-transcripts-en
+/Musica/radio/course-transcripts-en
 ```
 
 Old-course dependency evidence in the transcripts:
@@ -183,13 +183,13 @@ Converted lesson 6: remove SMS payment scripts.
 1. Build and verify the repo app:
 
 ```text
-bash C:\git\radio\tests\run
+bash tests/run
 ```
 
 2. Generate a DAW/manual-check MIDI artifact when needed:
 
 ```text
-node C:\git\radio\scripts\generate-demo.mjs
+node scripts/generate-demo.mjs "$env:USERPROFILE\Dropbox\Musica\radio\polymetric-polymodulation"
 ```
 
 3. Connect Cloudflare Pages in the dashboard:

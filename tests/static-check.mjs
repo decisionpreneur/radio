@@ -97,3 +97,16 @@ test("repository docs and app do not present local HTTP serving as delivery", as
     assert.doesNotMatch(file, /127\.0\.0\.1|localhost|http\.server|local server/i);
   }
 });
+
+test("public repo docs and scripts avoid user-specific absolute paths", async () => {
+  const files = await Promise.all([
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+    readFile(new URL("../docs/deployment.md", import.meta.url), "utf8"),
+    readFile(new URL("../docs/course-conversion.md", import.meta.url), "utf8"),
+    readFile(new URL("../docs/ui-copy-design.md", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/generate-demo.mjs", import.meta.url), "utf8")
+  ]);
+  for (const file of files) {
+    assert.doesNotMatch(file, /C:\\Users\\j|C:\\git\\radio|C:\/Users\/j|C:\/git\/radio/);
+  }
+});

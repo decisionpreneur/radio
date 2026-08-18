@@ -10,17 +10,18 @@ on ui ux copywriting and design use tafti and all from gdrive lit and dbox lit
 
 Google Drive Lit evidence:
 
+- `tafti` exact search returned no matching source in the checked Google Drive and Dropbox material.
 - `Tufte` search returned growth-plan documents that name Tufte, grid systems, newspaper design, Norman, Raskin, Tognazzini, and information style as the relevant design-reading cluster.
 - `Interface Information` search returned the generated Lit index with local and Dropbox Lit UI/design categories.
 
 Dropbox Lit local evidence:
 
 ```text
-C:\Users\j\Dropbox\Lit\Literature\Envisioning Information.pdf
-C:\Users\j\Dropbox\Lit\Literature\Grid Systems In Graphic Design.pdf
-C:\Users\j\Dropbox\Lit\Writing_and_design\Infostyle
-C:\Users\j\Dropbox\Lit\Writing_and_design\Infostyle\Editors_School_materials\Interface_and_Information
-C:\Users\j\Dropbox\Lit\Writing_and_design\Infostyle\Editors_School_materials\Interface_and_Information\03_12-16_Sep_Fitts_Law_Proximity_Theory
+/Lit/Literature/Envisioning Information.pdf
+/Lit/Literature/Grid Systems In Graphic Design.pdf
+/Lit/Writing_and_design/Infostyle
+/Lit/Writing_and_design/Infostyle/Editors_School_materials/Interface_and_Information
+/Lit/Writing_and_design/Infostyle/Editors_School_materials/Interface_and_Information/03_12-16_Sep_Fitts_Law_Proximity_Theory
 ```
 
 Read source titles from those folders: `Text Theory - Information Style`, `Informativeness. Rule of Seven Elements`, and `Fitts Law. Proximity Theory`.
@@ -39,7 +40,7 @@ Information style:
 - Use `payment email`, not `checkout email`, in the visible interface.
 - Convert machine error codes into short user-facing status text.
 
-Tufte/Tafti and information-design cluster:
+Design and information-style cluster:
 
 - Prefer direct evidence surfaces over decorative explanation.
 - Keep visual structure grid-based.

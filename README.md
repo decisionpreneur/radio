@@ -18,15 +18,15 @@ The lean version has no database, no Cloudflare API deploy path, and no repo CI/
 ## Verify
 
 ```powershell
-node --test C:\git\radio\tests\engine.test.mjs C:\git\radio\tests\logical-invariant.test.mjs C:\git\radio\tests\paywall.test.mjs C:\git\radio\tests\static-check.mjs
+node --test tests/engine.test.mjs tests/logical-invariant.test.mjs tests/paywall.test.mjs tests/static-check.mjs
 ```
 
 ```powershell
-bash C:\git\radio\tests\run
+bash tests/run
 ```
 
 ```powershell
-node C:\git\radio\scripts\generate-demo.mjs
+node scripts/generate-demo.mjs "$env:USERPROFILE\Dropbox\Musica\radio\polymetric-polymodulation"
 ```
 
 The full test runner includes the Z3 invariant check.
@@ -99,7 +99,7 @@ The ethnic percussion kit contains:
 Generated binaries and manual-check artifacts go under:
 
 ```text
-C:\Users\j\Dropbox\Musica\radio\polymetric-polymodulation
+$env:USERPROFILE\Dropbox\Musica\radio\polymetric-polymodulation
 ```
 
 ## Cloudflare Target

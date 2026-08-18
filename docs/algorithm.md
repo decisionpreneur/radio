@@ -12,12 +12,15 @@ At every tempo-basis change time `T`, the selected pattern keeps the same absolu
 - `voices`: simultaneous binary patterns.
 - `cycleIndex`: completed change cycles.
 - `pendingReplacements`: delayed replacement queue for non-immediate cadence.
+- `kitPool`: selectable kit ids; blank browser control means the full current kit pool.
 
 Each voice has:
 
 - `meter`
 - `pattern`
 - `role`: `start-only`, `pulse`, or `binary`
+- `kitId`
+- `kit`
 - `instrument`
 - `velocity`
 
@@ -107,7 +110,7 @@ Let selected voice `S` be chosen.
 4. Move `S` to voice slot 0 without changing its pattern or instrument.
 5. Preserve the old base voice for the new cycle.
 6. Regenerate replaceable voices from the configured meter source.
-7. Replace meter and pattern together for regenerated voices.
+7. Replace meter, pattern, kit, and instrument together for regenerated voices.
 
 The old base remains through the new cycle. At the next basis change, it becomes replaceable unless it is selected as the new base.
 

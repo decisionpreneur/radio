@@ -17,7 +17,7 @@ import {
   voiceBpm
 } from "../web/lib/engine.mjs";
 import { encodeMidiFile } from "../web/lib/midi-file.mjs";
-import { DRUM_LANES } from "../web/lib/instruments.mjs";
+import { DRUM_LANES, ETHNIC_PERCUSSION_LANES, KITS } from "../web/lib/instruments.mjs";
 
 test("start-only and pulse role counts are represented", () => {
   const state = createInitialState({
@@ -38,7 +38,7 @@ test("start-only and pulse role counts are represented", () => {
   }
 });
 
-test("instrument selection stays inside screenshot lane set", () => {
+test("instrument selection stays inside the lean kit set", () => {
   const state = createInitialState({
     seed: "lanes",
     patternCount: 19,
@@ -48,7 +48,7 @@ test("instrument selection stays inside screenshot lane set", () => {
   assert.equal(assertInstrumentsWithinLeanSet(state), true);
 });
 
-test("instrument set uses only named playable screenshot lanes", () => {
+test("normal drumset uses only named playable screenshot lanes", () => {
   assert.deepEqual(DRUM_LANES.map((lane) => lane.name), [
     "Ride Cup Gen Purpose",
     "Ride Gen Purpose",
@@ -68,6 +68,59 @@ test("instrument set uses only named playable screenshot lanes", () => {
     "Kick Tight Gen Purpose"
   ]);
   assert.deepEqual(DRUM_LANES.map((lane) => lane.note), Array.from({ length: 16 }, (_, index) => 51 - index));
+});
+
+test("lean version has normal drumset and ethnic percussion kit", () => {
+  assert.deepEqual(KITS.map((kit) => kit.name), ["normal drumset", "ethnic percussion kit"]);
+  assert.equal(KITS[0].aliases.includes("generic drum set"), true);
+  assert.deepEqual(ETHNIC_PERCUSSION_LANES.map((lane) => lane.name), [
+    "Bongo High",
+    "Bongo Low",
+    "Conga Slap",
+    "Conga High",
+    "Conga Low",
+    "Timbales High",
+    "Timbales Low",
+    "Afoxe Agogo",
+    "Agogo Low",
+    "Cabasa",
+    "Caixixi",
+    "Claves",
+    "Gwo Ka",
+    "Tambourin",
+    "Shaker",
+    "Cowbell"
+  ]);
+});
+
+test("default generation gives each track a kit from the full kit pool", () => {
+  const state = createInitialState({
+    seed: "two-kit-default",
+    patternCount: 64,
+    startOnlyCount: 5,
+    pulseCount: 8
+  });
+  const kitIds = new Set(state.voices.map((voice) => voice.kitId));
+  assert.deepEqual(state.config.kitPool, KITS.map((kit) => kit.id));
+  assert.equal(kitIds.has("normal-drumset"), true);
+  assert.equal(kitIds.has("ethnic-percussion-kit"), true);
+  assert.equal(state.voices.every((voice) => voice.kit === voice.instrument.kitName), true);
+});
+
+test("selected kit pool constrains generated and replacement tracks", () => {
+  let state = createInitialState({
+    seed: "ethnic-only",
+    patternCount: 12,
+    startOnlyCount: 2,
+    pulseCount: 3,
+    kitPool: "ethnic-percussion-kit",
+    basisPolicy: "next"
+  });
+  assert.equal(state.voices.every((voice) => voice.kitId === "ethnic-percussion-kit"), true);
+  state = advanceCycle(state);
+  while (state.pendingReplacements.length) state = applyNextReplacement(state);
+  assert.equal(state.voices.every((voice) => voice.kitId === "ethnic-percussion-kit"), true);
+  assert.equal(assertInstrumentsWithinLeanSet(state), true);
 });
 
 test("next basis cannot equal previous basis", () => {
@@ -119,6 +172,7 @@ test("blank UI-style controls use seeded random defaults and preserve chosen bas
   assert.equal(state.config.meterTiming, "shared-bar-polyrhythm");
   assert.equal(state.config.replacementCadence, "one-per-bar");
   assert.equal(state.config.strongBeatMode, "every-beat");
+  assert.equal(state.config.noteDurationSeconds, 0.08);
 });
 
 

@@ -23,6 +23,7 @@ const state = createInitialState({
 
 const rendered = renderArrangement(state, { sectionCount: 6, ppq: 480 });
 const midi = encodeMidiFile(rendered);
+const kitSummary = Array.from(new Set(state.voices.map((voice) => voice.kit))).sort();
 
 await mkdir(artifactDir, { recursive: true });
 await writeFile(join(artifactDir, "radio-polymetric-demo.mid"), midi);
@@ -35,6 +36,7 @@ await writeFile(
     "",
     `MIDI bytes: ${midi.byteLength}`,
     `Sections: ${rendered.sections.length}`,
+    `Kits: ${kitSummary.join(", ")}`,
     "",
     "Section tempo bases:",
     "",

@@ -300,28 +300,143 @@ function playEvent(event, when) {
 }
 
 function playAudio(event, when) {
-  const name = event.instrument.name.toLowerCase();
-  if (name.includes("kick") || name === "b0") {
-    drumSine(when, 70, 0.11, 0.85);
-  } else if (name.includes("tom")) {
-    drumSine(when, 130 + event.meter * 8, 0.13, 0.52);
-  } else if (name.includes("snare") || name.includes("rim")) {
-    noiseHit(when, 0.09, 0.42, 900);
-  } else if (name.includes("hihat")) {
-    noiseHit(when, 0.045, 0.25, 5000);
-  } else if (name.includes("ride") || name.includes("crash")) {
-    noiseHit(when, 0.18, 0.28, 3600);
-  } else {
-    drumSine(when, 220, 0.05, 0.24);
+  const level = eventLevel(event);
+  switch (event.instrument.sound) {
+    case "kick-tight":
+      kickHit(when, level);
+      break;
+    case "tom-high":
+      drumSine(when, 185 + event.meter * 2, 0.11, 0.42 * level, "triangle", 0.54);
+      break;
+    case "tom-high-mid":
+      drumSine(when, 152 + event.meter * 2, 0.13, 0.45 * level, "triangle", 0.52);
+      break;
+    case "tom-low-mid":
+      drumSine(when, 122 + event.meter * 2, 0.15, 0.48 * level, "triangle", 0.48);
+      break;
+    case "tom-low":
+      drumSine(when, 95 + event.meter * 2, 0.17, 0.5 * level, "triangle", 0.45);
+      break;
+    case "snare":
+      snareHit(when, level);
+      break;
+    case "rim":
+      woodHit(when, 1750, 0.035, 0.34 * level);
+      break;
+    case "hihat-closed":
+      noiseHit(when, 0.035, 0.18 * level, 7800, "highpass", 0.9);
+      break;
+    case "hihat-open":
+      noiseHit(when, 0.16, 0.2 * level, 6200, "highpass", 0.7);
+      break;
+    case "ride-cup":
+      metallicHit(when, [930, 1400, 2280], 0.16, 0.16 * level, "triangle");
+      break;
+    case "ride":
+      cymbalHit(when, 0.2, 0.2 * level, 4700);
+      break;
+    case "crash":
+      cymbalHit(when, 0.42, 0.26 * level, 3400);
+      break;
+    case "bongo-high":
+      handDrum(when, 310, 0.08, 0.42 * level);
+      break;
+    case "bongo-low":
+      handDrum(when, 225, 0.1, 0.46 * level);
+      break;
+    case "conga-slap":
+      handDrum(when, 285, 0.065, 0.38 * level);
+      woodHit(when, 2100, 0.025, 0.18 * level);
+      break;
+    case "conga-high":
+      handDrum(when, 190, 0.14, 0.5 * level);
+      break;
+    case "conga-low":
+      handDrum(when, 135, 0.18, 0.56 * level);
+      break;
+    case "timbales-high":
+      metallicHit(when, [410, 790], 0.09, 0.3 * level, "square");
+      break;
+    case "timbales-low":
+      metallicHit(when, [285, 570], 0.11, 0.33 * level, "square");
+      break;
+    case "agogo-high":
+      metallicHit(when, [880, 1760], 0.18, 0.26 * level, "sine");
+      break;
+    case "agogo-low":
+      metallicHit(when, [620, 1240], 0.19, 0.28 * level, "sine");
+      break;
+    case "cabasa":
+      shakerHit(when, 0.055, 0.16 * level, 7200);
+      break;
+    case "caixixi":
+      shakerHit(when, 0.075, 0.18 * level, 6500);
+      break;
+    case "claves":
+      woodHit(when, 2400, 0.045, 0.32 * level);
+      break;
+    case "gwo-ka":
+      handDrum(when, 115, 0.2, 0.6 * level);
+      break;
+    case "tambourin":
+      tambourinHit(when, level);
+      break;
+    case "shaker":
+      shakerHit(when, 0.08, 0.15 * level, 5600);
+      break;
+    case "cowbell":
+      metallicHit(when, [540, 810, 1620], 0.12, 0.25 * level, "square");
+      break;
+    default:
+      drumSine(when, 220, 0.05, 0.18 * level, "sine", 0.5);
   }
 }
 
-function drumSine(when, frequency, duration, gainValue) {
+function eventLevel(event) {
+  const voices = Math.max(1, live.state?.voices.length ?? 1);
+  const densityTrim = Math.max(0.28, Math.min(0.9, 3 / Math.sqrt(voices)));
+  return (event.velocity / 127) * densityTrim;
+}
+
+function kickHit(when, level) {
+  drumSine(when, 82, 0.14, 0.72 * level, "sine", 0.42);
+  noiseHit(when, 0.018, 0.14 * level, 3600, "highpass", 0.8);
+}
+
+function snareHit(when, level) {
+  noiseHit(when, 0.095, 0.34 * level, 1100, "bandpass", 1.6);
+  drumSine(when, 185, 0.055, 0.12 * level, "triangle", 0.72);
+}
+
+function cymbalHit(when, duration, gainValue, frequency) {
+  noiseHit(when, duration, gainValue, frequency, "highpass", 0.55);
+  metallicHit(when, [frequency * 0.19, frequency * 0.27], Math.min(duration, 0.16), gainValue * 0.18, "triangle");
+}
+
+function handDrum(when, frequency, duration, gainValue) {
+  drumSine(when, frequency, duration, gainValue, "triangle", 0.62);
+  noiseHit(when, Math.min(0.035, duration), gainValue * 0.18, frequency * 9, "bandpass", 4);
+}
+
+function woodHit(when, frequency, duration, gainValue) {
+  metallicHit(when, [frequency, frequency * 1.34], duration, gainValue, "square");
+}
+
+function shakerHit(when, duration, gainValue, frequency) {
+  noiseHit(when, duration, gainValue, frequency, "highpass", 1.2);
+}
+
+function tambourinHit(when, level) {
+  shakerHit(when, 0.11, 0.16 * level, 5400);
+  metallicHit(when, [820, 1210, 1880], 0.09, 0.13 * level, "triangle");
+}
+
+function drumSine(when, frequency, duration, gainValue, type = "sine", endRatio = 0.45) {
   const osc = audioContext.createOscillator();
   const gain = audioContext.createGain();
-  osc.type = "sine";
+  osc.type = type;
   osc.frequency.setValueAtTime(frequency, when);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(20, frequency * 0.45), when + duration);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20, frequency * endRatio), when + duration);
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
   osc.connect(gain).connect(masterInput);
@@ -329,7 +444,22 @@ function drumSine(when, frequency, duration, gainValue) {
   osc.stop(when + duration + 0.02);
 }
 
-function noiseHit(when, duration, gainValue, frequency) {
+function metallicHit(when, frequencies, duration, gainValue, type) {
+  frequencies.forEach((frequency, index) => {
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const share = gainValue / Math.max(1, frequencies.length);
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, when);
+    gain.gain.setValueAtTime(share * (index === 0 ? 1 : 0.72), when);
+    gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
+    osc.connect(gain).connect(masterInput);
+    osc.start(when);
+    osc.stop(when + duration + 0.02);
+  });
+}
+
+function noiseHit(when, duration, gainValue, frequency, filterType = "highpass", q = 0.7) {
   const sampleRate = audioContext.sampleRate;
   const buffer = audioContext.createBuffer(1, Math.ceil(sampleRate * duration), sampleRate);
   const data = buffer.getChannelData(0);
@@ -337,8 +467,9 @@ function noiseHit(when, duration, gainValue, frequency) {
   const source = audioContext.createBufferSource();
   const filter = audioContext.createBiquadFilter();
   const gain = audioContext.createGain();
-  filter.type = "highpass";
+  filter.type = filterType;
   filter.frequency.value = frequency;
+  filter.Q.value = q;
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
   source.buffer = buffer;
@@ -354,7 +485,12 @@ async function ensureAudioContext() {
   if (!masterInput) {
     const compressor = audioContext.createDynamicsCompressor();
     const masterGain = audioContext.createGain();
-    masterGain.gain.value = 0.95;
+    compressor.threshold.value = -18;
+    compressor.knee.value = 22;
+    compressor.ratio.value = 6;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.18;
+    masterGain.gain.value = 0.82;
     compressor.connect(masterGain).connect(audioContext.destination);
     masterInput = compressor;
   }
@@ -386,6 +522,7 @@ function makeStateFromControls() {
     patternCount: readOptionalNumber("patternCount"),
     startOnlyCount: readOptionalNumber("startOnlyCount"),
     pulseCount: readOptionalNumber("pulseCount"),
+    kitPool: optionalValue("kitPool"),
     meterStart: readOptionalNumber("meterStart"),
     meterCount: readOptionalNumber("patternCount"),
     cycleLength: readOptionalNumber("cycleLength"),
@@ -460,6 +597,7 @@ function drawVoices() {
       <h2>${escapeHtml(voice.instrument.name)}</h2>
       <dl>
         <dt>voice</dt><dd>${escapeHtml(voice.id)}</dd>
+        <dt>kit</dt><dd>${escapeHtml(voice.kit)}</dd>
         <dt>meter</dt><dd>${voice.meter}</dd>
         <dt>role</dt><dd>${escapeHtml(voice.role)}</dd>
         <dt>bpm</dt><dd>${bpm.toFixed(3)}</dd>
@@ -478,6 +616,7 @@ function randomizeControls() {
   const patterns = readNumber("patternCount");
   document.querySelector("#startOnlyCount").value = String(Math.floor(Math.random() * Math.max(1, patterns / 3)));
   document.querySelector("#pulseCount").value = String(Math.floor(Math.random() * Math.max(1, patterns / 3)));
+  document.querySelector("#kitPool").value = "";
   document.querySelector("#cycleLength").value = String(1 + Math.floor(Math.random() * 5));
   const policies = ["next", "random", "closest", "farthest"];
   document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];

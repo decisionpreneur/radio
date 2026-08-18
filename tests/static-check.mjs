@@ -25,6 +25,8 @@ test("HTML loads the static app module", async () => {
   assert.match(html, /id="checkoutLink"/);
   assert.match(html, />Subscribe<\/a>/);
   assert.match(html, /Payment email/);
+  assert.match(html, /id="kitPool"/);
+  assert.match(html, />ethnic percussion kit<\/option>/);
 });
 
 test("paid controls fail closed before license JavaScript runs", async () => {
@@ -60,8 +62,18 @@ test("web audio nodes route through a master output graph", async () => {
   const app = await readFile(new URL("../web/app.mjs", import.meta.url), "utf8");
   assert.match(app, /let masterInput = null;/);
   assert.match(app, /compressor\.connect\(masterGain\)\.connect\(audioContext\.destination\);/);
+  assert.match(app, /compressor\.threshold\.value = -18;/);
   assert.match(app, /osc\.connect\(gain\)\.connect\(masterInput\);/);
   assert.match(app, /source\.connect\(filter\)\.connect\(gain\)\.connect\(masterInput\);/);
+});
+
+test("frontend reads kit pool and includes ethnic percussion audio roles", async () => {
+  const app = await readFile(new URL("../web/app.mjs", import.meta.url), "utf8");
+  assert.match(app, /kitPool: optionalValue\("kitPool"\)/);
+  assert.match(app, /function handDrum/);
+  assert.match(app, /function metallicHit/);
+  assert.match(app, /function shakerHit/);
+  assert.match(app, /function tambourinHit/);
 });
 
 test("Pages Function license endpoints are present without wrangler deployment config", async () => {

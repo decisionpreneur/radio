@@ -1,4 +1,4 @@
-import { DRUM_LANES, pickLane } from "./instruments.mjs";
+import { ALL_LANES, pickLane, normalizeKitPool } from "./instruments.mjs";
 import { makeRng, pick, randomInt, shuffled } from "./prng.mjs";
 
 export const BASIS_POLICIES = Object.freeze(["next", "random", "closest", "farthest"]);
@@ -22,7 +22,8 @@ export function createInitialState(input = {}) {
       meter,
       role: roles[index],
       rng,
-      cycleIndex: 0
+      cycleIndex: 0,
+      kitPool: config.kitPool
     });
   });
   ensureOpeningHit(voices);
@@ -88,7 +89,8 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
     replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "one-per-bar"),
     strongBeatMode: ensureMember(input.strongBeatMode, STRONG_BEAT_MODES, "every-beat"),
-    noteDurationSeconds: clampNumber(hasValue(input.noteDurationSeconds) ? input.noteDurationSeconds : 0.08, 0.01, 2)
+    noteDurationSeconds: clampFloat(hasValue(input.noteDurationSeconds) ? input.noteDurationSeconds : 0.08, 0.01, 2),
+    kitPool: normalizeKitPool(input.kitPool)
   };
 }
 
@@ -122,14 +124,16 @@ export function buildRoles(config, rng) {
   return shuffled(rng, roles);
 }
 
-export function createVoice({ id, meter, role, rng, cycleIndex, lane }) {
-  const instrument = lane ?? pickLane(rng);
+export function createVoice({ id, meter, role, rng, cycleIndex, lane, kitPool }) {
+  const instrument = lane ?? pickLane(rng, kitPool);
   return {
     id,
     meter,
     role,
     pattern: createPattern(meter, role, rng),
     instrument,
+    kitId: instrument.kitId,
+    kit: instrument.kitName,
     velocity: randomInt(rng, 78, 120),
     createdAtCycle: cycleIndex,
     protectedThroughCycle: null
@@ -221,6 +225,8 @@ export function generateEventsInWindow(state, options) {
         voiceId: voice.id,
         meter: voice.meter,
         role: voice.role,
+        kitId: voice.kitId,
+        kit: voice.kit,
         instrument: voice.instrument,
         note: voice.instrument.note,
         velocity: voice.velocity,
@@ -418,7 +424,8 @@ function buildReplacementVoices({ previousState, preserved, cycleIndex, rng }) {
       meter,
       role,
       rng,
-      cycleIndex
+      cycleIndex,
+      kitPool: config.kitPool
     });
     finalVoices.push(voice);
     replacements.push({ slot: finalVoices.length - 1, voice });
@@ -483,6 +490,12 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, number));
 }
 
+function clampFloat(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, number));
+}
+
 function gcd(a, b) {
   let x = Math.abs(Math.floor(a));
   let y = Math.abs(Math.floor(b));
@@ -501,6 +514,6 @@ function lcmAll(values) {
 }
 
 export function assertInstrumentsWithinLeanSet(state) {
-  const names = new Set(DRUM_LANES.map((lane) => lane.name));
-  return state.voices.every((voice) => names.has(voice.instrument.name));
+  const names = new Set(ALL_LANES.map((lane) => lane.name));
+  return state.voices.every((voice) => names.has(voice.instrument.name) && state.config.kitPool.includes(voice.kitId));
 }

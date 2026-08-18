@@ -6,7 +6,7 @@
 
 `web/lib/midi-file.mjs` contains a dependency-free Standard MIDI File encoder.
 
-`web/lib/instruments.mjs` contains the lean instrument set from the attached drum-lane screenshot.
+`web/lib/instruments.mjs` contains the lean kit pool: the normal drumset from the attached drum-lane screenshot and the ethnic percussion kit.
 
 `web/lib/paywall.mjs` contains browser-side license-key activation, validation, and local entitlement persistence.
 
@@ -16,6 +16,8 @@
 - Web MIDI when the browser exposes MIDI output access.
 - The shared engine for every live cycle and export.
 - The paywall module to gate live playback, MIDI output, and MIDI export.
+
+The Web Audio preview synthesizes the implemented instrument roles in the browser. It does not require copied sample binaries.
 
 `scripts/generate-demo.mjs` renders a finite MIDI file for DAW/manual checks under the Dropbox radio artifact folder.
 

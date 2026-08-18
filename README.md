@@ -36,6 +36,7 @@ The full test runner includes the Z3 invariant check.
 - simultaneous patterns
 - start-only patterns
 - pulse patterns
+- kit pool
 - meter source as first natural numbers
 - cycle length in bars or resolving sequences
 - next tempo-basis policy: next, random, closest, farthest
@@ -46,9 +47,16 @@ The full test runner includes the Z3 invariant check.
 
 Unchosen tuneables randomize by default. A blank control means the shared engine receives no value for that tuneable and derives it from the current seed.
 
-## Instrument Set
+## Kit Pool
 
-The lean version is constrained to the named playable lanes visible between the note-only `E2` and `B0` row labels in the attached drum-lane screenshot:
+Each track gets one kit chosen from the configured kit pool. Blank kit-pool control means all kits.
+
+The lean version currently has two kits:
+
+- normal drumset
+- ethnic percussion kit
+
+The normal drumset is constrained to the named playable lanes visible between the note-only `E2` and `B0` row labels in the attached drum-lane screenshot:
 
 - Ride Cup Gen Purpose
 - Ride Gen Purpose
@@ -66,6 +74,25 @@ The lean version is constrained to the named playable lanes visible between the 
 - Snare Gen Purpose
 - Rim Sidestick Gen Purpose
 - Kick Tight Gen Purpose
+
+The ethnic percussion kit contains:
+
+- Bongo High
+- Bongo Low
+- Conga Slap
+- Conga High
+- Conga Low
+- Timbales High
+- Timbales Low
+- Afoxe Agogo
+- Agogo Low
+- Cabasa
+- Caixixi
+- Claves
+- Gwo Ka
+- Tambourin
+- Shaker
+- Cowbell
 
 ## Artifact Target
 

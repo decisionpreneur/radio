@@ -65,6 +65,7 @@ let midiAccess = null;
 let midiOutput = null;
 let timer = null;
 let live = null;
+let entitlementValidationPending = entitlementUnlocks(entitlement);
 
 updatePaywallUi();
 validateExistingEntitlement();
@@ -168,6 +169,7 @@ async function unlockWithLicense() {
       return;
     }
     entitlement = makeEntitlement({ licenseKey, email, verdict });
+    entitlementValidationPending = false;
     writeEntitlement(entitlement);
     licenseKeyInput.value = "";
     updatePaywallUi();
@@ -180,6 +182,7 @@ async function unlockWithLicense() {
 
 async function validateExistingEntitlement() {
   if (!entitlementUnlocks(entitlement)) {
+    entitlementValidationPending = false;
     updatePaywallUi();
     return;
   }
@@ -188,6 +191,7 @@ async function validateExistingEntitlement() {
     if (!verdict.unlocked) {
       clearEntitlement();
       entitlement = null;
+      stopLive();
     } else {
       entitlement = makeEntitlement({
         licenseKey: entitlement.licenseKey,
@@ -199,6 +203,9 @@ async function validateExistingEntitlement() {
   } catch {
     clearEntitlement();
     entitlement = null;
+    stopLive();
+  } finally {
+    entitlementValidationPending = false;
   }
   updatePaywallUi();
 }
@@ -218,12 +225,12 @@ function requireUnlocked() {
 }
 
 function updatePaywallUi() {
-  const unlocked = entitlementUnlocks(entitlement);
+  const unlocked = !entitlementValidationPending && entitlementUnlocks(entitlement);
   startBtn.disabled = !unlocked;
   midiBtn.disabled = !unlocked;
   exportBtn.disabled = !unlocked;
   clearLicenseBtn.disabled = !unlocked;
-  paywallStatus.textContent = unlocked ? "unlocked" : "locked";
+  paywallStatus.textContent = entitlementValidationPending ? "checking license" : (unlocked ? "unlocked" : "locked");
 }
 
 function stopLive() {

@@ -36,6 +36,15 @@ test("paid controls fail closed before license JavaScript runs", async () => {
   assert.match(html, /id="exportBtn"[^>]*disabled/);
 });
 
+test("stored entitlement cannot unlock transport before server validation finishes", async () => {
+  const app = await readFile(new URL("../web/app.mjs", import.meta.url), "utf8");
+  assert.match(app, /let entitlementValidationPending = entitlementUnlocks\(entitlement\);/);
+  assert.match(app, /const unlocked = !entitlementValidationPending && entitlementUnlocks\(entitlement\);/);
+  assert.match(app, /paywallStatus\.textContent = entitlementValidationPending \? "checking license"/);
+  assert.match(app, /entitlementValidationPending = false;/);
+  assert.match(app, /stopLive\(\);/);
+});
+
 test("static app initializes session seed before constructing state", async () => {
   const app = await readFile(new URL("../web/app.mjs", import.meta.url), "utf8");
   const seedIndex = app.indexOf("const sessionSeed = makeSessionSeed();");

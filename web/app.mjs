@@ -48,7 +48,9 @@ const readoutFields = {
   change: document.querySelector('[data-field="change"]'),
   voices: document.querySelector('[data-field="voices"]'),
   kits: document.querySelector('[data-field="kits"]'),
-  timing: document.querySelector('[data-field="timing"]')
+  timing: document.querySelector('[data-field="timing"]'),
+  signal: document.querySelector('[data-field="signal"]'),
+  signalFill: document.querySelector('[data-field="signalFill"]')
 };
 
 const donationUrl = donateLink.dataset.donationUrl;
@@ -71,6 +73,9 @@ let state = makeStateFromControls();
 let entitlement = readEntitlement();
 let audioContext = null;
 let masterInput = null;
+let signalAnalyser = null;
+let signalSamples = null;
+let signalFrame = null;
 let midiAccess = null;
 let midiOutput = null;
 let timer = null;
@@ -81,12 +86,19 @@ updatePaywallUi();
 validateExistingEntitlement();
 draw();
 
-controls.addEventListener("input", syncControlsWhenStopped);
-controls.addEventListener("change", syncControlsWhenStopped);
+controls.addEventListener("input", syncControls);
+controls.addEventListener("change", syncControls);
 
-function syncControlsWhenStopped() {
-  if (timer) return;
+function syncControls(event) {
+  if (event?.target?.closest?.("#paywall")) return;
   state = makeStateFromControls();
+  if (timer && live && audioContext) {
+    live.state = state;
+    live.sectionStart = audioContext.currentTime + 0.08;
+    live.lastReplacementBar = -1;
+    live.lastReplacementResolve = -1;
+    live.scheduled.clear();
+  }
   draw();
 }
 
@@ -106,10 +118,7 @@ stopBtn.addEventListener("click", () => {
 
 randomBtn.addEventListener("click", () => {
   randomizeControls();
-  if (!timer) {
-    state = makeStateFromControls();
-    draw();
-  }
+  syncControls();
 });
 
 midiBtn.addEventListener("click", async () => {
@@ -167,6 +176,7 @@ async function startLive() {
   tick();
   statusEl.textContent = live.scheduled.size ? "playing" : "waiting for hit";
   timer = window.setInterval(tick, 25);
+  startSignalMeter();
 }
 
 async function unlockWithLicense() {
@@ -257,10 +267,13 @@ function stopLive() {
   if (timer) window.clearInterval(timer);
   timer = null;
   live = null;
+  stopSignalMeter();
+  setSignalLevel(0);
   statusEl.textContent = "stopped";
 }
 
 function tick() {
+  if (!live || !audioContext) return;
   const now = audioContext.currentTime;
   let currentSectionSeconds = sectionSeconds(live.state);
   while (now >= live.sectionStart + currentSectionSeconds) {
@@ -512,17 +525,58 @@ async function ensureAudioContext() {
   if (!masterInput) {
     const compressor = audioContext.createDynamicsCompressor();
     const masterGain = audioContext.createGain();
+    signalAnalyser = audioContext.createAnalyser();
     compressor.threshold.value = -18;
     compressor.knee.value = 22;
     compressor.ratio.value = 6;
     compressor.attack.value = 0.003;
     compressor.release.value = 0.18;
+    signalAnalyser.fftSize = 256;
+    signalAnalyser.smoothingTimeConstant = 0.45;
     masterGain.gain.value = 0.82;
-    compressor.connect(masterGain).connect(audioContext.destination);
+    compressor.connect(signalAnalyser).connect(masterGain).connect(audioContext.destination);
     masterInput = compressor;
   }
   await audioContext.resume();
   if (audioContext.state !== "running") throw new Error("AudioContext not running");
+}
+
+function startSignalMeter() {
+  stopSignalMeter();
+  const frame = () => {
+    updateSignalMeter();
+    if (timer) signalFrame = window.requestAnimationFrame(frame);
+  };
+  signalFrame = window.requestAnimationFrame(frame);
+}
+
+function stopSignalMeter() {
+  if (!signalFrame) return;
+  window.cancelAnimationFrame(signalFrame);
+  signalFrame = null;
+}
+
+function updateSignalMeter() {
+  if (!signalAnalyser) {
+    setSignalLevel(0);
+    return;
+  }
+  if (!signalSamples || signalSamples.length !== signalAnalyser.fftSize) {
+    signalSamples = new Float32Array(signalAnalyser.fftSize);
+  }
+  signalAnalyser.getFloatTimeDomainData(signalSamples);
+  let sum = 0;
+  for (let index = 0; index < signalSamples.length; index += 1) {
+    const sample = signalSamples[index];
+    sum += sample * sample;
+  }
+  setSignalLevel(Math.sqrt(sum / signalSamples.length));
+}
+
+function setSignalLevel(value) {
+  const level = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  readoutFields.signal.textContent = level.toFixed(3);
+  readoutFields.signalFill.style.transform = `scaleX(${Math.min(1, level * 5)})`;
 }
 
 async function connectMidi() {

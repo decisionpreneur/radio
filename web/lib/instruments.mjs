@@ -32,22 +32,22 @@ export const DRUM_LANES = Object.freeze([
 ]);
 
 export const ETHNIC_PERCUSSION_LANES = Object.freeze([
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Bongo High", note: 60, color: "#c66f46", sound: "bongo-high" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Bongo Low", note: 61, color: "#b7623f", sound: "bongo-low" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga Slap", note: 62, color: "#d08a55", sound: "conga-slap" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga High", note: 63, color: "#c97d4f", sound: "conga-high" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga Low", note: 64, color: "#b86a48", sound: "conga-low" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Timbales High", note: 65, color: "#d4a15a", sound: "timbales-high" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Timbales Low", note: 66, color: "#bd8a4c", sound: "timbales-low" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Afoxe Agogo", note: 67, color: "#d2b65e", sound: "agogo-high" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Agogo Low", note: 68, color: "#c2a650", sound: "agogo-low" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Cabasa", note: 69, color: "#a9a962", sound: "cabasa" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Caixixi", note: 70, color: "#8fae63", sound: "caixixi" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Claves", note: 75, color: "#c19070", sound: "claves" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Gwo Ka", note: 71, color: "#a15d45", sound: "gwo-ka" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Tambourin", note: 54, color: "#c2c36b", sound: "tambourin" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Shaker", note: 82, color: "#9fb36f", sound: "shaker" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Cowbell", note: 56, color: "#b9ad9b", sound: "cowbell" })
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Bongo High Open Hard", note: 60, color: "#c66f46", sound: "bongo-high" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Bongo Low Open Hard", note: 61, color: "#b7623f", sound: "bongo-low" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga Hi Slap", note: 62, color: "#d08a55", sound: "conga-slap" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga Acoustified Hi", note: 63, color: "#c97d4f", sound: "conga-high" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga Acoustified Low", note: 64, color: "#b86a48", sound: "conga-low" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Timbales High Open Hard", note: 65, color: "#d4a15a", sound: "timbales-high" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Timbales Low Open Hard", note: 66, color: "#bd8a4c", sound: "timbales-low" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Bells Agogo Hi", note: 67, color: "#d2b65e", sound: "agogo-high" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Djembe High Hard", note: 68, color: "#c2a650", sound: "djembe-high" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Cabasa Short Mid", note: 69, color: "#a9a962", sound: "cabasa" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Maracas Hard", note: 70, color: "#8fae63", sound: "maracas" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Wood Claves", note: 75, color: "#c19070", sound: "claves" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Perc African MPC", note: 71, color: "#a15d45", sound: "perc-african" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Tambourine Hit Hard", note: 54, color: "#c2c36b", sound: "tambourine" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Shaker Acoustic", note: 82, color: "#9fb36f", sound: "shaker" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Cowbell Latin Ting", note: 56, color: "#b9ad9b", sound: "cowbell" })
 ]);
 
 export const KITS = Object.freeze([

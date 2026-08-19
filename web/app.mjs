@@ -425,23 +425,24 @@ function playAudio(event, when) {
     case "agogo-high":
       metallicHit(when, [880, 1760], 0.18, 0.26 * level, "sine");
       break;
-    case "agogo-low":
-      metallicHit(when, [620, 1240], 0.19, 0.28 * level, "sine");
+    case "djembe-high":
+      handDrum(when, 165, 0.16, 0.58 * level);
       break;
     case "cabasa":
       shakerHit(when, 0.055, 0.16 * level, 7200);
       break;
-    case "caixixi":
+    case "maracas":
       shakerHit(when, 0.075, 0.18 * level, 6500);
       break;
     case "claves":
       woodHit(when, 2400, 0.045, 0.32 * level);
       break;
-    case "gwo-ka":
+    case "perc-african":
       handDrum(when, 115, 0.2, 0.6 * level);
+      woodHit(when, 980, 0.03, 0.14 * level);
       break;
-    case "tambourin":
-      tambourinHit(when, level);
+    case "tambourine":
+      tambourineHit(when, level);
       break;
     case "shaker":
       shakerHit(when, 0.08, 0.15 * level, 5600);
@@ -488,7 +489,7 @@ function shakerHit(when, duration, gainValue, frequency) {
   noiseHit(when, duration, gainValue, frequency, "highpass", 1.2);
 }
 
-function tambourinHit(when, level) {
+function tambourineHit(when, level) {
   shakerHit(when, 0.11, 0.16 * level, 5400);
   metallicHit(when, [820, 1210, 1880], 0.09, 0.13 * level, "triangle");
 }

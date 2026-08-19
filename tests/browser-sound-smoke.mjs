@@ -12,31 +12,9 @@ const LOCAL_LICENSE_KEY = "browser-sound-smoke-key";
 
 test("browser radio tab drives Web Audio output and MIDI sends after unlock", { timeout: 45_000 }, async () => {
   const target = await makeTarget();
-  const profileDir = await mkdtemp(join(await profileRoot(), "radio-browser-profile-"));
-  const debuggingPort = await freePort();
-  const chromium = spawn(chromiumExecutable(), [
-    "--headless=new",
-    `--remote-debugging-port=${debuggingPort}`,
-    `--user-data-dir=${profileDir}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-background-networking",
-    "--autoplay-policy=no-user-gesture-required",
-    "--disable-features=MediaRouter",
-    "about:blank"
-  ], { stdio: "ignore" });
-
-  let client;
+  const session = await openTargetInChromium(target, { midiMode: "available" });
+  const { client, issues } = session;
   try {
-    const targetInfo = await waitForInitialPage(debuggingPort);
-    client = new CdpClient(targetInfo.webSocketDebuggerUrl);
-    await client.open();
-    await client.send("Page.enable");
-    await client.send("Runtime.enable");
-    await client.send("Page.addScriptToEvaluateOnNewDocument", { source: probeScript() });
-    await client.send("Page.navigate", { url: target.url });
-    await waitForValue(client, `document.readyState === "complete" && Boolean(document.querySelector("#startBtn"))`);
-
     await evaluate(client, `
       document.querySelector("#seed").value = "browser-sound-smoke";
       document.querySelector("#baseBpm").value = "120";
@@ -110,13 +88,162 @@ test("browser radio tab drives Web Audio output and MIDI sends after unlock", { 
     assert.equal(result.voiceCount, 20);
     assert.equal(result.normalKitVisible, true);
     assert.equal(result.ethnicKitVisible, true);
+    assert.deepEqual(issues.errors, []);
   } finally {
-    if (client) {
-      await client.send("Browser.close").catch(() => {});
-      client.close();
+    await session.close();
+    await target.close();
+  }
+});
+
+test("ordinary Chromium user flow covers controls, paywall, MIDI, export, and responsive UI", { timeout: 90_000 }, async () => {
+  const target = await makeTarget();
+  const session = await openTargetInChromium(target, { midiMode: "denied" });
+  const { client, issues } = session;
+  try {
+    await waitForValue(client, `document.querySelector("#checkoutLink").hidden === false`);
+
+    const locked = await evaluate(client, `
+      ({
+        status: document.querySelector("#status").textContent,
+        paywallStatus: document.querySelector("#paywallStatus").textContent,
+        startDisabled: document.querySelector("#startBtn").disabled,
+        midiDisabled: document.querySelector("#midiBtn").disabled,
+        exportDisabled: document.querySelector("#exportBtn").disabled,
+        checkoutHref: document.querySelector("#checkoutLink").href,
+        donateHidden: document.querySelector("#donateLink").hidden,
+        voiceCount: document.querySelectorAll(".voice").length,
+        canvasWidth: document.querySelector("#timeline").getBoundingClientRect().width
+      })
+    `);
+    assert.equal(locked.status, "stopped");
+    assert.equal(locked.paywallStatus, "locked");
+    assert.equal(locked.startDisabled, true);
+    assert.equal(locked.midiDisabled, true);
+    assert.equal(locked.exportDisabled, true);
+    assert.match(locked.checkoutHref, /^https?:\/\//);
+    assert.equal(locked.donateHidden, true);
+    assert.ok(locked.voiceCount >= 2);
+    assert.ok(locked.canvasWidth > 0);
+
+    await clickSelector(client, "#unlockBtn");
+    await waitForValue(client, `document.querySelector("#paywallStatus").textContent === "license key required"`);
+    await replaceValue(client, "#licenseKey", target.licenseKey);
+    await replaceValue(client, "#licenseEmail", "");
+    await clickSelector(client, "#unlockBtn");
+    await waitForValue(client, `document.querySelector("#paywallStatus").textContent === "unlocked"`);
+
+    await setControlValues(client, {
+      "#seed": "ordinary-flow",
+      "#baseBpm": "118",
+      "#baseMeter": "1",
+      "#patternCount": "6",
+      "#startOnlyCount": "2",
+      "#pulseCount": "2",
+      "#meterStart": "1",
+      "#cycleLength": "2",
+      "#exportSections": "2"
+    });
+
+    const kitValues = ["", "normal-drumset", "ethnic-percussion-kit"];
+    const cycleValues = ["", "resolving-sequences", "bars"];
+    const basisValues = ["", "next", "random", "closest", "farthest"];
+    for (const kitPool of kitValues) {
+      await selectValue(client, "#kitPool", kitPool);
+      for (const cycleLengthKind of cycleValues) {
+        await selectValue(client, "#cycleLengthKind", cycleLengthKind);
+        for (const basisPolicy of basisValues) {
+          await selectValue(client, "#basisPolicy", basisPolicy);
+          const summary = await evaluate(client, `
+            ({
+              voiceCount: document.querySelectorAll(".voice").length,
+              voiceText: document.querySelector("#voices").textContent,
+              status: document.querySelector("#status").textContent,
+              horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth
+            })
+          `);
+          assert.equal(summary.voiceCount, 6);
+          assert.equal(summary.status, "stopped");
+          if (kitPool === "normal-drumset") assert.match(summary.voiceText, /normal drumset/);
+          if (kitPool === "ethnic-percussion-kit") assert.match(summary.voiceText, /ethnic percussion kit/);
+          assert.ok(summary.horizontalOverflow <= 2);
+        }
+      }
     }
-    await closeChromium(chromium);
-    await removeWithRetry(profileDir);
+
+    await clickSelector(client, "#midiBtn");
+    await waitForValue(client, `document.querySelector("#status").textContent === "midi unavailable"`);
+    await evaluate(client, `window.__radioProbe.setMidiMode("available")`);
+    await clickSelector(client, "#midiBtn");
+    await waitForValue(client, `document.querySelector("#status").textContent === "midi ready" && document.querySelector("#midiOutput option[value='probe-output']") !== null`);
+    await selectValue(client, "#midiOutput", "probe-output");
+
+    await clickSelector(client, "#startBtn");
+    await waitForValue(client, `document.querySelector("#status").textContent === "playing"`);
+    const playing = await evaluate(client, `
+      (async () => {
+        const energy = await window.__radioProbe.captureEnergy(1800);
+        return {
+          status: document.querySelector("#status").textContent,
+          midiSends: window.__radioProbe.midiSends,
+          starts: window.__radioProbe.starts,
+          audioState: window.__radioProbe.audioState,
+          energy
+        };
+      })()
+    `);
+    assert.equal(playing.status, "playing");
+    assert.equal(playing.audioState, "running");
+    assert.ok(playing.starts > 0);
+    assert.ok(playing.midiSends > 0);
+    assert.ok(playing.energy.nonSilentFrames > 0);
+    assert.ok(playing.energy.maxPeak > 0.005);
+    assert.ok(playing.energy.maxRms > 0.0005);
+
+    await clickSelector(client, "#randomBtn");
+    await waitForValue(client, `document.querySelector("#status").textContent === "playing"`);
+    await clickSelector(client, "#stopBtn");
+    await waitForValue(client, `document.querySelector("#status").textContent === "stopped"`);
+    await clickSelector(client, "#exportBtn");
+    await waitForValue(client, `window.__radioProbe.downloadClicks.some((item) => item.download === "radio-polymetric-export.mid")`);
+    const exported = await evaluate(client, `
+      ({
+        downloadClicks: window.__radioProbe.downloadClicks,
+        objectUrls: window.__radioProbe.objectUrls
+      })
+    `);
+    assert.ok(exported.objectUrls.some((item) => item.type === "audio/midi" && item.size > 18));
+
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 2,
+      mobile: true
+    });
+    await delay(250);
+    const mobile = await evaluate(client, `
+      (() => {
+        const controls = [...document.querySelectorAll("button,input,select,a")].filter((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+        return {
+          width: window.innerWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          badControls: controls.filter((element) => element.scrollWidth > element.clientWidth + 2).map((element) => element.id || element.textContent.trim()),
+          visibleButtons: controls.map((element) => element.id || element.textContent.trim()).filter(Boolean)
+        };
+      })()
+    `);
+    assert.ok(mobile.scrollWidth <= mobile.width + 2);
+    assert.deepEqual(mobile.badControls, []);
+    assert.ok(mobile.visibleButtons.includes("startBtn"));
+    assert.ok(mobile.visibleButtons.includes("exportBtn"));
+
+    await clickSelector(client, "#clearLicenseBtn");
+    await waitForValue(client, `document.querySelector("#paywallStatus").textContent === "locked" && document.querySelector("#startBtn").disabled === true`);
+    assert.deepEqual(issues.errors, []);
+  } finally {
+    await session.close();
     await target.close();
   }
 });
@@ -156,6 +283,63 @@ async function makeTarget() {
     licenseKey: LOCAL_LICENSE_KEY,
     close: () => new Promise((resolve) => server.close(resolve))
   };
+}
+
+async function openTargetInChromium(target, options = {}) {
+  const profileDir = await mkdtemp(join(await profileRoot(), "radio-browser-profile-"));
+  const debuggingPort = await freePort();
+  const width = options.width ?? 1366;
+  const height = options.height ?? 900;
+  const chromium = spawn(chromiumExecutable(), [
+    "--headless=new",
+    `--remote-debugging-port=${debuggingPort}`,
+    `--user-data-dir=${profileDir}`,
+    `--window-size=${width},${height}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    "--disable-features=MediaRouter",
+    "about:blank"
+  ], { stdio: "ignore" });
+
+  let client;
+  try {
+    const targetInfo = await waitForInitialPage(debuggingPort);
+    client = new CdpClient(targetInfo.webSocketDebuggerUrl);
+    await client.open();
+    const issues = collectBrowserIssues(client);
+    await client.send("Page.enable");
+    await client.send("Runtime.enable");
+    await client.send("Log.enable").catch(() => {});
+    await client.send("Emulation.setDeviceMetricsOverride", {
+      width,
+      height,
+      deviceScaleFactor: 1,
+      mobile: false
+    });
+    await client.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: probeScript({ midiMode: options.midiMode ?? "available" })
+    });
+    await client.send("Page.navigate", { url: target.url });
+    await waitForValue(client, `document.readyState === "complete" && Boolean(document.querySelector("#startBtn"))`);
+    return {
+      client,
+      issues,
+      close: async () => {
+        if (client) {
+          await client.send("Browser.close").catch(() => {});
+          client.close();
+        }
+        await closeChromium(chromium);
+        await removeWithRetry(profileDir);
+      }
+    };
+  } catch (error) {
+    if (client) client.close();
+    await closeChromium(chromium);
+    await removeWithRetry(profileDir);
+    throw error;
+  }
 }
 
 async function serveStatic(pathname, response) {
@@ -252,6 +436,7 @@ class CdpClient {
     this.url = url;
     this.nextId = 1;
     this.pending = new Map();
+    this.listeners = new Map();
     this.socket = null;
   }
 
@@ -276,6 +461,9 @@ class CdpClient {
 
   handleMessage(raw) {
     const message = JSON.parse(raw);
+    if (message.method) {
+      for (const listener of this.listeners.get(message.method) ?? []) listener(message.params ?? {});
+    }
     if (!message.id) return;
     const pending = this.pending.get(message.id);
     if (!pending) return;
@@ -292,6 +480,29 @@ class CdpClient {
     this.pending.clear();
     this.socket?.close();
   }
+
+  on(method, listener) {
+    const listeners = this.listeners.get(method) ?? [];
+    listeners.push(listener);
+    this.listeners.set(method, listeners);
+  }
+}
+
+function collectBrowserIssues(client) {
+  const issues = { errors: [], warnings: [] };
+  client.on("Runtime.exceptionThrown", ({ exceptionDetails }) => {
+    issues.errors.push(exceptionDetails?.exception?.description ?? exceptionDetails?.text ?? "runtime exception");
+  });
+  client.on("Runtime.consoleAPICalled", ({ type, args = [] }) => {
+    const text = args.map((arg) => arg.value ?? arg.description ?? "").join(" ").trim();
+    if (type === "error" || type === "assert") issues.errors.push(text || type);
+    if (type === "warning") issues.warnings.push(text || type);
+  });
+  client.on("Log.entryAdded", ({ entry }) => {
+    if (entry?.level === "error") issues.errors.push(entry.text ?? "log error");
+    if (entry?.level === "warning") issues.warnings.push(entry.text ?? "log warning");
+  });
+  return issues;
 }
 
 async function evaluate(client, expression) {
@@ -316,12 +527,63 @@ async function waitForValue(client, expression, timeoutMs = 10_000) {
 }
 
 async function clickSelector(client, selector) {
-  await evaluate(client, `
+  const point = await evaluate(client, `
     (() => {
       const element = document.querySelector(${JSON.stringify(selector)});
       if (!element) throw new Error("selector not found: ${selector}");
-      element.click();
-      return true;
+      element.scrollIntoView({ block: "center", inline: "center" });
+      const rect = element.getBoundingClientRect();
+      return {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2)
+      };
+    })()
+  `);
+  await client.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y, button: "none" });
+  await client.send("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
+  await client.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
+}
+
+async function replaceValue(client, selector, value) {
+  await clickSelector(client, selector);
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "a",
+    code: "KeyA",
+    windowsVirtualKeyCode: 65,
+    modifiers: 2
+  });
+  await client.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "a",
+    code: "KeyA",
+    windowsVirtualKeyCode: 65,
+    modifiers: 2
+  });
+  if (value) await client.send("Input.insertText", { text: value });
+  await evaluate(client, `
+    (() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    })()
+  `);
+}
+
+async function setControlValues(client, entries) {
+  for (const [selector, value] of Object.entries(entries)) {
+    await replaceValue(client, selector, value);
+  }
+}
+
+async function selectValue(client, selector, value) {
+  await clickSelector(client, selector);
+  await evaluate(client, `
+    (() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      element.value = ${JSON.stringify(value)};
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
     })()
   `);
 }
@@ -360,10 +622,12 @@ async function removeWithRetry(path) {
   throw lastError;
 }
 
-function probeScript() {
+function probeScript(options = {}) {
+  const midiMode = JSON.stringify(options.midiMode ?? "available");
   return String.raw`
 (() => {
   const probe = {
+    midiMode: ${midiMode},
     audioContextConstructed: 0,
     audioState: "uncreated",
     starts: 0,
@@ -373,7 +637,12 @@ function probeScript() {
     midiSends: 0,
     nodeTypes: {},
     destinationTypes: {},
+    objectUrls: [],
+    downloadClicks: [],
     analyser: null,
+    setMidiMode: (mode) => {
+      probe.midiMode = mode;
+    },
     captureEnergy: async (durationMs = 1200) => {
       const analyser = probe.analyser;
       if (!analyser) return { frames: 0, nonSilentFrames: 0, maxPeak: 0, maxRms: 0 };
@@ -403,6 +672,24 @@ function probeScript() {
     }
   };
   Object.defineProperty(window, "__radioProbe", { value: probe });
+
+  if (URL?.createObjectURL) {
+    const nativeCreateObjectURL = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (blob) => {
+      probe.objectUrls.push({ size: blob?.size ?? 0, type: blob?.type ?? "" });
+      return nativeCreateObjectURL(blob);
+    };
+  }
+
+  if (HTMLAnchorElement?.prototype?.click) {
+    const nativeAnchorClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function(...args) {
+      if (this.download) {
+        probe.downloadClicks.push({ download: this.download, href: this.href });
+      }
+      return nativeAnchorClick.apply(this, args);
+    };
+  }
 
   const NativeAudioContext = window.AudioContext;
   if (NativeAudioContext) {
@@ -458,6 +745,9 @@ function probeScript() {
     configurable: true,
     value: async () => {
       probe.midiRequests += 1;
+      if (probe.midiMode === "denied") {
+        throw new DOMException("midi denied", "NotAllowedError");
+      }
       const output = {
         id: "probe-output",
         name: "probe output",

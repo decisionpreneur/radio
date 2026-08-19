@@ -71,11 +71,14 @@ updatePaywallUi();
 validateExistingEntitlement();
 draw();
 
-controls.addEventListener("input", () => {
+controls.addEventListener("input", syncControlsWhenStopped);
+controls.addEventListener("change", syncControlsWhenStopped);
+
+function syncControlsWhenStopped() {
   if (timer) return;
   state = makeStateFromControls();
   draw();
-});
+}
 
 startBtn.addEventListener("click", async () => {
   if (!requireUnlocked()) return;
@@ -101,7 +104,14 @@ randomBtn.addEventListener("click", () => {
 
 midiBtn.addEventListener("click", async () => {
   if (!requireUnlocked()) return;
-  await connectMidi();
+  try {
+    await connectMidi();
+  } catch {
+    midiAccess = null;
+    midiOutput = null;
+    midiOutputSelect.innerHTML = '<option value="">none</option>';
+    statusEl.textContent = "midi unavailable";
+  }
 });
 
 midiOutputSelect.addEventListener("change", () => {

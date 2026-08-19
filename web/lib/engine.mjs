@@ -302,11 +302,12 @@ export function chooseBasisVoice(state) {
 }
 
 export function advanceCycle(state) {
-  const selected = chooseBasisVoice(state);
-  const oldBase = state.voices.find((voice) => voice.id === state.baseVoiceId);
-  const selectedBpm = voiceBpm(state, selected);
-  const nextCycleIndex = state.cycleIndex + 1;
-  const rng = makeRng(`${state.seed}:cycle:${nextCycleIndex}`);
+  const currentState = completePendingReplacements(state);
+  const selected = chooseBasisVoice(currentState);
+  const oldBase = currentState.voices.find((voice) => voice.id === currentState.baseVoiceId);
+  const selectedBpm = voiceBpm(currentState, selected);
+  const nextCycleIndex = currentState.cycleIndex + 1;
+  const rng = makeRng(`${currentState.seed}:cycle:${nextCycleIndex}`);
   const selectedClone = cloneVoice(selected);
   const oldBaseClone = cloneVoice(oldBase);
   oldBaseClone.protectedThroughCycle = nextCycleIndex;
@@ -315,14 +316,14 @@ export function advanceCycle(state) {
   if (oldBaseClone.id !== selectedClone.id) preserved.push(oldBaseClone);
 
   const replacementPlan = buildReplacementVoices({
-    previousState: state,
+    previousState: currentState,
     preserved,
     cycleIndex: nextCycleIndex,
     rng
   });
 
   const nextState = {
-    ...state,
+    ...currentState,
     cycleIndex: nextCycleIndex,
     baseVoiceId: selectedClone.id,
     previousBaseVoiceId: oldBase.id,
@@ -337,8 +338,16 @@ export function advanceCycle(state) {
     return nextState;
   }
 
-  nextState.voices = [selectedClone, ...state.voices.filter((voice) => voice.id !== selectedClone.id).map(cloneVoice)];
+  nextState.voices = [selectedClone, ...currentState.voices.filter((voice) => voice.id !== selectedClone.id).map(cloneVoice)];
   nextState.pendingReplacements = replacementPlan.replacements;
+  return nextState;
+}
+
+export function completePendingReplacements(state) {
+  let nextState = state;
+  while (nextState.pendingReplacements.length) {
+    nextState = applyNextReplacement(nextState);
+  }
   return nextState;
 }
 

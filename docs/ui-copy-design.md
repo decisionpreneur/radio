@@ -1,11 +1,5 @@
 # UI, UX, Copy, And Design Sources
 
-## Verbatim Prompt Sources
-
-```text
-on ui ux copywriting and design use tafti and all from gdrive lit and dbox lit
-```
-
 ## Source Material Used
 
 Google Drive Lit evidence:

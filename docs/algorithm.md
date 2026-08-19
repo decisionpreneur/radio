@@ -52,7 +52,7 @@ random 0/1 pattern with at least one hit
 
 `same-pulse-polymeter`:
 
-All voices share the same pulse duration. Different meters create different bar lengths. Resolving length is based on the least common multiple of the active meters. This is the lean browser default because the source prompt says `polymetric` and gives a 1..20 meter example resolving once in a lot of bars.
+All voices share the same pulse duration. Different meters create different bar lengths. Resolving length is based on the least common multiple of the active meters. This is the lean browser default for long-cycle polymeter.
 
 ```text
 voiceBpm = baseBpm
@@ -164,10 +164,4 @@ Z3 result for the negated equality:
 
 ```text
 unsat
-```
-
-Runnable check:
-
-```text
-tests/verbatim-corpus-disproof.mjs
 ```

@@ -1,39 +1,5 @@
 # Deployment
 
-## Verbatim Prompt Sources
-
-```text
-keep that project code in radio crossrepo as per repo rules and artifacts/binaries in db radio folder
-```
-
-```text
-preferably without backend or db at all (but where paywalling stores its data then??) to use cf workers/pages nothiong more
-```
-
-```text
-i think lincences \n sepratated list can be stored in cloudflare thus keeping it frontend only
-```
-
-```text
-for cicd and deployment conventions see infra and hardlinksdb reference
-```
-
-```text
-i never said anything allowed to be local
-```
-
-```text
-how is it designed that it needs tokens? pages can work without tokens i just add repo in cf ui and no cicd nor tokens needed
-```
-
-```text
-no api no cicd that way
-```
-
-```text
-e.g you can read encerta.in frontend works this way
-```
-
 ## Component Repository Boundary
 
 The `radio` repository contains generic component material:
@@ -41,7 +7,6 @@ The `radio` repository contains generic component material:
 - static browser app under `web`
 - shared algorithm modules under `web/lib`
 - Cloudflare Pages Functions under `functions`
-- verbatim-source disproof runner under `tests`
 - artifact generator under `scripts`
 
 Environment-specific credentials, account identifiers, private host targeting, and deployment values belong outside this component repository.
@@ -144,12 +109,3 @@ Do not use these for this lean deployment:
 - local HTTP server as delivery
 - repository-stored license keys
 - repository-stored provider secrets
-
-## Component Disproof Run
-
-```text
-RADIO_VERBATIM_TRANSCRIPT=... RADIO_BROWSER_TEST_LICENSE_KEY=... RADIO_BROWSER_TEST_URL=https://radio.vandrowka.com/ \
-tests/run
-```
-
-This runs the source-gated Node checks and Chromium live-site checks. It is a manual command, not CI/CD.

@@ -10,7 +10,6 @@ Lean browser-live polymetric polymodulation instrument for an eternal drum patte
 - Static paywall client: `web/lib/paywall.mjs`
 - Cloudflare Pages Function license endpoints: `functions/api/license`
 - Cloudflare Pages Function public checkout config: `functions/api/config`
-- Verbatim-source disproof runner: `tests/verbatim-corpus-disproof.mjs`
 - Demo artifact generator: `scripts/generate-demo.mjs`
 
 The lean version has no database, no Cloudflare API deploy path, and no repo CI/CD workflow. Donation and checkout are configurable outbound links in the static page. Paywall validation runs through Cloudflare Pages Functions with either Lemon Squeezy license keys or a newline-separated Cloudflare environment license list.
@@ -18,17 +17,8 @@ The lean version has no database, no Cloudflare API deploy path, and no repo CI/
 ## Verify
 
 ```powershell
-$env:RADIO_VERBATIM_TRANSCRIPT="C:\path\to\local\codex-session.jsonl"
-$env:RADIO_BROWSER_TEST_LICENSE_KEY="live paid or special-use key"
-$env:RADIO_BROWSER_TEST_URL="https://radio.vandrowka.com/"
-bash tests/run
-```
-
-```powershell
 node scripts/generate-demo.mjs "$env:USERPROFILE\Dropbox\Musica\radio\polymetric-polymodulation"
 ```
-
-The runner reads the local Codex JSONL prompt corpus before every source-backed disproof check and includes the Z3 invariant check.
 
 ## Lean Controls
 
@@ -55,7 +45,7 @@ The lean version currently has two kits:
 - normal drumset
 - ethnic percussion kit
 
-The normal drumset is constrained to the named playable lanes visible between the note-only `E2` and `B0` row labels in the attached drum-lane screenshot:
+The normal drumset is constrained to the named playable lanes from the attached drum-lane screenshot:
 
 - Ride Cup Gen Purpose
 - Ride Gen Purpose

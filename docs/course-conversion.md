@@ -1,31 +1,5 @@
 # Course Conversion
 
-## Verbatim Prompt Sources
-
-```text
-old course must be converted to contemporary lean zero ru-ties worldnet no runet solutions
-```
-
-```text
-read the materials transcribing if needed and tell me
-```
-
-```text
-preferably without backend or db at all (but where paywalling stores its data then??) to use cf workers/pages nothiong more
-```
-
-```text
-yeah just the leanest possible
-```
-
-```text
-licence key is ok
-```
-
-```text
-i think lincences \n sepratated list can be stored in cloudflare thus keeping it frontend only
-```
-
 ## Source Material Used
 
 The converted source material is the transcribed old radio course under:
@@ -180,26 +154,19 @@ Converted lesson 6: remove SMS payment scripts.
 
 ## Lean Launch Course
 
-1. Run the source-gated disproof checks:
-
-```text
-RADIO_VERBATIM_TRANSCRIPT=... RADIO_BROWSER_TEST_LICENSE_KEY=... RADIO_BROWSER_TEST_URL=https://radio.vandrowka.com/ \
-bash tests/run
-```
-
-2. Generate a DAW/manual-check MIDI artifact when needed:
+1. Generate a DAW/manual-check MIDI artifact when needed:
 
 ```text
 node scripts/generate-demo.mjs "$env:USERPROFILE\Dropbox\Musica\radio\polymetric-polymodulation"
 ```
 
-3. Connect Cloudflare Pages in the dashboard:
+2. Connect Cloudflare Pages in the dashboard:
 
 ```text
 Workers & Pages -> Create application -> Pages -> Connect to Git
 ```
 
-4. Use these Cloudflare Pages settings:
+3. Use these Cloudflare Pages settings:
 
 ```text
 Repository: decisionpreneur/radio
@@ -210,7 +177,7 @@ Build output directory: web
 Root directory:
 ```
 
-5. Configure paywall environment:
+4. Configure paywall environment:
 
 ```text
 RADIO_CHECKOUT_URL=
@@ -221,14 +188,14 @@ RADIO_LEMONSQUEEZY_PRODUCT_ID=
 RADIO_LEMONSQUEEZY_VARIANT_ID=
 ```
 
-6. Configure hosted checkout:
+5. Configure hosted checkout:
 
 - Create the product in Lemon Squeezy or the later chosen hosted checkout provider.
 - Enable generated license keys.
 - Copy the hosted checkout URL into `RADIO_CHECKOUT_URL`.
 - If using Lemon Squeezy product or variant constraints, set `RADIO_LEMONSQUEEZY_PRODUCT_ID` and `RADIO_LEMONSQUEEZY_VARIANT_ID`.
 
-7. Verify public paid access:
+6. Verify public paid access:
 
 - Unlicensed browser: live playback, MIDI output, and export stay locked.
 - Checkout link is visible only when `RADIO_CHECKOUT_URL` is configured.
@@ -237,7 +204,7 @@ RADIO_LEMONSQUEEZY_VARIANT_ID=
 - The app plays after entitlement validation.
 - `/api/license/validate` preserves access for the same stored entitlement.
 
-8. Operate the fallback:
+7. Operate the fallback:
 
 - Add a paid or comped license key to `RADIO_LICENSE_KEYS` when provider-side activation is delayed.
 - Add a special-use key to `RADIO_SPECIAL_USE_KEYS` when special access must avoid payment-email requirement.

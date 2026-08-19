@@ -1,47 +1,5 @@
 # Paywall
 
-## Verbatim Prompt Sources
-
-```text
-preferably without backend or db at all (but where paywalling stores its data then??) to use cf workers/pages nothiong more
-```
-
-```text
-tech-wise it should aim at lean donation-based with further paywalling
-```
-
-```text
-ok what is the most lean paywall enablement? can paywalling be delegated to stripe paypal etc without ruining lean-frontend-only?
-```
-
-```text
-ok propose the leanest solution preferably if some saas handles paywolling for us
-```
-
-```text
-for percentage commision not fixed payment
-```
-
-```text
-uruguay jursidiction supported preferable but not a must
-```
-
-```text
-licence key is ok
-```
-
-```text
-i think lincences \n sepratated list can be stored in cloudflare thus keeping it frontend only
-```
-
-```text
-yeah just the leanest possible
-```
-
-```text
-implement radio with paywall
-```
-
 ## Implemented Shape
 
 The app gates live playback, MIDI output, and MIDI export behind a license key.

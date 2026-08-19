@@ -1,6 +1,8 @@
 import {
   advanceCycle,
   applyNextReplacement,
+  baseBarSeconds,
+  cloneState,
   createInitialState,
   generateEventsInWindow,
   renderArrangement,
@@ -101,6 +103,11 @@ let timer = null;
 let live = null;
 let entitlementValidationPending = entitlementUnlocks(entitlement);
 
+const SCHEDULE_OFFSET_SECONDS = 0.02;
+const SCHEDULE_LOOKAHEAD_SECONDS = 0.35;
+const SCHEDULE_PRUNE_SECONDS = 1;
+const EPSILON_SECONDS = 1e-6;
+
 updatePaywallUi();
 validateExistingEntitlement();
 draw();
@@ -193,7 +200,7 @@ async function startLive() {
     sectionStart: audioContext.currentTime + 0.08,
     lastReplacementBar: -1,
     lastReplacementResolve: -1,
-    scheduled: new Set()
+    scheduled: new Map()
   };
   draw();
   tick();
@@ -306,57 +313,124 @@ function stopLive() {
 function tick() {
   if (!live || !audioContext) return;
   const now = audioContext.currentTime;
-  let currentSectionSeconds = sectionSeconds(live.state);
-  while (now >= live.sectionStart + currentSectionSeconds) {
-    live.sectionStart += currentSectionSeconds;
+  catchUpLiveState(now);
+  pruneScheduled(now);
+  scheduleWindow(now + SCHEDULE_OFFSET_SECONDS, now + SCHEDULE_LOOKAHEAD_SECONDS);
+  updateCycleProgress(now);
+}
+
+function catchUpLiveState(now) {
+  let changed = false;
+  while (now >= live.sectionStart + sectionSeconds(live.state) - EPSILON_SECONDS) {
+    live.sectionStart += sectionSeconds(live.state);
     live.state = advanceCycle(live.state);
-    live.scheduled.clear();
     live.lastReplacementBar = -1;
     live.lastReplacementResolve = -1;
-    state = live.state;
-    currentSectionSeconds = sectionSeconds(live.state);
-    draw();
+    changed = true;
   }
-
-  applyCadence(now);
-
-  const from = now + 0.02;
-  const to = now + 0.35;
-  const result = generateEventsInWindow(live.state, {
-    fromSeconds: from,
-    toSeconds: to,
-    sectionStartSeconds: live.sectionStart,
-    maxEvents: 600
-  });
-
-  for (const event of result.events) {
-    const key = `${live.state.cycleIndex}:${event.voiceId}:${event.pulseIndex}`;
-    if (live.scheduled.has(key)) continue;
-    live.scheduled.add(key);
-    playEvent(event, event.timeSeconds);
+  changed = applyCadenceUntil(live, now) || changed;
+  if (changed) {
+    state = live.state;
+    draw();
   }
 }
 
-function applyCadence(now) {
-  if (!live.state.pendingReplacements.length) return;
-  const local = now - live.sectionStart;
-  const baseBar = (60 / live.state.baseBpm) * live.state.baseMeter;
-  const barIndex = Math.floor(local / baseBar);
-  if (live.state.config.replacementCadence === "one-per-bar" && barIndex > live.lastReplacementBar) {
-    live.state = applyNextReplacement(live.state);
-    live.lastReplacementBar = barIndex;
-    state = live.state;
-    draw();
-  }
-  if (live.state.config.replacementCadence === "one-per-resolving-sequence") {
-    const resolveIndex = Math.floor(local / resolvingSeconds(live.state));
-    if (resolveIndex > live.lastReplacementResolve) {
-      live.state = applyNextReplacement(live.state);
-      live.lastReplacementResolve = resolveIndex;
-      state = live.state;
-      draw();
+function scheduleWindow(fromSeconds, toSeconds) {
+  const cursorState = {
+    state: cloneState(live.state),
+    sectionStart: live.sectionStart,
+    lastReplacementBar: live.lastReplacementBar,
+    lastReplacementResolve: live.lastReplacementResolve
+  };
+  applyCadenceUntil(cursorState, fromSeconds);
+
+  let cursor = fromSeconds;
+  while (cursor < toSeconds - EPSILON_SECONDS) {
+    const sectionEnd = cursorState.sectionStart + sectionSeconds(cursorState.state);
+    const nextCadence = nextCadenceSeconds(cursorState);
+    const segmentEnd = Math.min(toSeconds, sectionEnd, nextCadence ?? Number.POSITIVE_INFINITY);
+
+    if (segmentEnd > cursor + EPSILON_SECONDS) {
+      const result = generateEventsInWindow(cursorState.state, {
+        fromSeconds: cursor,
+        toSeconds: segmentEnd,
+        sectionStartSeconds: cursorState.sectionStart,
+        maxEvents: 600
+      });
+      for (const event of result.events) scheduleEvent(cursorState.state, event);
     }
+
+    if (nextCadence !== null && nextCadence <= segmentEnd + EPSILON_SECONDS && nextCadence <= toSeconds + EPSILON_SECONDS) {
+      applyOneReplacement(cursorState);
+      cursor = Math.max(segmentEnd, nextCadence);
+      continue;
+    }
+
+    if (sectionEnd <= segmentEnd + EPSILON_SECONDS && sectionEnd <= toSeconds + EPSILON_SECONDS) {
+      cursorState.sectionStart = sectionEnd;
+      cursorState.state = advanceCycle(cursorState.state);
+      cursorState.lastReplacementBar = -1;
+      cursorState.lastReplacementResolve = -1;
+      cursor = Math.max(segmentEnd, sectionEnd);
+      continue;
+    }
+
+    cursor = segmentEnd;
   }
+}
+
+function scheduleEvent(currentState, event) {
+  const key = `${currentState.cycleIndex}:${event.voiceId}:${event.pulseIndex}`;
+  if (live.scheduled.has(key)) return;
+  live.scheduled.set(key, event.timeSeconds);
+  playEvent(event, event.timeSeconds);
+}
+
+function pruneScheduled(now) {
+  for (const [key, timeSeconds] of live.scheduled.entries()) {
+    if (timeSeconds < now - SCHEDULE_PRUNE_SECONDS) live.scheduled.delete(key);
+  }
+}
+
+function applyCadenceUntil(target, untilSeconds) {
+  let changed = false;
+  while (target.state.pendingReplacements.length) {
+    const nextCadence = nextCadenceSeconds(target);
+    if (nextCadence === null || nextCadence > untilSeconds + EPSILON_SECONDS) break;
+    applyOneReplacement(target);
+    changed = true;
+  }
+  return changed;
+}
+
+function nextCadenceSeconds(target) {
+  if (!target.state.pendingReplacements.length) return null;
+  if (target.state.config.replacementCadence === "immediate") return null;
+  const unitSeconds = target.state.config.replacementCadence === "one-per-resolving-sequence"
+    ? resolvingSeconds(target.state)
+    : baseBarSeconds(target.state);
+  if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
+  const lastIndex = target.state.config.replacementCadence === "one-per-resolving-sequence"
+    ? target.lastReplacementResolve
+    : target.lastReplacementBar;
+  return target.sectionStart + ((lastIndex + 1) * unitSeconds);
+}
+
+function applyOneReplacement(target) {
+  const cadence = target.state.config.replacementCadence;
+  const atSeconds = nextCadenceSeconds(target);
+  if (atSeconds === null) return false;
+  const unitSeconds = cadence === "one-per-resolving-sequence"
+    ? resolvingSeconds(target.state)
+    : baseBarSeconds(target.state);
+  const nextIndex = Math.round((atSeconds - target.sectionStart) / unitSeconds);
+  target.state = applyNextReplacement(target.state);
+  if (cadence === "one-per-resolving-sequence") {
+    target.lastReplacementResolve = nextIndex;
+  } else {
+    target.lastReplacementBar = nextIndex;
+  }
+  return true;
 }
 
 function playEvent(event, when) {
@@ -659,7 +733,7 @@ function drawReadout() {
   const pending = state.pendingReplacements.length;
   const kits = [...new Set(state.voices.map((voice) => voice.kit))].join(", ");
   readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"} meter ${state.baseMeter} @ ${state.baseBpm.toFixed(3)} bpm`;
-  readoutFields.cycle.textContent = `${state.cycleIndex} / ${sectionBaseBars(state)} bars`;
+  readoutFields.cycle.textContent = cycleProgressText(state);
   readoutFields.change.textContent = `${state.config.cycleLength} ${state.config.cycleLengthKind}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacing`;
   readoutFields.voices.textContent = String(state.voices.length);
   readoutFields.kits.textContent = kits || "-";
@@ -669,6 +743,18 @@ function drawReadout() {
   readoutFields.access.textContent = entitlementValidationPending
     ? "checking license"
     : (entitlementUnlocks(entitlement) ? "unlocked" : "locked");
+}
+
+function updateCycleProgress(now) {
+  readoutFields.cycle.textContent = cycleProgressText(live.state, now, live.sectionStart);
+}
+
+function cycleProgressText(currentState, now = null, sectionStart = null) {
+  const totalBars = sectionBaseBars(currentState);
+  if (now === null || sectionStart === null) return `${currentState.cycleIndex}; ${totalBars} bars`;
+  const elapsed = Math.max(0, now - sectionStart);
+  const barIndex = Math.min(totalBars, Math.floor(elapsed / baseBarSeconds(currentState)));
+  return `${currentState.cycleIndex}; bar ${barIndex} / ${totalBars}`;
 }
 
 function drawTimeline() {

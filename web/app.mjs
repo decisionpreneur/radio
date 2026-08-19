@@ -4,7 +4,9 @@ import {
   createInitialState,
   generateEventsInWindow,
   renderArrangement,
+  resolvingBaseBars,
   resolvingSeconds,
+  sectionBaseBars,
   sectionSeconds,
   voiceBpm
 } from "./lib/engine.mjs";
@@ -40,6 +42,14 @@ const licenseEmailInput = document.querySelector("#licenseEmail");
 const unlockBtn = document.querySelector("#unlockBtn");
 const clearLicenseBtn = document.querySelector("#clearLicenseBtn");
 const paywallStatus = document.querySelector("#paywallStatus");
+const readoutFields = {
+  tempoBasis: document.querySelector('[data-field="tempoBasis"]'),
+  cycle: document.querySelector('[data-field="cycle"]'),
+  change: document.querySelector('[data-field="change"]'),
+  voices: document.querySelector('[data-field="voices"]'),
+  kits: document.querySelector('[data-field="kits"]'),
+  timing: document.querySelector('[data-field="timing"]')
+};
 
 const donationUrl = donateLink.dataset.donationUrl;
 if (!donationUrl) {
@@ -542,6 +552,7 @@ function makeStateFromControls() {
     kitPool: optionalValue("kitPool"),
     meterStart: readOptionalNumber("meterStart"),
     meterCount: readOptionalNumber("patternCount"),
+    meterTiming: optionalValue("meterTiming"),
     cycleLength: readOptionalNumber("cycleLength"),
     cycleLengthKind: optionalValue("cycleLengthKind"),
     basisPolicy: optionalValue("basisPolicy")
@@ -549,8 +560,23 @@ function makeStateFromControls() {
 }
 
 function draw() {
+  drawReadout();
   drawTimeline();
   drawVoices();
+}
+
+function drawReadout() {
+  const baseVoice = state.voices.find((voice) => voice.id === state.baseVoiceId) ?? state.voices[0];
+  const pending = state.pendingReplacements.length;
+  const kits = [...new Set(state.voices.map((voice) => voice.kit))].join(", ");
+  readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"} meter ${state.baseMeter} @ ${state.baseBpm.toFixed(3)} bpm`;
+  readoutFields.cycle.textContent = `${state.cycleIndex} / ${sectionBaseBars(state)} bars`;
+  readoutFields.change.textContent = `${state.config.cycleLength} ${state.config.cycleLengthKind}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacing`;
+  readoutFields.voices.textContent = String(state.voices.length);
+  readoutFields.kits.textContent = kits || "-";
+  readoutFields.timing.textContent = state.config.meterTiming === "shared-bar-polyrhythm"
+    ? "shared bar"
+    : "same pulse";
 }
 
 function drawTimeline() {
@@ -629,13 +655,19 @@ function randomizeControls() {
   const now = Date.now().toString(36);
   document.querySelector("#seed").value = `radio-${now}`;
   document.querySelector("#baseBpm").value = String(80 + Math.floor(Math.random() * 80));
+  document.querySelector("#baseMeter").value = "";
   document.querySelector("#patternCount").value = String(3 + Math.floor(Math.random() * 18));
   const patterns = readNumber("patternCount");
   document.querySelector("#startOnlyCount").value = String(Math.floor(Math.random() * Math.max(1, patterns / 3)));
   document.querySelector("#pulseCount").value = String(Math.floor(Math.random() * Math.max(1, patterns / 3)));
   document.querySelector("#kitPool").value = "";
+  document.querySelector("#meterStart").value = "";
+  const timingModes = ["same-pulse-polymeter", "shared-bar-polyrhythm"];
+  document.querySelector("#meterTiming").value = timingModes[Math.floor(Math.random() * timingModes.length)];
   document.querySelector("#cycleLength").value = String(1 + Math.floor(Math.random() * 5));
-  const policies = ["next", "random", "closest", "farthest"];
+  const units = ["resolving-sequences", "bars"];
+  document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
+  const policies = ["next", "random", "closest", "farmost"];
   document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];
 }
 

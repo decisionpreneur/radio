@@ -51,7 +51,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     : randomInt(rng, 3, 20);
   const patternCount = clampNumber(
     patternCountInput,
-    2,
+    3,
     64
   );
   const baseMeter = hasValue(input.baseMeter) ? clampNumber(input.baseMeter, 1, 64) : undefined;
@@ -85,7 +85,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     meterStart,
     meterCount,
     customMeters: Array.isArray(input.customMeters) ? input.customMeters.map(Number).filter(Number.isFinite) : null,
-    meterTiming: ensureMember(input.meterTiming, METER_TIMING_MODES, "same-pulse-polymeter"),
+    meterTiming: ensureMemberOrRandom(input.meterTiming, METER_TIMING_MODES, rng),
     cycleLengthKind: ensureMemberOrRandom(input.cycleLengthKind, CYCLE_LENGTH_KINDS, rng),
     cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
@@ -246,7 +246,9 @@ export function generateEventsInWindow(state, options) {
 export function chooseBasisVoice(state) {
   const currentIndex = state.voices.findIndex((voice) => voice.id === state.baseVoiceId);
   const candidates = state.voices.filter((voice) => {
-    return voice.id !== state.baseVoiceId && voice.meter !== state.baseMeter;
+    return voice.id !== state.baseVoiceId
+      && voice.id !== state.previousBaseVoiceId
+      && voice.meter !== state.baseMeter;
   });
   if (!candidates.length) {
     throw new Error("No eligible next basis voice");
@@ -356,7 +358,7 @@ export function renderArrangement(initialState, options = {}) {
     const beatSeconds = 60 / state.baseBpm;
     const currentSectionSeconds = sectionSeconds(state);
     tempos.push({ tick: startTick, bpm: state.baseBpm });
-    const result = generateSectionEvents(state, {
+    const result = generateSectionEventsWithCadence(state, {
       startSeconds,
       maxEvents: maxEventsPerSection
     });
@@ -385,6 +387,43 @@ export function renderArrangement(initialState, options = {}) {
   }
 
   return { events, tempos, sections, ppq, finalState: state };
+}
+
+export function generateSectionEventsWithCadence(state, options = {}) {
+  let workingState = cloneState(state);
+  const startSeconds = options.startSeconds ?? 0;
+  const maxEvents = options.maxEvents ?? 20000;
+  const endSeconds = startSeconds + Math.min(sectionSeconds(workingState), options.maxSeconds ?? Infinity);
+  const events = [];
+  let from = startSeconds;
+  let replacementIndex = -1;
+  let truncated = false;
+
+  while (from < endSeconds - EPSILON && events.length < maxEvents) {
+    const nextReplacementAt = nextReplacementTime(workingState, {
+      startSeconds,
+      fromSeconds: from,
+      lastReplacementIndex: replacementIndex
+    });
+    const to = Math.min(endSeconds, nextReplacementAt ?? endSeconds);
+    if (to > from + EPSILON) {
+      const result = generateEventsInWindow(workingState, {
+        fromSeconds: from,
+        toSeconds: to,
+        sectionStartSeconds: startSeconds,
+        maxEvents: maxEvents - events.length
+      });
+      events.push(...result.events);
+      truncated = truncated || result.truncated;
+      if (result.truncated || events.length >= maxEvents) break;
+    }
+    if (nextReplacementAt == null || nextReplacementAt >= endSeconds - EPSILON) break;
+    workingState = applyNextReplacement(workingState);
+    replacementIndex += 1;
+    from = nextReplacementAt;
+  }
+
+  return { events: events.sort(sortEvents), truncated };
 }
 
 export function cloneState(state) {
@@ -441,6 +480,19 @@ function buildReplacementVoices({ previousState, preserved, cycleIndex, rng }) {
   }
 
   return { finalVoices, replacements, nextVoiceNumber };
+}
+
+function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacementIndex }) {
+  if (!state.pendingReplacements.length) return null;
+  if (state.config.replacementCadence === "immediate") return null;
+  const localFrom = Math.max(0, fromSeconds - startSeconds);
+  const unitSeconds = state.config.replacementCadence === "one-per-resolving-sequence"
+    ? resolvingSeconds(state)
+    : baseBarSeconds(state);
+  if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
+  const currentIndex = Math.floor((localFrom + EPSILON) / unitSeconds);
+  const nextIndex = Math.max(lastReplacementIndex + 1, currentIndex);
+  return startSeconds + (nextIndex * unitSeconds);
 }
 
 function patternHitAt(state, voice, pulseIndex) {

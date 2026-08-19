@@ -49,6 +49,8 @@ const readoutFields = {
   voices: document.querySelector('[data-field="voices"]'),
   kits: document.querySelector('[data-field="kits"]'),
   timing: document.querySelector('[data-field="timing"]'),
+  access: document.querySelector('[data-field="access"]'),
+  accessBadge: document.querySelector("#accessBadge"),
   signal: document.querySelector('[data-field="signal"]'),
   signalFill: document.querySelector('[data-field="signalFill"]')
 };
@@ -277,11 +279,18 @@ function requireUnlocked() {
 
 function updatePaywallUi() {
   const unlocked = !entitlementValidationPending && entitlementUnlocks(entitlement);
+  const accessText = entitlementValidationPending ? "checking license" : (unlocked ? "unlocked" : "locked");
   startBtn.disabled = !unlocked;
   midiBtn.disabled = !unlocked;
   exportBtn.disabled = !unlocked;
   clearLicenseBtn.disabled = !unlocked;
-  paywallStatus.textContent = entitlementValidationPending ? "checking license" : (unlocked ? "unlocked" : "locked");
+  startBtn.title = unlocked ? "Start live audio" : "License required";
+  midiBtn.title = unlocked ? "Connect MIDI output" : "License required";
+  exportBtn.title = unlocked ? "Export MIDI file" : "License required";
+  paywallStatus.textContent = accessText;
+  readoutFields.access.textContent = accessText;
+  readoutFields.accessBadge.textContent = accessText;
+  document.documentElement.dataset.access = unlocked ? "unlocked" : "locked";
 }
 
 function stopLive() {
@@ -657,6 +666,9 @@ function drawReadout() {
   readoutFields.timing.textContent = state.config.meterTiming === "shared-bar-polyrhythm"
     ? "shared bar"
     : "same pulse";
+  readoutFields.access.textContent = entitlementValidationPending
+    ? "checking license"
+    : (entitlementUnlocks(entitlement) ? "unlocked" : "locked");
 }
 
 function drawTimeline() {

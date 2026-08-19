@@ -54,6 +54,32 @@ h1 {
   font-size: 13px;
 }
 
+.runline {
+  margin: 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #b9c1b0;
+  font-size: 13px;
+}
+
+#accessBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid #645944;
+  border-radius: 6px;
+  padding: 0 8px;
+  color: #d7b458;
+  background: #1b1d16;
+}
+
+html[data-access="unlocked"] #accessBadge {
+  border-color: #566949;
+  color: #a8d28a;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -169,7 +195,7 @@ select {
 
 .statebar {
   display: grid;
-  grid-template-columns: repeat(7, minmax(118px, 1fr));
+  grid-template-columns: repeat(8, minmax(108px, 1fr));
   gap: 1px;
   margin: 0;
   border-bottom: 1px solid #34362f;

@@ -18,7 +18,7 @@ const state = createInitialState({
   cycleLength: 4,
   basisPolicy: "next",
   replacementCadence: "one-per-bar",
-  meterTiming: "shared-bar-polyrhythm"
+  meterTiming: "same-pulse-polymeter"
 });
 
 const rendered = renderArrangement(state, { sectionCount: 6, ppq: 480 });

@@ -110,7 +110,7 @@ Current provider evidence checked on 2026-08-15:
 
 - Cloudflare Pages Git integration deploys from a connected GitHub or GitLab repository on push: https://developers.cloudflare.com/pages/get-started/git-integration/
 - Cloudflare Pages Functions run server-side code without a dedicated server: https://developers.cloudflare.com/pages/functions/
-- Lemon Squeezy license keys are generated per purchase and can be used as proof of paid access: https://docs.lemonsqueezy.com/help/licensing/generating-license-keys
+- Lemon Squeezy license keys are generated per purchase and can be used as paid-access evidence: https://docs.lemonsqueezy.com/help/licensing/generating-license-keys
 - Lemon Squeezy supported bank-payout countries include Uruguay: https://docs.lemonsqueezy.com/help/getting-started/supported-countries
 - Lemon Squeezy unsupported customer countries include Russian Federation: https://docs.lemonsqueezy.com/help/getting-started/supported-countries
 - Lemon Squeezy fees are sale-based and payout-fee based, not a fixed monthly subscription in this lean setup: https://docs.lemonsqueezy.com/help/getting-started/fees
@@ -163,7 +163,7 @@ Old lesson 5: accept payment through manual electronic wallets.
 
 Converted lesson 5: use hosted checkout and license keys.
 
-- Do not request wallet screenshots, manual payment proof, or direct wallet transfers.
+- Do not request wallet screenshots, manual payment evidence, or direct wallet transfers.
 - Let the hosted checkout provider hold order, tax, payment, and license state.
 - Let Cloudflare Pages Functions validate license status.
 - Use `RADIO_LICENSE_KEYS` only as a fallback allowlist or manual comp path.
@@ -180,9 +180,10 @@ Converted lesson 6: remove SMS payment scripts.
 
 ## Lean Launch Course
 
-1. Build and verify the repo app:
+1. Run the source-gated disproof checks:
 
 ```text
+RADIO_VERBATIM_TRANSCRIPT=... RADIO_BROWSER_TEST_LICENSE_KEY=... RADIO_BROWSER_TEST_URL=https://radio.vandrowka.com/ \
 bash tests/run
 ```
 

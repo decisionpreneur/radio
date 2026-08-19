@@ -50,6 +50,14 @@ random 0/1 pattern with at least one hit
 
 ## Meter Timing Modes
 
+`same-pulse-polymeter`:
+
+All voices share the same pulse duration. Different meters create different bar lengths. Resolving length is based on the least common multiple of the active meters. This is the lean browser default because the source prompt says `polymetric` and gives a 1..20 meter example resolving once in a lot of bars.
+
+```text
+voiceBpm = baseBpm
+```
+
 `shared-bar-polyrhythm`:
 
 All meters fit inside the same base bar duration. Voice pulse BPM is:
@@ -58,13 +66,7 @@ All meters fit inside the same base bar duration. Voice pulse BPM is:
 voiceBpm = baseBpm * voiceMeter / baseMeter
 ```
 
-This is the lean browser default because `closest` and `farthest` basis choices have concrete BPM distance and cycle lengths stay usable for live playback.
-
-`same-pulse-polymeter`:
-
-All voices share the same pulse duration. Different meters create different bar lengths. Resolving length is based on the least common multiple of the active meters.
-
-`same-pulse-polymeter` remains an engine-level option only, not a lean UI tuneable.
+`shared-bar-polyrhythm` remains an engine-level option for BPM-distance basis selection checks.
 
 ## Cycle Length
 
@@ -80,13 +82,13 @@ change after cycleLength base bars
 change after cycleLength * resolvingBaseBars
 ```
 
-For `shared-bar-polyrhythm`, `resolvingBaseBars = 1`.
-
 For `same-pulse-polymeter`:
 
 ```text
 resolvingBaseBars = lcm(activeMeters) / baseMeter
 ```
+
+For `shared-bar-polyrhythm`, `resolvingBaseBars = 1`.
 
 ## Basis Selection
 
@@ -118,7 +120,20 @@ Lean browser playback uses `one-per-bar` replacement. `immediate` and `one-per-r
 
 ## Invariant Check
 
-For `shared-bar-polyrhythm`, selected voice BPM before transition:
+For the default same-pulse polymeter timing, selected voice BPM before transition:
+
+```text
+before = oldBpm
+```
+
+After selecting that voice as the new basis:
+
+```text
+newBaseBpm = before
+after = newBaseBpm
+```
+
+The shared-bar engine option uses:
 
 ```text
 before = oldBpm * selectedMeter / oldMeter
@@ -151,14 +166,8 @@ Z3 result for the negated equality:
 unsat
 ```
 
-Wolfram result for the equality:
+Runnable check:
 
 ```text
-True
-```
-
-Runnable coverage:
-
-```text
-tests/logical-invariant.test.mjs
+tests/verbatim-corpus-disproof.mjs
 ```

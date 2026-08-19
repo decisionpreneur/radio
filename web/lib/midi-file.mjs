@@ -32,7 +32,7 @@ export function encodeMidiFile(rendered) {
 
   let previousTick = 0;
   for (const message of messages) {
-    pushVar(track, message.tick - previousTick);
+    pushDelta(track, message.tick - previousTick);
     pushBytes(track, message.bytes);
     previousTick = message.tick;
   }
@@ -51,6 +51,8 @@ export function encodeMidiFile(rendered) {
   return new Uint8Array(output);
 }
 
+const MAX_MIDI_DELTA = 0x0fffffff;
+
 function tempoBytes(bpm) {
   const microsPerQuarter = Math.max(1, Math.round(60000000 / bpm));
   return [
@@ -63,19 +65,26 @@ function tempoBytes(bpm) {
   ];
 }
 
-function pushVar(output, value) {
-  let buffer = value & 0x7f;
-  while ((value >>= 7)) {
-    buffer <<= 8;
-    buffer |= ((value & 0x7f) | 0x80);
+function pushDelta(output, value) {
+  let remaining = Math.max(0, Math.floor(Number(value)));
+  while (remaining > MAX_MIDI_DELTA) {
+    pushVar(output, MAX_MIDI_DELTA);
+    pushBytes(output, [0xff, 0x01, 0x00]);
+    remaining -= MAX_MIDI_DELTA;
   }
-  for (;;) {
-    output.push(buffer & 0xff);
-    if (buffer & 0x80) {
-      buffer >>= 8;
-    } else {
-      break;
-    }
+  pushVar(output, remaining);
+}
+
+function pushVar(output, value) {
+  let remaining = Math.max(0, Math.floor(Number(value)));
+  const bytes = [remaining % 128];
+  remaining = Math.floor(remaining / 128);
+  while (remaining > 0) {
+    bytes.unshift((remaining % 128) | 0x80);
+    remaining = Math.floor(remaining / 128);
+  }
+  for (const byte of bytes) {
+    output.push(byte);
   }
 }
 

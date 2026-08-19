@@ -41,7 +41,7 @@ The `radio` repository contains generic component material:
 - static browser app under `web`
 - shared algorithm modules under `web/lib`
 - Cloudflare Pages Functions under `functions`
-- component tests under `tests`
+- verbatim-source disproof runner under `tests`
 - artifact generator under `scripts`
 
 Environment-specific credentials, account identifiers, private host targeting, and deployment values belong outside this component repository.
@@ -145,10 +145,11 @@ Do not use these for this lean deployment:
 - repository-stored license keys
 - repository-stored provider secrets
 
-## Component Verification
+## Component Disproof Run
 
 ```text
+RADIO_VERBATIM_TRANSCRIPT=... RADIO_BROWSER_TEST_LICENSE_KEY=... RADIO_BROWSER_TEST_URL=https://radio.vandrowka.com/ \
 tests/run
 ```
 
-This runs the Node component tests and the static Cloudflare Pages readiness check. It is a manual component verification command, not CI/CD.
+This runs the source-gated Node checks and Chromium live-site checks. It is a manual command, not CI/CD.

@@ -6,4 +6,8 @@ if [ -z "$root" ] || [ "$root" = "$0" ]; then
   root=.
 fi
 
-node --test "$root/tests/engine.test.mjs" "$root/tests/logical-invariant.test.mjs" "$root/tests/paywall.test.mjs" "$root/tests/static-check.mjs" "$root/tests/browser-sound-smoke.mjs"
+: "${RADIO_VERBATIM_TRANSCRIPT:?RADIO_VERBATIM_TRANSCRIPT must point at the local Codex JSONL transcript source}"
+: "${RADIO_BROWSER_TEST_LICENSE_KEY:?RADIO_BROWSER_TEST_LICENSE_KEY must contain a live paid or special-use key}"
+: "${RADIO_BROWSER_TEST_URL:=https://radio.vandrowka.com/}"
+
+node --test "$root/tests/verbatim-corpus-disproof.mjs"

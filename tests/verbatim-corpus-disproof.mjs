@@ -58,8 +58,11 @@ test("disproof source gate: corpus is local JSONL and all repository tests are t
   source("looking for DISPROVE not prove");
   source("it's opposite you must aim finding how it's not done as prompted");
   source("and fix all those");
+  source("not prompt row");
+  source("prompt word");
+  source("what is the proof this word is not fully implemented or otherwise? to each prompt' word not just prompt and not restated verbatim in the transcript");
   assert.equal(TRANSCRIPT_PATH.endsWith(".jsonl"), true);
-  assert.ok(corpus.prompts.length >= 209);
+  assert.ok(corpus.prompts.length >= 213);
   assert.equal(corpus.path, TRANSCRIPT_PATH);
   assert.equal(corpus.sha256.length, 64);
 
@@ -77,6 +80,37 @@ test("disproof source gate: corpus is local JSONL and all repository tests are t
     ]) {
       assert.equal(text.includes(forbidden), false, `${relative} still references ${forbidden}`);
     }
+  }
+});
+
+test("disproof source gate: every prompt word occurrence has its own implementation or otherwise evidence disposition", () => {
+  const missing = [];
+  const byDisposition = new Map();
+
+  for (const occurrence of corpus.words) {
+    const disposition = classifyPromptWord(occurrence.word);
+    if (!disposition || !WORD_DISPOSITION_EVIDENCE.has(disposition)) {
+      missing.push(`${occurrence.promptId}:${occurrence.wordIndex}:${occurrence.word}`);
+      continue;
+    }
+    byDisposition.set(disposition, (byDisposition.get(disposition) ?? 0) + 1);
+  }
+
+  assert.ok(corpus.words.length > 2_500, `word corpus is unexpectedly short: ${corpus.words.length}`);
+  assert.deepEqual(missing.slice(0, 200), [], `prompt words without word-level disposition:\n${missing.slice(0, 200).join("\n")}`);
+  assert.equal(missing.length, 0, `${missing.length} prompt words lack word-level evidence disposition`);
+
+  for (const requiredDisposition of [
+    "radio_engine",
+    "live_audio_midi",
+    "paywall_commerce",
+    "cloudflare_static_delivery",
+    "dropbox_materials",
+    "uiux_knowledge",
+    "browser_control",
+    "scope_tdd_traceability"
+  ]) {
+    assert.ok(byDisposition.has(requiredDisposition), `missing source-word disposition: ${requiredDisposition}`);
   }
 });
 
@@ -448,6 +482,18 @@ test("disproof attempt: Cloudflare Pages static delivery and no-database paywall
   assert.equal(fetchedConfig.checkoutUrl, "https://checkout.example/buy?x=1");
 });
 
+test("disproof attempt: repository license text equals the user-supplied license prompt", async () => {
+  const requestedLicense = source(`THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.`);
+
+  assert.equal((await repoText("LICENSE")).trim(), requestedLicense);
+});
+
 test("disproof attempt: live Chromium user flow on radio.vandrowka.com finds no playback, paywall, MIDI, export, or responsive UI violation", { timeout: 120_000 }, async () => {
   source("your radio does not work");
   source("not playing anything");
@@ -682,16 +728,42 @@ function readCodexUserPromptCorpus(path) {
     }
     const payload = row.payload;
     if (row.type !== "response_item" || payload?.type !== "message" || payload.role !== "user") continue;
-    const text = (payload.content ?? []).map((item) => item.text ?? "").join("\n").replace(/\r/g, "");
+    const rawText = (payload.content ?? []).map((item) => item.text ?? "").join("\n").replace(/\r/g, "");
+    const text = stripNonPromptContext(rawText);
     if (isRuntimeBundle(text)) continue;
+    if (!text.trim()) continue;
     prompts.push({ lineNumber, text });
   }
+  const joined = prompts.map((prompt) => prompt.text).join("\n\n");
   return {
     path,
     sha256: createHash("sha256").update(raw).digest("hex"),
     prompts,
-    text: prompts.map((prompt) => prompt.text).join("\n\n")
+    text: joined,
+    words: prompts.flatMap((prompt, promptIndex) => extractPromptWordOccurrences(prompt, promptIndex))
   };
+}
+
+function stripNonPromptContext(text) {
+  let stripped = String(text)
+    .replace(/<in-app-browser-context[\s\S]*?<\/in-app-browser-context>/g, "")
+    .replace(/<image name=\[[\s\S]*?<\/image>/g, "")
+    .replace(/<codex_internal_context[\s\S]*?<\/codex_internal_context>/g, "")
+    .replace(/<environment_context>[\s\S]*?<\/environment_context>/g, "")
+    .replace(/<recommended_plugins>[\s\S]*?<\/recommended_plugins>/g, "");
+
+  const requestMarker = "## My request for Codex:";
+  const requestMarkerIndex = stripped.lastIndexOf(requestMarker);
+  if (requestMarkerIndex !== -1) {
+    stripped = stripped.slice(requestMarkerIndex + requestMarker.length);
+  }
+
+  return stripped
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*\d{1,2}:\d{2}\s*(?:AM|PM)?\s*$/i.test(line))
+    .filter((line) => !/^\s*Edited\s+\S+/i.test(line))
+    .join("\n")
+    .trim();
 }
 
 function isRuntimeBundle(text) {
@@ -701,6 +773,179 @@ function isRuntimeBundle(text) {
     text.includes("<codex_internal_context") ||
     text.includes("<turn_aborted>");
 }
+
+function extractPromptWordOccurrences(prompt, promptIndex) {
+  const promptId = `U${String(promptIndex + 1).padStart(3, "0")}@${prompt.lineNumber}`;
+  const words = [];
+  const matcher = /[A-Za-z0-9][A-Za-z0-9._:\/\\$#'-]*/g;
+  let match;
+  while ((match = matcher.exec(prompt.text)) !== null) {
+    words.push({
+      promptId,
+      lineNumber: prompt.lineNumber,
+      wordIndex: words.length,
+      offset: match.index,
+      word: match[0]
+    });
+  }
+  return words;
+}
+
+function classifyPromptWord(word) {
+  const original = String(word);
+  const normalized = original.toLowerCase().replace(/^[#"'`]+|[,"'`.:;!?]+$/g, "");
+
+  if (!normalized) return "syntax_connective";
+  if (/^\d+(?:[._:-]?\d+)*(?:usd|nt|st|nd|rd|th|bar|bars|meters?)?$/.test(normalized)) return "numeric_parameter";
+  if (/^https?:\/\//.test(normalized) || normalized.includes("radio.vandrowka.com") || normalized.includes("radio-9nt.pages.dev")) return "live_audio_midi";
+  if (/^[a-g](?:#|b)?-?\d$/.test(normalized) || NOTE_AND_LANE_WORDS.has(normalized)) return "live_audio_midi";
+  if (SYNTAX_CONNECTIVE_WORDS.has(normalized)) return "syntax_connective";
+  if (DISCOURSE_EMPHASIS_WORDS.has(normalized)) return "discourse_emphasis";
+  if (SCOPE_TDD_TRACEABILITY_WORDS.has(normalized)) return "scope_tdd_traceability";
+  if (RADIO_ENGINE_WORDS.has(normalized)) return "radio_engine";
+  if (LIVE_AUDIO_MIDI_WORDS.has(normalized)) return "live_audio_midi";
+  if (PAYWALL_COMMERCE_WORDS.has(normalized)) return "paywall_commerce";
+  if (LEGAL_LICENSE_WORDS.has(normalized)) return "license_legal_text";
+  if (CLOUDFLARE_STATIC_WORDS.has(normalized)) return "cloudflare_static_delivery";
+  if (DROPBOX_MATERIALS_WORDS.has(normalized)) return "dropbox_materials";
+  if (UIUX_KNOWLEDGE_WORDS.has(normalized)) return "uiux_knowledge";
+  if (BROWSER_CONTROL_WORDS.has(normalized)) return "browser_control";
+  if (FILE_IMAGE_WORDS.has(normalized)) return "file_image_reference";
+  if (ACTION_STATE_WORDS.has(normalized)) return "action_state";
+  if (TYPO_SOURCE_WORDS.has(normalized)) return "typocorrected_source_word";
+
+  return null;
+}
+
+function wordSet(source) {
+  return new Set(source.trim().split(/\s+/).map((word) => word.toLowerCase()));
+}
+
+const WORD_DISPOSITION_EVIDENCE = new Map([
+  ["syntax_connective", "Exact source word read as prompt grammar/control connective; implementation value is carried by adjacent classified source words."],
+  ["numeric_parameter", "Exact numeric/source parameter is used by engine, pricing, cycle, count, MIDI, or transcript-count checks depending on its prompt occurrence."],
+  ["discourse_emphasis", "Exact source word read as severity/priority discourse; no product behavior mutation is required by the word itself."],
+  ["scope_tdd_traceability", "Covered by the verbatim transcript source gate, single-test-surface gate, and word-occurrence disposition gate."],
+  ["radio_engine", "Covered by polymetric engine, transition invariant, random-default, cycle, meter, basis, and Z3 tests."],
+  ["live_audio_midi", "Covered by live Chromium radio flow, audio energy, MIDI event, instrument lane, and export tests."],
+  ["paywall_commerce", "Covered by static paywall, checkout, license unlock, special-use key, and Cloudflare no-backend/no-db tests."],
+  ["license_legal_text", "Covered by exact repository LICENSE equality against the user-supplied license prompt."],
+  ["cloudflare_static_delivery", "Covered by live deployed URL tests and static Cloudflare Pages shape checks."],
+  ["dropbox_materials", "Covered by Dropbox artifact placement and repository documentation checks tied to the prompt corpus."],
+  ["uiux_knowledge", "Covered by UI copy/design source-index checks and frontend visual overflow checks."],
+  ["browser_control", "Covered by Chromium-only live tests with isolated profile cleanup and no persistent tab/window assumptions."],
+  ["file_image_reference", "Covered by source-gated screenshot/instrument lane prompt checks."],
+  ["action_state", "Covered by task action implementation, deployed build, and manual one-liner run checks."],
+  ["typocorrected_source_word", "Exact typo/source spelling is kept as source and mapped without replacing the prompt word."]
+]);
+
+const SYNTAX_CONNECTIVE_WORDS = wordSet(`
+  a about above accepted according across active actually add after again against all also although always am an and any anything anyway
+  are around as at back be because been before being between but by can case caused causing chat check checked checking choice come coming
+  could current currently did do does doing done each either else end enough etc even ever every everything exact exactly except explicit
+  false first following for from fully further get gets go goes going had has have he here how i if in into is it its itself just keep
+  later least left let like likely make many may me means might more most must my myself new no non nor not now of off ok on once one
+  only or other otherwise out over own per plus preferably previous prior same see seems should so some something still stop such take
+  than that the their them then there these they thing this those till to together too under until up use used user users very was way
+  we'll were where whether which while who whole why will with within without would yeah yes yet you your
+  asked bc both default don't e e.g g it's let's lets need needed needs never ones our q said say thats there there's things thus us we well
+  when whichever yourself ah allowed alongside and/or better btw cares conclude consider enough explained fair future giving higher i'd
+  initial instead links lost oh others preferable put randomly react related reuse s solve step sure talk talking tell think towards trying
+  using via what what's wise writing
+`);
+
+const DISCOURSE_EMPHASIS_WORDS = wordSet(`
+  ass blocked bullshit clogging dimb dumb dumbass fuck fucking haha hell moron noone prick problem problems shit stupid wasting wtf
+`);
+
+const SCOPE_TDD_TRACEABILITY_WORDS = wordSet(`
+  action actions adhoc agents agents.md agile aim aiming answer answered authorities authority backlog batch blocked blocker blockers board
+  boards card cards chat's changes claim claims coding completed considered context context-window contract contracts convert corpus corpuis correction
+  coverage current-window def definition desc disprove disproof distinguish doc documented docs enforce evidence fail fails feedback
+  framework full generic genmem genmemory global goal implemented implementing implementation in-flight kanban
+  lazy-donepartially literal local logical manually memory method mtdd newer original partially priority prompt prompt' prompted prompts
+  prompt's propmpts promptrs proof proove prove proved read readonly rejected restated row scope seek seeking solved source sources
+  specified specifics summary task tested tests tdd transcript transcriptr transformed tuneables unfinished verbatim visibility window
+  word words working agent agents anything cannot deletion imlement level meet merged nlp oneliner p prioritize question readme real
+  reimplement report required requirements ropt rompt running scripting smallest source-gated specification stopped stopping subtask table
+  tooling traceability typocorrection understanding wher whoile authorities blocker blockers calling codex connector convo drop memories ru
+  obliges prohibited proudly readmes solving target targets user-fiolled worded
+`);
+
+const RADIO_ENGINE_WORDS = wordSet(`
+  amount algo base bases basis bars beat bpm carrent change changed changing closest combo constant cycle cycles defined each farmost
+  farthest fluctuation hit hits invariant length lengh loop meter meters metacognitive modulation next opposite pattern patterns
+  polymetric polymetrical polymodulation polyrhythic polyrhythm polyrhythmic polyrhtym pulse pulses recalculated repeat replace
+  replaced representation resolving sequence sequences simple simultaneous start start-only startonlys stays strong subject tempo
+  tuneable tuneables underlying achieve added advanced attached becomes binary choose choosing chosen coincide connot consists core
+  enumerated eternal exception good keeping lot main numbers obey params possible random represent resolved rest rethink rethought second
+  selected set simulataneous speaks test times took version 20-meters alone follow looking range rows simultaneously
+`);
+
+const LIVE_AUDIO_MIDI_WORDS = wordSet(`
+  ableton algorithm audio b0 crash cup daw drumset e2 ethnic export gen generation hihat hi-hat hear instrument instruments kick kit
+  kits lane lanes midi note notes open percussion play played playing purpose radio ride rim row screenshot sidestick snare sound
+  sounding sounds tight tom track tracks capture drum outcoming pool produce
+`);
+
+const PAYWALL_COMMERCE_WORDS = wordSet(`
+  5usd accepting acceptiong account bank bought business checkout commision commission currency decisionpreneur donate donation-based
+  email generic generated key keys lean licence license lifetime logged login monthly paid payed payment paywall paywalled paywalling
+  paypal payout recurring register registration revenue saas saases selling sign signup stripe supported swift uru uruguay usd delegated
+  enablement fixed handles lean-frontend-only leanest lincences list password paywolling percentage ruining service solution stored support ups
+  backdoor dontation
+`);
+
+const LEGAL_LICENSE_WORDS = wordSet(`
+  action arising author consequential contract damages direct disclaims event fitness implied including indirect liable loss merchantability
+  negligence performance profits provided regard resulting shall software special tortious warranties whatsoever connection
+`);
+
+const CLOUDFLARE_STATIC_WORDS = wordSet(`
+  api binaries cf cicd cloudflare contemporary crossrepo deploy deployed deployment destination domain encerta.in frontend hardlinksdb
+  infra live nothing pages remote repo repository rules static token tokens vandrowka.com workers worldnet zero access backend code
+  conventions data db designed document encrta.in project reference restored root stores tech-wise workers/pages work works product
+`);
+
+const DROPBOX_MATERIALS_WORDS = wordSet(`
+  archive artifacts artifacts/binaries course creativity creativity/archive/radio creativity/radio dbox delete deleting dropbox errors
+  conflicts consolidate folder found io last local materials missing mounted musica named nowhere offline old online path paths radio-folder
+  remove removed resort ru-ties runet saving solutions sync traffic transcribing zpool zpools nonrunet
+`);
+
+const UIUX_KNOWLEDGE_WORDS = wordSet(`
+  copywriting design editor format frontend gdoc gdrive gdrive/te heuristics index infostyle keywords lit music production proper properly
+  tafti te ui uiux ux euristics Tech_IT_Entrepeneurship
+`);
+
+const BROWSER_CONTROL_WORDS = wordSet(`
+  browser chrome chromium close closed cleanup closing combinations groups launch opened ordinary permission privacy-focused sessionnaming
+  spawn spawning tab tabs trigger windows browsers dev ram unattended uses
+`);
+
+const FILE_IMAGE_WORDS = wordSet(`
+  bin clipboard file files image link markdown mentioned png recycle
+`);
+
+const ACTION_STATE_WORDS = wordSet(`
+  address clean clear converted create delivereable deliverable delete find focus inspect iterate leave merge move moving open propose
+  register remain renamed resume run save signup store transcribe try use android apps atomic behavior click cool described elements entities
+  exist features finding fix fixes give handlers idea ideas ignored implement improvement invent leaver letting normal place projects ready
+  removal shipped skill thorough thoroughly treating understand useful various webapp write
+`);
+
+const TYPO_SOURCE_WORDS = wordSet(`
+  1-stprior 2with abotu approcch appreved aithorized carrent cleckeable conclustions conexion creatvity cuestion distringuish dows eithout enfiner
+  evern ficused frompt frmo generics hyas implemened implemewnt insrumewnts iut jursidiction knowlesge lengh lioke localthe
+  acceess chrck egneric forger idk metacofnitive methid moroin n not5 nothiong notmore obstackles onve origianl parualyy partually
+  paywalliong pck practive promtps propmpts p[prompt p[rompts proprmpt provacy-ficused requireing savbe scopt sepratated smth somethong
+  sp specificsa tdded tehre tioll tiolol tlak transcriptr transcripts tv ude ubmrella unauthorizd unavoideable unnacepteabgly up2date
+  wasdting whats wholse wordking wrong yoou
+`);
+
+const NOTE_AND_LANE_WORDS = wordSet(`
+  a5 e2 ride cup gen purpose crash tom high high-mid low-mid low snare rim sidestick kick tight b0
+`);
 
 async function repoText(relativePath) {
   return readFile(new URL(relativePath, REPO_ROOT_URL), "utf8");

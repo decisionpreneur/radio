@@ -48,7 +48,10 @@ const readoutFields = {
   tempoBasis: document.querySelector('[data-field="tempoBasis"]'),
   cycle: document.querySelector('[data-field="cycle"]'),
   change: document.querySelector('[data-field="change"]'),
+  basisPolicy: document.querySelector('[data-field="basisPolicy"]'),
   voices: document.querySelector('[data-field="voices"]'),
+  roles: document.querySelector('[data-field="roles"]'),
+  meters: document.querySelector('[data-field="meters"]'),
   kits: document.querySelector('[data-field="kits"]'),
   timing: document.querySelector('[data-field="timing"]'),
   access: document.querySelector('[data-field="access"]'),
@@ -735,7 +738,10 @@ function drawReadout() {
   readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"} meter ${state.baseMeter} @ ${state.baseBpm.toFixed(3)} bpm`;
   readoutFields.cycle.textContent = cycleProgressText(state);
   readoutFields.change.textContent = `${state.config.cycleLength} ${state.config.cycleLengthKind}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacing`;
+  readoutFields.basisPolicy.textContent = state.config.basisPolicy === "farthest" ? "farmost" : state.config.basisPolicy;
   readoutFields.voices.textContent = String(state.voices.length);
+  readoutFields.roles.textContent = roleCountText(state);
+  readoutFields.meters.textContent = meterSetText(state);
   readoutFields.kits.textContent = kits || "-";
   readoutFields.timing.textContent = state.config.meterTiming === "shared-bar-polyrhythm"
     ? "shared bar"
@@ -755,6 +761,22 @@ function cycleProgressText(currentState, now = null, sectionStart = null) {
   const elapsed = Math.max(0, now - sectionStart);
   const barIndex = Math.min(totalBars, Math.floor(elapsed / baseBarSeconds(currentState)));
   return `${currentState.cycleIndex}; bar ${barIndex} / ${totalBars}`;
+}
+
+function roleCountText(currentState) {
+  const counts = currentState.voices.reduce((acc, voice) => {
+    acc[voice.role] = (acc[voice.role] ?? 0) + 1;
+    return acc;
+  }, { "start-only": 0, pulse: 0, binary: 0 });
+  return `start-only ${counts["start-only"]}; pulse ${counts.pulse}; binary ${counts.binary}`;
+}
+
+function meterSetText(currentState) {
+  const meters = currentState.voices.map((voice) => voice.meter).sort((a, b) => a - b);
+  if (!meters.length) return "-";
+  const contiguous = meters.every((meter, index) => index === 0 || meter === meters[index - 1] + 1);
+  if (contiguous && meters.length > 2) return `${meters[0]}-${meters[meters.length - 1]}`;
+  return meters.join(", ");
 }
 
 function drawTimeline() {

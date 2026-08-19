@@ -195,7 +195,7 @@ select {
 
 .statebar {
   display: grid;
-  grid-template-columns: repeat(8, minmax(108px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 1px;
   margin: 0;
   border-bottom: 1px solid #34362f;

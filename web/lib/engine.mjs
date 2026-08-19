@@ -339,7 +339,11 @@ export function advanceCycle(state) {
   }
 
   nextState.voices = [selectedClone, ...currentState.voices.filter((voice) => voice.id !== selectedClone.id).map(cloneVoice)];
-  nextState.pendingReplacements = replacementPlan.replacements;
+  nextState.pendingReplacements = buildRoleStableReplacementPlan(
+    nextState.voices,
+    replacementPlan.replacementVoices,
+    new Set(preserved.map((voice) => voice.id))
+  );
   return nextState;
 }
 
@@ -479,7 +483,7 @@ function buildReplacementVoices({ previousState, preserved, cycleIndex, rng }) {
   while (roleList.length < targetCount - preserved.length) roleList.push("binary");
   const roles = shuffled(rng, roleList);
   const finalVoices = preserved.slice();
-  const replacements = [];
+  const replacementVoices = [];
   let nextVoiceNumber = previousState.nextVoiceNumber;
 
   while (finalVoices.length < targetCount) {
@@ -495,11 +499,32 @@ function buildReplacementVoices({ previousState, preserved, cycleIndex, rng }) {
       kitPool: config.kitPool
     });
     finalVoices.push(voice);
-    replacements.push({ slot: finalVoices.length - 1, voice });
+    replacementVoices.push(voice);
     nextVoiceNumber += 1;
   }
 
-  return { finalVoices, replacements, nextVoiceNumber };
+  return { finalVoices, replacementVoices, nextVoiceNumber };
+}
+
+function buildRoleStableReplacementPlan(startingVoices, replacementVoices, preservedIds) {
+  const availableSlots = new Set();
+  const slotsByRole = new Map();
+  for (let slot = 0; slot < startingVoices.length; slot += 1) {
+    const voice = startingVoices[slot];
+    if (preservedIds.has(voice.id)) continue;
+    availableSlots.add(slot);
+    const slots = slotsByRole.get(voice.role) ?? [];
+    slots.push(slot);
+    slotsByRole.set(voice.role, slots);
+  }
+
+  return replacementVoices.map((voice) => {
+    const matchingSlots = slotsByRole.get(voice.role) ?? [];
+    const matchingSlot = matchingSlots.find((slot) => availableSlots.has(slot));
+    const slot = matchingSlot ?? availableSlots.values().next().value;
+    availableSlots.delete(slot);
+    return { slot, voice };
+  });
 }
 
 function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacementIndex }) {

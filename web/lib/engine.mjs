@@ -215,27 +215,38 @@ export function generateEventsInWindow(state, options) {
     const pulseSeconds = voicePulseSeconds(state, voice);
     const firstPulse = Math.max(0, Math.floor((fromLocal - EPSILON) / pulseSeconds));
     const lastPulse = Math.ceil((toLocal + EPSILON) / pulseSeconds);
+    const hitOffsets = voice.pattern
+      .map((hit, index) => (hit ? index : -1))
+      .filter((index) => index >= 0);
+    if (!hitOffsets.length) continue;
+    const patternLength = voice.pattern.length;
+    const firstPatternCycle = Math.max(0, Math.floor(firstPulse / patternLength));
+    const lastPatternCycle = Math.floor(lastPulse / patternLength);
 
-    for (let pulseIndex = firstPulse; pulseIndex <= lastPulse; pulseIndex += 1) {
-      const localTime = pulseIndex * pulseSeconds;
-      if (localTime + EPSILON < fromLocal || localTime - EPSILON >= toLocal) continue;
-      if (!patternHitAt(state, voice, pulseIndex)) continue;
-      events.push({
-        timeSeconds: sectionStart + localTime,
-        localSeconds: localTime,
-        pulseIndex,
-        voiceId: voice.id,
-        meter: voice.meter,
-        role: voice.role,
-        kitId: voice.kitId,
-        kit: voice.kit,
-        instrument: voice.instrument,
-        note: voice.instrument.note,
-        velocity: voice.velocity,
-        durationSeconds: state.config.noteDurationSeconds
-      });
-      if (events.length >= maxEvents) {
-        return { events: events.sort(sortEvents), truncated: true };
+    for (let patternCycle = firstPatternCycle; patternCycle <= lastPatternCycle; patternCycle += 1) {
+      for (const offset of hitOffsets) {
+        const pulseIndex = patternCycle * patternLength + offset;
+        if (pulseIndex < firstPulse || pulseIndex > lastPulse) continue;
+        const localTime = pulseIndex * pulseSeconds;
+        if (localTime + EPSILON < fromLocal || localTime - EPSILON >= toLocal) continue;
+        if (state.config.strongBeatMode === "downbeat-only" && pulseIndex % voice.meter !== 0) continue;
+        events.push({
+          timeSeconds: sectionStart + localTime,
+          localSeconds: localTime,
+          pulseIndex,
+          voiceId: voice.id,
+          meter: voice.meter,
+          role: voice.role,
+          kitId: voice.kitId,
+          kit: voice.kit,
+          instrument: voice.instrument,
+          note: voice.instrument.note,
+          velocity: voice.velocity,
+          durationSeconds: state.config.noteDurationSeconds
+        });
+        if (events.length >= maxEvents) {
+          return { events: events.sort(sortEvents), truncated: true };
+        }
       }
     }
   }
@@ -493,13 +504,6 @@ function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacement
   const currentIndex = Math.floor((localFrom + EPSILON) / unitSeconds);
   const nextIndex = Math.max(lastReplacementIndex + 1, currentIndex);
   return startSeconds + (nextIndex * unitSeconds);
-}
-
-function patternHitAt(state, voice, pulseIndex) {
-  if (state.config.strongBeatMode === "downbeat-only" && pulseIndex % voice.meter !== 0) {
-    return false;
-  }
-  return voice.pattern[pulseIndex % voice.pattern.length] === 1;
 }
 
 function cloneVoice(voice) {

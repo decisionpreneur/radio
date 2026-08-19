@@ -69,13 +69,30 @@ if (!checkoutUrl) {
 const sessionSeed = makeSessionSeed();
 loadPublicConfig();
 
-let state = makeStateFromControls();
+const tunedControlIds = [
+  "seed",
+  "baseBpm",
+  "baseMeter",
+  "patternCount",
+  "startOnlyCount",
+  "pulseCount",
+  "kitPool",
+  "meterStart",
+  "meterTiming",
+  "cycleLength",
+  "cycleLengthKind",
+  "basisPolicy"
+];
+const touchedControls = new Set();
+
+let state = makeStateFromControls(null);
 let entitlement = readEntitlement();
 let audioContext = null;
 let masterInput = null;
 let signalAnalyser = null;
 let signalSamples = null;
 let signalFrame = null;
+let signalPeak = 0;
 let midiAccess = null;
 let midiOutput = null;
 let timer = null;
@@ -91,7 +108,9 @@ controls.addEventListener("change", syncControls);
 
 function syncControls(event) {
   if (event?.target?.closest?.("#paywall")) return;
-  state = makeStateFromControls();
+  markTouchedControl(event?.target);
+  state = makeStateFromControls(state);
+  releaseBlankTouchedControls();
   if (timer && live && audioContext) {
     live.state = state;
     live.sectionStart = audioContext.currentTime + 0.08;
@@ -118,6 +137,7 @@ stopBtn.addEventListener("click", () => {
 
 randomBtn.addEventListener("click", () => {
   randomizeControls();
+  markTunedControlsTouched();
   syncControls();
 });
 
@@ -140,7 +160,7 @@ midiOutputSelect.addEventListener("change", () => {
 exportBtn.addEventListener("click", () => {
   if (!requireUnlocked()) return;
   const sections = readNumber("exportSections");
-  const rendered = renderArrangement(makeStateFromControls(), { sectionCount: sections, ppq: 480 });
+  const rendered = renderArrangement(makeStateFromControls(state), { sectionCount: sections, ppq: 480 });
   const midi = encodeMidiFile(rendered);
   const blob = new Blob([midi], { type: "audio/midi" });
   const url = URL.createObjectURL(blob);
@@ -163,7 +183,8 @@ clearLicenseBtn.addEventListener("click", () => {
 });
 
 async function startLive() {
-  state = makeStateFromControls();
+  state = makeStateFromControls(state);
+  releaseBlankTouchedControls();
   await ensureAudioContext();
   live = {
     state,
@@ -268,6 +289,7 @@ function stopLive() {
   timer = null;
   live = null;
   stopSignalMeter();
+  signalPeak = 0;
   setSignalLevel(0);
   statusEl.textContent = "stopped";
 }
@@ -434,7 +456,7 @@ function playAudio(event, when) {
 
 function eventLevel(event) {
   const voices = Math.max(1, live.state?.voices.length ?? 1);
-  const densityTrim = Math.max(0.28, Math.min(0.9, 3 / Math.sqrt(voices)));
+  const densityTrim = Math.max(0.38, Math.min(0.95, 3.4 / Math.sqrt(voices)));
   return (event.velocity / 127) * densityTrim;
 }
 
@@ -533,7 +555,7 @@ async function ensureAudioContext() {
     compressor.release.value = 0.18;
     signalAnalyser.fftSize = 256;
     signalAnalyser.smoothingTimeConstant = 0.45;
-    masterGain.gain.value = 0.82;
+    masterGain.gain.value = 1;
     compressor.connect(signalAnalyser).connect(masterGain).connect(audioContext.destination);
     masterInput = compressor;
   }
@@ -570,7 +592,9 @@ function updateSignalMeter() {
     const sample = signalSamples[index];
     sum += sample * sample;
   }
-  setSignalLevel(Math.sqrt(sum / signalSamples.length));
+  const rms = Math.sqrt(sum / signalSamples.length);
+  signalPeak = Math.max(rms, signalPeak * 0.975);
+  setSignalLevel(signalPeak);
 }
 
 function setSignalLevel(value) {
@@ -595,21 +619,22 @@ async function connectMidi() {
   statusEl.textContent = "midi ready";
 }
 
-function makeStateFromControls() {
+function makeStateFromControls(previousState = null) {
+  const previousConfig = previousState?.config;
   return createInitialState({
-    seed: value("seed") || sessionSeed,
-    baseBpm: readOptionalNumber("baseBpm"),
-    baseMeter: readOptionalNumber("baseMeter"),
-    patternCount: readOptionalNumber("patternCount"),
-    startOnlyCount: readOptionalNumber("startOnlyCount"),
-    pulseCount: readOptionalNumber("pulseCount"),
-    kitPool: optionalValue("kitPool"),
-    meterStart: readOptionalNumber("meterStart"),
-    meterCount: readOptionalNumber("patternCount"),
-    meterTiming: optionalValue("meterTiming"),
-    cycleLength: readOptionalNumber("cycleLength"),
-    cycleLengthKind: optionalValue("cycleLengthKind"),
-    basisPolicy: optionalValue("basisPolicy")
+    seed: readOptionalText("seed", previousState?.seed) || sessionSeed,
+    baseBpm: readOptionalNumber("baseBpm", previousConfig?.baseBpm),
+    baseMeter: readOptionalNumber("baseMeter", previousState?.baseMeter),
+    patternCount: readOptionalNumber("patternCount", previousConfig?.patternCount),
+    startOnlyCount: readOptionalNumber("startOnlyCount", previousConfig?.startOnlyCount),
+    pulseCount: readOptionalNumber("pulseCount", previousConfig?.pulseCount),
+    kitPool: readOptionalText("kitPool", previousConfig?.kitPool?.join(",")),
+    meterStart: readOptionalNumber("meterStart", previousConfig?.meterStart),
+    meterCount: readOptionalNumber("patternCount", previousConfig?.patternCount),
+    meterTiming: readOptionalText("meterTiming", previousConfig?.meterTiming),
+    cycleLength: readOptionalNumber("cycleLength", previousConfig?.cycleLength),
+    cycleLengthKind: readOptionalText("cycleLengthKind", previousConfig?.cycleLengthKind),
+    basisPolicy: readOptionalText("basisPolicy", previousConfig?.basisPolicy)
   });
 }
 
@@ -729,17 +754,36 @@ function value(id) {
   return document.querySelector(`#${id}`).value;
 }
 
-function optionalValue(id) {
-  return value(id) || undefined;
+function readOptionalText(id, fallback) {
+  const current = value(id);
+  if (current === "" && fallback !== undefined && !touchedControls.has(id)) return fallback;
+  return current || undefined;
 }
 
-function readOptionalNumber(id) {
+function readOptionalNumber(id, fallback) {
   const current = value(id);
+  if (current === "" && fallback !== undefined && !touchedControls.has(id)) return fallback;
   return current === "" ? undefined : Number(current);
 }
 
 function readNumber(id) {
   return Number(value(id));
+}
+
+function markTouchedControl(target) {
+  if (target?.id && tunedControlIds.includes(target.id)) {
+    touchedControls.add(target.id);
+  }
+}
+
+function markTunedControlsTouched() {
+  for (const id of tunedControlIds) touchedControls.add(id);
+}
+
+function releaseBlankTouchedControls() {
+  for (const id of tunedControlIds) {
+    if (value(id) === "") touchedControls.delete(id);
+  }
 }
 
 function makeSessionSeed() {

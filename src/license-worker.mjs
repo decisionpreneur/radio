@@ -277,7 +277,7 @@ function timingSafeEqualHex(left, right) {
 }
 
 function requiresEmail(env) {
-  return normalizeText(env.RADIO_LICENSE_REQUIRE_EMAIL) !== "0";
+  return normalizeText(env.RADIO_LICENSE_REQUIRE_EMAIL) === "1";
 }
 
 function hasLemonConstraint(env) {

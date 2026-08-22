@@ -34,6 +34,7 @@ const ctx = canvas.getContext("2d");
 const startBtn = document.querySelector("#startBtn");
 const stopBtn = document.querySelector("#stopBtn");
 const randomBtn = document.querySelector("#randomBtn");
+const shareBtn = document.querySelector("#shareBtn");
 const midiBtn = document.querySelector("#midiBtn");
 const exportBtn = document.querySelector("#exportBtn");
 const midiOutputSelect = document.querySelector("#midiOutput");
@@ -91,6 +92,8 @@ const tunedControlIds = [
   "basisPolicy"
 ];
 const touchedControls = new Set();
+
+applySharedConfigFromUrl();
 
 let state = makeStateFromControls(null);
 let entitlement = readEntitlement();
@@ -151,6 +154,10 @@ randomBtn.addEventListener("click", () => {
   randomizeControls();
   markTunedControlsTouched();
   syncControls();
+});
+
+shareBtn.addEventListener("click", async () => {
+  await shareStation();
 });
 
 midiBtn.addEventListener("click", async () => {
@@ -301,6 +308,18 @@ function updatePaywallUi() {
   readoutFields.access.textContent = accessText;
   readoutFields.accessBadge.textContent = accessText;
   document.documentElement.dataset.access = unlocked ? "unlocked" : "locked";
+}
+
+async function shareStation() {
+  const url = new URL(window.location.href);
+  url.hash = stationHashParams().toString();
+  try {
+    await navigator.clipboard.writeText(url.href);
+    statusEl.textContent = "link copied";
+  } catch {
+    window.location.hash = url.hash;
+    statusEl.textContent = "link ready";
+  }
 }
 
 function stopLive() {
@@ -873,6 +892,41 @@ function randomizeControls() {
   document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
   const policies = ["next", "random", "closest", "farmost"];
   document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];
+}
+
+function applySharedConfigFromUrl() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  for (const id of [...tunedControlIds, "exportSections"]) {
+    if (!params.has(id)) continue;
+    const control = document.querySelector(`#${id}`);
+    if (!control) continue;
+    control.value = params.get(id) ?? "";
+    if (tunedControlIds.includes(id)) touchedControls.add(id);
+  }
+}
+
+function stationHashParams() {
+  const params = new URLSearchParams();
+  const config = state.config;
+  const values = {
+    seed: state.seed,
+    baseBpm: config.baseBpm,
+    baseMeter: state.baseMeter,
+    patternCount: config.patternCount,
+    startOnlyCount: config.startOnlyCount,
+    pulseCount: config.pulseCount,
+    kitPool: config.kitPool.join(","),
+    meterStart: config.meterStart,
+    meterTiming: config.meterTiming,
+    cycleLength: config.cycleLength,
+    cycleLengthKind: config.cycleLengthKind,
+    basisPolicy: config.basisPolicy === "farthest" ? "farmost" : config.basisPolicy,
+    exportSections: value("exportSections") || "6"
+  };
+  for (const [key, value] of Object.entries(values)) {
+    params.set(key, String(value));
+  }
+  return params;
 }
 
 function value(id) {

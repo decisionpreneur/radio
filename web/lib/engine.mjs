@@ -162,6 +162,9 @@ export function baseBarSeconds(state) {
 }
 
 export function voiceBpm(state, voice) {
+  if (voice.pulseSecondsOverride) {
+    return 60 / voice.pulseSecondsOverride;
+  }
   if (state.config.meterTiming === "same-pulse-polymeter") {
     return state.baseBpm;
   }
@@ -169,6 +172,9 @@ export function voiceBpm(state, voice) {
 }
 
 export function voicePulseSeconds(state, voice) {
+  if (voice.pulseSecondsOverride) {
+    return voice.pulseSecondsOverride;
+  }
   return 60 / voiceBpm(state, voice);
 }
 
@@ -309,11 +315,10 @@ export function advanceCycle(state) {
   const nextCycleIndex = currentState.cycleIndex + 1;
   const rng = makeRng(`${currentState.seed}:cycle:${nextCycleIndex}`);
   const selectedClone = cloneVoice(selected);
-  const oldBaseClone = cloneVoice(oldBase);
-  oldBaseClone.protectedThroughCycle = nextCycleIndex;
-
+  selectedClone.rethoughtFromMeter = selectedClone.meter;
+  selectedClone.meter = currentState.config.meterStart;
+  delete selectedClone.pulseSecondsOverride;
   const preserved = [selectedClone];
-  if (oldBaseClone.id !== selectedClone.id) preserved.push(oldBaseClone);
 
   const replacementPlan = buildReplacementVoices({
     previousState: currentState,
@@ -338,7 +343,12 @@ export function advanceCycle(state) {
     return nextState;
   }
 
-  nextState.voices = [selectedClone, ...currentState.voices.filter((voice) => voice.id !== selectedClone.id).map(cloneVoice)];
+  nextState.voices = [
+    selectedClone,
+    ...currentState.voices
+      .filter((voice) => voice.id !== selectedClone.id)
+      .map((voice) => cloneVoiceWithPulseOverride(currentState, voice))
+  ];
   nextState.pendingReplacements = buildRoleStableReplacementPlan(
     nextState.voices,
     replacementPlan.replacementVoices,
@@ -545,6 +555,13 @@ function cloneVoice(voice) {
     ...voice,
     pattern: voice.pattern.slice(),
     instrument: { ...voice.instrument }
+  };
+}
+
+function cloneVoiceWithPulseOverride(state, voice) {
+  return {
+    ...cloneVoice(voice),
+    pulseSecondsOverride: voicePulseSeconds(state, voice)
   };
 }
 

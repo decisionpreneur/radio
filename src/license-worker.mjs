@@ -95,7 +95,7 @@ export async function handleLicenseRequest(context, action, options = {}) {
       unlocked: false,
       provider: "lemonsqueezy",
       error: providerResponse.error
-    });
+    }, licenseFailureStatus(providerResponse.status));
   }
 
   const verdict = evaluateLemonPayload(providerResponse.body, context.env, { action, email });
@@ -285,6 +285,10 @@ function hasLemonConstraint(env) {
     normalizeText(env.RADIO_LEMONSQUEEZY_PRODUCT_ID) ||
     normalizeText(env.RADIO_LEMONSQUEEZY_VARIANT_ID)
   );
+}
+
+function licenseFailureStatus(status) {
+  return Number(status) >= 500 ? 502 : 403;
 }
 
 function normalizeKey(value) {

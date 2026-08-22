@@ -108,6 +108,7 @@ let midiOutput = null;
 let timer = null;
 let live = null;
 let entitlementValidationPending = entitlementUnlocks(entitlement);
+let statusHoldUntil = 0;
 
 const SCHEDULE_OFFSET_SECONDS = 0.02;
 const SCHEDULE_LOOKAHEAD_SECONDS = 0.35;
@@ -315,10 +316,10 @@ async function shareStation() {
   url.hash = stationHashParams().toString();
   try {
     await navigator.clipboard.writeText(url.href);
-    statusEl.textContent = "link copied";
+    setStatus("link copied", 1600);
   } catch {
     window.location.hash = url.hash;
-    statusEl.textContent = "link ready";
+    setStatus("link ready", 1600);
   }
 }
 
@@ -463,7 +464,18 @@ function playEvent(event, when) {
     output.send([0x89, event.note, 0], timestamp + event.durationSeconds * 1000);
   }
   playAudio(event, when);
-  statusEl.textContent = "playing";
+  setPlaybackStatus("playing");
+}
+
+function setStatus(text, holdMs = 0) {
+  statusEl.textContent = text;
+  statusHoldUntil = holdMs ? performance.now() + holdMs : 0;
+}
+
+function setPlaybackStatus(text) {
+  if (performance.now() >= statusHoldUntil) {
+    statusEl.textContent = text;
+  }
 }
 
 function playAudio(event, when) {

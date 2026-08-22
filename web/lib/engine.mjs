@@ -2,11 +2,12 @@ import { ALL_LANES, pickLane, normalizeKitPool } from "./instruments.mjs";
 import { makeRng, pick, randomInt, shuffled } from "./prng.mjs";
 
 export const BASIS_POLICIES = Object.freeze(["next", "random", "closest", "farthest"]);
-export const METER_TIMING_MODES = Object.freeze(["shared-bar-polyrhythm", "same-pulse-polymeter"]);
+export const METER_TIMING_MODES = Object.freeze(["same-pulse-polymeter"]);
 export const CYCLE_LENGTH_KINDS = Object.freeze(["bars", "resolving-sequences"]);
 export const REPLACEMENT_CADENCES = Object.freeze(["immediate", "one-per-bar", "one-per-resolving-sequence"]);
 export const STRONG_BEAT_MODES = Object.freeze(["every-beat", "downbeat-only"]);
 const BASIS_POLICY_TYPOS = Object.freeze({ farmost: "farthest" });
+const LEAN_METER_TIMING_MODE = "same-pulse-polymeter";
 
 const EPSILON = 1e-9;
 
@@ -85,7 +86,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     meterStart,
     meterCount,
     customMeters: Array.isArray(input.customMeters) ? input.customMeters.map(Number).filter(Number.isFinite) : null,
-    meterTiming: ensureMemberOrRandom(input.meterTiming, METER_TIMING_MODES, rng),
+    meterTiming: LEAN_METER_TIMING_MODE,
     cycleLengthKind: ensureMemberOrRandom(input.cycleLengthKind, CYCLE_LENGTH_KINDS, rng),
     cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
@@ -165,10 +166,7 @@ export function voiceBpm(state, voice) {
   if (voice.pulseSecondsOverride) {
     return 60 / voice.pulseSecondsOverride;
   }
-  if (state.config.meterTiming === "same-pulse-polymeter") {
-    return state.baseBpm;
-  }
-  return state.baseBpm * (voice.meter / state.baseMeter);
+  return state.baseBpm;
 }
 
 export function voicePulseSeconds(state, voice) {
@@ -179,7 +177,6 @@ export function voicePulseSeconds(state, voice) {
 }
 
 export function resolvingBaseBars(state) {
-  if (state.config.meterTiming === "shared-bar-polyrhythm") return 1;
   const meterLcm = lcmAll(state.voices.map((voice) => voice.meter));
   return meterLcm / state.baseMeter;
 }

@@ -86,7 +86,6 @@ const tunedControlIds = [
   "pulseCount",
   "kitPool",
   "meterStart",
-  "meterTiming",
   "cycleLength",
   "cycleLengthKind",
   "basisPolicy"
@@ -749,7 +748,7 @@ function makeStateFromControls(previousState = null) {
     kitPool: readOptionalText("kitPool", previousConfig?.kitPool?.join(",")),
     meterStart: readOptionalNumber("meterStart", previousConfig?.meterStart),
     meterCount: readOptionalNumber("patternCount", previousConfig?.patternCount),
-    meterTiming: readOptionalText("meterTiming", previousConfig?.meterTiming),
+    meterTiming: "same-pulse-polymeter",
     cycleLength: readOptionalNumber("cycleLength", previousConfig?.cycleLength),
     cycleLengthKind: readOptionalText("cycleLengthKind", previousConfig?.cycleLengthKind),
     basisPolicy: readOptionalText("basisPolicy", previousConfig?.basisPolicy)
@@ -774,9 +773,7 @@ function drawReadout() {
   readoutFields.roles.textContent = roleCountText(state);
   readoutFields.meters.textContent = meterSetText(state);
   readoutFields.kits.textContent = kits || "-";
-  readoutFields.timing.textContent = state.config.meterTiming === "shared-bar-polyrhythm"
-    ? "shared bar"
-    : "same pulse";
+  readoutFields.timing.textContent = "same pulse";
   readoutFields.access.textContent = entitlementValidationPending
     ? "checking license"
     : (entitlementUnlocks(entitlement) ? "unlocked" : "locked");
@@ -897,8 +894,6 @@ function randomizeControls() {
   document.querySelector("#pulseCount").value = String(Math.floor(Math.random() * Math.max(1, patterns / 3)));
   document.querySelector("#kitPool").value = "";
   document.querySelector("#meterStart").value = "";
-  const timingModes = ["same-pulse-polymeter", "shared-bar-polyrhythm"];
-  document.querySelector("#meterTiming").value = timingModes[Math.floor(Math.random() * timingModes.length)];
   document.querySelector("#cycleLength").value = String(1 + Math.floor(Math.random() * 5));
   const units = ["resolving-sequences", "bars"];
   document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
@@ -929,7 +924,6 @@ function stationHashParams() {
     pulseCount: config.pulseCount,
     kitPool: config.kitPool.join(","),
     meterStart: config.meterStart,
-    meterTiming: config.meterTiming,
     cycleLength: config.cycleLength,
     cycleLengthKind: config.cycleLengthKind,
     basisPolicy: config.basisPolicy === "farthest" ? "farmost" : config.basisPolicy,

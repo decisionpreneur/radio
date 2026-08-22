@@ -318,7 +318,13 @@ export function advanceCycle(state) {
   selectedClone.rethoughtFromMeter = selectedClone.meter;
   selectedClone.meter = currentState.config.meterStart;
   delete selectedClone.pulseSecondsOverride;
-  const preserved = [selectedClone];
+  const retainedOldBase = oldBase && oldBase.id !== selected.id
+    ? cloneVoiceWithPulseOverride(currentState, oldBase)
+    : null;
+  if (retainedOldBase) {
+    retainedOldBase.protectedThroughCycle = nextCycleIndex;
+  }
+  const preserved = retainedOldBase ? [selectedClone, retainedOldBase] : [selectedClone];
 
   const replacementPlan = buildReplacementVoices({
     previousState: currentState,
@@ -345,8 +351,9 @@ export function advanceCycle(state) {
 
   nextState.voices = [
     selectedClone,
+    ...(retainedOldBase ? [retainedOldBase] : []),
     ...currentState.voices
-      .filter((voice) => voice.id !== selectedClone.id)
+      .filter((voice) => voice.id !== selectedClone.id && voice.id !== retainedOldBase?.id)
       .map((voice) => cloneVoiceWithPulseOverride(currentState, voice))
   ];
   nextState.pendingReplacements = buildRoleStableReplacementPlan(

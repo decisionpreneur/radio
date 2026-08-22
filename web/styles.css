@@ -173,6 +173,16 @@ button:disabled {
   content: "\21C4";
 }
 
+.icon-copy::before {
+  content: "\2398";
+}
+
+.icon-midi::before {
+  content: "MIDI";
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .icon-export::before {
   content: "\21E9";
 }

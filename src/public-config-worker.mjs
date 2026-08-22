@@ -18,6 +18,13 @@ function normalizePublicUrl(value) {
   try {
     const url = new URL(raw);
     if (url.protocol !== "https:") return "";
+    if (
+      url.hostname.endsWith(".lemonsqueezy.com") &&
+      url.pathname.startsWith("/checkout/buy/") &&
+      !url.searchParams.has("embed")
+    ) {
+      url.searchParams.set("embed", "1");
+    }
     return url.href;
   } catch {
     return "";

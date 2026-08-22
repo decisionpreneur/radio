@@ -13,6 +13,15 @@
   display: none !important;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -139,6 +148,33 @@ button:hover,
 button:disabled {
   cursor: not-allowed;
   opacity: 0.52;
+}
+
+.icon-button {
+  width: 42px;
+  padding: 0;
+  aspect-ratio: 1;
+}
+
+.icon-button::before {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.icon-play::before {
+  content: "\25B6";
+}
+
+.icon-stop::before {
+  content: "\25A0";
+}
+
+.icon-random::before {
+  content: "\21C4";
+}
+
+.icon-export::before {
+  content: "\21E9";
 }
 
 button:focus-visible,

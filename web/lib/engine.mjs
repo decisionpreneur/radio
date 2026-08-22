@@ -177,8 +177,8 @@ export function voicePulseSeconds(state, voice) {
 }
 
 export function resolvingBaseBars(state) {
-  const meterLcm = lcmAll(state.voices.map((voice) => voice.meter));
-  return meterLcm / state.baseMeter;
+  const patternLcm = lcmAll(state.voices.map((voice) => voice.pattern.length));
+  return patternLcm / state.baseMeter;
 }
 
 export function sectionBaseBars(state) {

@@ -45,7 +45,7 @@ export const ETHNIC_PERCUSSION_LANES = Object.freeze([
   lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Maracas Hard", note: 70, color: "#8fae63", sound: "maracas" }),
   lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Wood Claves", note: 75, color: "#c19070", sound: "claves" }),
   lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Perc African MPC", note: 71, color: "#a15d45", sound: "perc-african" }),
-  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Tambourine Hit Hard", note: 54, color: "#c2c36b", sound: "tambourine" }),
+  lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Tambourine 110 bpm", note: 54, color: "#c2c36b", sound: "tambourine" }),
   lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Shaker Acoustic", note: 82, color: "#9fb36f", sound: "shaker" }),
   lane(ETHNIC_PERCUSSION_KIT_ID, ETHNIC_PERCUSSION_KIT_NAME, { name: "Cowbell Latin Ting", note: 56, color: "#b9ad9b", sound: "cowbell" })
 ]);

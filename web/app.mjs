@@ -294,7 +294,7 @@ function updatePaywallUi() {
   midiBtn.disabled = !unlocked;
   exportBtn.disabled = !unlocked;
   clearLicenseBtn.disabled = !unlocked;
-  startBtn.title = unlocked ? "Start live audio" : "License required";
+  startBtn.title = unlocked ? "Play live audio" : "License required";
   midiBtn.title = unlocked ? "Connect MIDI output" : "License required";
   exportBtn.title = unlocked ? "Export MIDI file" : "License required";
   paywallStatus.textContent = accessText;
@@ -735,9 +735,9 @@ function drawReadout() {
   const baseVoice = state.voices.find((voice) => voice.id === state.baseVoiceId) ?? state.voices[0];
   const pending = state.pendingReplacements.length;
   const kits = [...new Set(state.voices.map((voice) => voice.kit))].join(", ");
-  readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"} meter ${state.baseMeter} @ ${state.baseBpm.toFixed(3)} bpm`;
+  readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"}; meter ${state.baseMeter}; ${state.baseBpm.toFixed(3)} bpm`;
   readoutFields.cycle.textContent = cycleProgressText(state);
-  readoutFields.change.textContent = `${state.config.cycleLength} ${state.config.cycleLengthKind}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacing`;
+  readoutFields.change.textContent = `${state.config.cycleLength} ${cycleUnitText(state.config.cycleLengthKind)}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacements`;
   readoutFields.basisPolicy.textContent = state.config.basisPolicy === "farthest" ? "farmost" : state.config.basisPolicy;
   readoutFields.voices.textContent = String(state.voices.length);
   readoutFields.roles.textContent = roleCountText(state);
@@ -761,6 +761,10 @@ function cycleProgressText(currentState, now = null, sectionStart = null) {
   const elapsed = Math.max(0, now - sectionStart);
   const barIndex = Math.min(totalBars, Math.floor(elapsed / baseBarSeconds(currentState)));
   return `${currentState.cycleIndex}; bar ${barIndex} / ${totalBars}`;
+}
+
+function cycleUnitText(value) {
+  return value === "resolving-sequences" ? "resolving sequences" : "bars";
 }
 
 function roleCountText(currentState) {

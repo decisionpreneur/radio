@@ -321,7 +321,7 @@ export function advanceCycle(state) {
   if (retainedOldBase) {
     retainedOldBase.protectedThroughCycle = nextCycleIndex;
   }
-  const preserved = retainedOldBase ? [selectedClone, retainedOldBase] : [selectedClone];
+  const preserved = [selectedClone];
 
   const replacementPlan = buildReplacementVoices({
     previousState: currentState,

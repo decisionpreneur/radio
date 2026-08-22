@@ -95,7 +95,7 @@ export async function handleLicenseRequest(context, action, options = {}) {
       unlocked: false,
       provider: "lemonsqueezy",
       error: providerResponse.error
-    }, providerResponse.status);
+    });
   }
 
   const verdict = evaluateLemonPayload(providerResponse.body, context.env, { action, email });

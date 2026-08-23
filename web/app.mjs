@@ -61,19 +61,11 @@ const readoutFields = {
   signalFill: document.querySelector('[data-field="signalFill"]')
 };
 
-const donationUrl = donateLink.dataset.donationUrl;
-if (!donationUrl) {
-  donateLink.hidden = true;
-} else {
-  donateLink.href = donationUrl;
-}
-
-const checkoutUrl = checkoutLink.dataset.checkoutUrl;
-if (!checkoutUrl) {
-  checkoutLink.hidden = true;
-} else {
-  checkoutLink.href = checkoutUrl;
-}
+const commerceLinks = {
+  donationUrl: donateLink.dataset.donationUrl,
+  checkoutUrl: checkoutLink.dataset.checkoutUrl
+};
+applyCommerceLinks();
 const sessionSeed = makeSessionSeed();
 loadPublicConfig();
 
@@ -137,7 +129,6 @@ function syncControls(event) {
 }
 
 startBtn.addEventListener("click", async () => {
-  if (!requireUnlocked()) return;
   try {
     await startLive();
   } catch {
@@ -159,6 +150,16 @@ randomBtn.addEventListener("click", () => {
 shareBtn.addEventListener("click", async () => {
   await shareStation();
 });
+
+for (const link of [donateLink, checkoutLink]) {
+  link.addEventListener("click", (event) => {
+    if (link.dataset.state !== "unavailable") return;
+    event.preventDefault();
+    const text = link === donateLink ? "donation link unavailable" : "subscription link unavailable";
+    paywallStatus.textContent = text;
+    setStatus(text, 1600);
+  });
+}
 
 midiBtn.addEventListener("click", async () => {
   if (!requireUnlocked()) return;
@@ -283,9 +284,31 @@ async function validateExistingEntitlement() {
 async function loadPublicConfig() {
   const config = await fetchPublicConfig();
   if (config.checkoutUrl) {
-    checkoutLink.href = config.checkoutUrl;
-    checkoutLink.hidden = false;
+    commerceLinks.checkoutUrl = config.checkoutUrl;
   }
+  if (config.donationUrl) {
+    commerceLinks.donationUrl = config.donationUrl;
+  }
+  applyCommerceLinks();
+}
+
+function applyCommerceLinks() {
+  configureCommerceLink(checkoutLink, commerceLinks.checkoutUrl, "Subscribe $5/mo USD", "subscription link unavailable");
+  configureCommerceLink(donateLink, commerceLinks.donationUrl, "Donate", "donation link unavailable");
+}
+
+function configureCommerceLink(link, url, activeText, inactiveText) {
+  if (url) {
+    link.href = url;
+    link.textContent = activeText;
+    link.removeAttribute("title");
+    link.dataset.state = "active";
+    return;
+  }
+  link.href = "#paywall";
+  link.textContent = activeText;
+  link.title = inactiveText;
+  link.dataset.state = "unavailable";
 }
 
 function requireUnlocked() {
@@ -296,12 +319,12 @@ function requireUnlocked() {
 
 function updatePaywallUi() {
   const unlocked = !entitlementValidationPending && entitlementUnlocks(entitlement);
-  const accessText = entitlementValidationPending ? "checking license" : (unlocked ? "unlocked" : "locked");
-  startBtn.disabled = !unlocked;
+  const accessText = entitlementValidationPending ? "checking license" : (unlocked ? "subscribed" : "live open");
+  startBtn.disabled = false;
   midiBtn.disabled = !unlocked;
   exportBtn.disabled = !unlocked;
   clearLicenseBtn.disabled = !unlocked;
-  startBtn.title = unlocked ? "Play live audio" : "License required";
+  startBtn.title = "Play live audio";
   midiBtn.title = unlocked ? "Connect MIDI output" : "License required";
   exportBtn.title = unlocked ? "Export MIDI file" : "License required";
   paywallStatus.textContent = accessText;
@@ -776,7 +799,7 @@ function drawReadout() {
   readoutFields.timing.textContent = "same pulse";
   readoutFields.access.textContent = entitlementValidationPending
     ? "checking license"
-    : (entitlementUnlocks(entitlement) ? "unlocked" : "locked");
+    : (entitlementUnlocks(entitlement) ? "subscribed" : "live open");
 }
 
 function updateCycleProgress(now) {

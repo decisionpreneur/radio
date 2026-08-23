@@ -1,6 +1,7 @@
 export function publicConfig(env = {}) {
   return {
-    checkoutUrl: normalizePublicUrl(env.RADIO_CHECKOUT_URL)
+    checkoutUrl: normalizePublicUrl(env.RADIO_CHECKOUT_URL),
+    donationUrl: normalizePublicUrl(env.RADIO_DONATION_URL)
   };
 }
 

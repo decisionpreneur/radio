@@ -94,7 +94,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     meterTiming: LEAN_METER_TIMING_MODE,
     cycleLengthKind: hasValue(input.cycleLengthKind)
       ? ensureMember(input.cycleLengthKind, CYCLE_LENGTH_KINDS, "bars")
-      : "bars",
+      : pick(rng, CYCLE_LENGTH_KINDS),
     cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
     replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "one-per-bar"),

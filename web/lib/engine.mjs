@@ -64,14 +64,19 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
   );
   const meterCount = clampNumber(hasValue(input.meterCount) ? input.meterCount : patternCount, 1, 64);
   const maxSpecial = patternCount;
+  const pulseRequested = hasValue(input.pulseCount);
+  const pulseRequestedCount = pulseRequested ? clampNumber(input.pulseCount, 0, maxSpecial) : 0;
+  const defaultStartOnlyCount = pulseRequested && !hasValue(input.startOnlyCount)
+    ? maxSpecial - pulseRequestedCount
+    : maxSpecial;
   const startOnlyCount = clampNumber(
-    hasValue(input.startOnlyCount) ? input.startOnlyCount : randomInt(rng, 0, Math.floor(maxSpecial / 3)),
+    hasValue(input.startOnlyCount) ? input.startOnlyCount : defaultStartOnlyCount,
     0,
     maxSpecial
   );
   const remainingAfterStartOnly = maxSpecial - startOnlyCount;
   const pulseCount = clampNumber(
-    hasValue(input.pulseCount) ? input.pulseCount : randomInt(rng, 0, Math.floor(remainingAfterStartOnly / 2)),
+    pulseRequested ? pulseRequestedCount : 0,
     0,
     remainingAfterStartOnly
   );

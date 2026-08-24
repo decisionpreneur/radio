@@ -8,152 +8,159 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <main class="shell">
-      <section class="console-head">
-        <div class="identity">
+    <main class="station">
+      <section class="transport-ribbon" aria-label="Station">
+        <div class="brand-block">
           <h1>Polyrhythmic Radio</h1>
           <p class="runline"><span id="status">stopped</span><span id="accessBadge">live open</span></p>
         </div>
-        <div class="head-actions">
-          <div class="transport-actions" aria-label="Transport">
-            <button id="startBtn" class="icon-button icon-play primary-play" type="button" title="Play live audio" aria-label="Play live audio"><span class="visually-hidden">Play</span></button>
-            <button id="stopBtn" class="icon-button icon-stop" type="button" title="Stop audio" aria-label="Stop audio"><span class="visually-hidden">Stop</span></button>
-            <button id="randomBtn" class="icon-button icon-random" type="button" title="Random controls" aria-label="Random controls"><span class="visually-hidden">Random</span></button>
-            <button id="shareBtn" class="icon-button icon-copy" type="button" title="Copy station link" aria-label="Copy station link"><span class="visually-hidden">Copy link</span></button>
-            <button id="midiBtn" class="icon-button icon-midi" type="button" disabled title="Connect MIDI output" aria-label="Connect MIDI output"><span class="visually-hidden">MIDI</span></button>
-            <button id="exportBtn" class="icon-button icon-export" type="button" disabled title="Export MIDI file" aria-label="Export MIDI file"><span class="visually-hidden">Export MIDI</span></button>
-          </div>
-          <div class="commerce-actions" aria-label="Access">
-            <a id="checkoutLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1" data-checkout-url="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1">Subscribe $5/mo USD</a>
-            <a id="donateLink" href="#" data-donation-url="">Donate</a>
-          </div>
+        <div class="transport-actions" aria-label="Transport">
+          <button id="startBtn" class="icon-button icon-play primary-play" type="button" title="Play live audio" aria-label="Play live audio"><span class="visually-hidden">Play</span></button>
+          <button id="stopBtn" class="icon-button icon-stop" type="button" title="Stop audio" aria-label="Stop audio"><span class="visually-hidden">Stop</span></button>
+          <button id="randomBtn" class="icon-button icon-random" type="button" title="Random controls" aria-label="Random controls"><span class="visually-hidden">Random</span></button>
+          <button id="shareBtn" class="icon-button icon-copy" type="button" title="Copy station link" aria-label="Copy station link"><span class="visually-hidden">Copy link</span></button>
+          <button id="midiBtn" class="icon-button icon-midi" type="button" disabled title="Connect MIDI output" aria-label="Connect MIDI output"><span class="visually-hidden">MIDI</span></button>
+          <button id="exportBtn" class="icon-button icon-export" type="button" disabled title="Export MIDI file" aria-label="Export MIDI file"><span class="visually-hidden">Export MIDI</span></button>
+        </div>
+        <div class="commerce-actions" aria-label="Access">
+          <a id="checkoutLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1" data-checkout-url="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1">Subscribe $5/mo USD</a>
+          <a id="donateLink" href="#" data-donation-url="">Donate</a>
         </div>
       </section>
 
-      <section class="layout">
-        <form id="controls" class="panel">
-          <fieldset>
-            <legend>Structure</legend>
-            <label>
-              Seed
-              <input id="seed" name="seed" placeholder="random">
-            </label>
-            <label>
-              Simultaneous patterns
-              <input id="patternCount" name="patternCount" type="number" min="3" max="64" placeholder="random">
-            </label>
-            <label>
-              Start-only patterns
-              <input id="startOnlyCount" name="startOnlyCount" type="number" min="0" max="64" placeholder="random">
-            </label>
-            <label>
-              Pulse patterns
-              <input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="random">
-            </label>
-            <label>
-              Kit pool
-              <select id="kitPool" name="kitPool">
-                <option value="">all kits</option>
-                <option value="normal-drumset">normal drumset</option>
-                <option value="ethnic-percussion-kit">ethnic percussion kit</option>
-              </select>
-            </label>
-          </fieldset>
+      <section class="meter-wall">
+        <dl id="readout" class="readout-grid">
+          <div><dt>tempo basis</dt><dd data-field="tempoBasis"></dd></div>
+          <div><dt>cycle</dt><dd data-field="cycle"></dd></div>
+          <div><dt>change</dt><dd data-field="change"></dd></div>
+          <div><dt>basis policy</dt><dd data-field="basisPolicy"></dd></div>
+          <div><dt>voices</dt><dd data-field="voices"></dd></div>
+          <div><dt>roles</dt><dd data-field="roles"></dd></div>
+          <div><dt>meters</dt><dd data-field="meters"></dd></div>
+          <div><dt>kits</dt><dd data-field="kits"></dd></div>
+          <div><dt>timing</dt><dd data-field="timing"></dd></div>
+          <div><dt>access</dt><dd data-field="access">locked</dd></div>
+          <div>
+            <dt>signal</dt>
+            <dd class="signal-readout">
+              <span class="signal-meter"><span data-field="signalFill"></span></span>
+              <span data-field="signal">0.000</span>
+            </dd>
+          </div>
+        </dl>
 
-          <fieldset>
-            <legend>Cycle</legend>
-            <label>
-              Base BPM
-              <input id="baseBpm" name="baseBpm" type="number" min="20" max="300" placeholder="random">
-            </label>
-            <label>
-              Base meter
-              <input id="baseMeter" name="baseMeter" type="number" min="1" max="64" placeholder="random">
-            </label>
-            <label>
-              First meter
-              <input id="meterStart" name="meterStart" type="number" min="1" max="64" placeholder="random">
-            </label>
-            <label>
-              Cycle length
-              <input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" placeholder="random">
-            </label>
-            <label>
-              Cycle unit
-              <select id="cycleLengthKind" name="cycleLengthKind">
-                <option value="">random</option>
-                <option value="resolving-sequences">resolving sequences</option>
-                <option value="bars">bars</option>
-              </select>
-            </label>
-            <label>
-              Next tempo basis
-              <select id="basisPolicy" name="basisPolicy">
-                <option value="">random</option>
-                <option value="next">next</option>
-                <option value="random">random</option>
-                <option value="closest">closest</option>
-                <option value="farmost">farmost</option>
-              </select>
-            </label>
-          </fieldset>
+        <dl id="hitStrip" class="hit-strip" aria-live="polite">
+          <div class="hit-lamp-cell"><dt>hit</dt><dd><span class="hit-lamp" data-field="hitLamp"></span></dd></div>
+          <div><dt>instrument</dt><dd data-field="hitInstrument">-</dd></div>
+          <div><dt>lane</dt><dd data-field="hitVoice">-</dd></div>
+          <div><dt>meter</dt><dd data-field="hitMeter">-</dd></div>
+          <div><dt>kit</dt><dd data-field="hitKit">-</dd></div>
+          <div><dt>role</dt><dd data-field="hitRole">-</dd></div>
+          <div><dt>pulse</dt><dd data-field="hitPulse">-</dd></div>
+        </dl>
 
-          <fieldset>
-            <legend>Output</legend>
-            <label>
-              Export sections
-              <input id="exportSections" name="exportSections" type="number" min="1" max="64" value="6">
-            </label>
-            <label>
-              MIDI output
-              <select id="midiOutput" name="midiOutput">
-                <option value="">none</option>
-              </select>
-            </label>
-          </fieldset>
-
-          <fieldset id="paywall" class="paywall">
-            <legend>Access</legend>
-            <label>
-              License key
-              <input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false">
-            </label>
-            <label>
-              Payment email (optional)
-              <input id="licenseEmail" name="licenseEmail" type="email" autocomplete="email">
-            </label>
-            <div class="paywall-actions">
-              <button id="unlockBtn" type="button">Unlock</button>
-              <button id="clearLicenseBtn" type="button" disabled>Clear</button>
-            </div>
-            <p id="paywallStatus">live open</p>
-          </fieldset>
-        </form>
-
-        <section class="work">
-          <dl id="readout" class="statebar">
-            <div><dt>tempo basis</dt><dd data-field="tempoBasis"></dd></div>
-            <div><dt>cycle</dt><dd data-field="cycle"></dd></div>
-            <div><dt>change</dt><dd data-field="change"></dd></div>
-            <div><dt>basis policy</dt><dd data-field="basisPolicy"></dd></div>
-            <div><dt>voices</dt><dd data-field="voices"></dd></div>
-            <div><dt>roles</dt><dd data-field="roles"></dd></div>
-            <div><dt>meters</dt><dd data-field="meters"></dd></div>
-            <div><dt>kits</dt><dd data-field="kits"></dd></div>
-            <div><dt>timing</dt><dd data-field="timing"></dd></div>
-            <div><dt>access</dt><dd data-field="access">locked</dd></div>
-            <div>
-              <dt>signal</dt>
-              <dd class="signal-readout">
-                <span class="signal-meter"><span data-field="signalFill"></span></span>
-                <span data-field="signal">0.000</span>
-              </dd>
-            </div>
-          </dl>
-          <canvas id="timeline" width="1280" height="420"></canvas>
-          <div id="voices" class="voices"></div>
-        </section>
+        <canvas id="timeline" width="1280" height="420"></canvas>
+        <div id="voices" class="voices lane-board"></div>
       </section>
+
+      <form id="controls" class="control-deck">
+        <fieldset class="control-group">
+          <legend>Structure</legend>
+          <label>
+            Seed
+            <input id="seed" name="seed" placeholder="random">
+          </label>
+          <label>
+            Simultaneous patterns
+            <input id="patternCount" name="patternCount" type="number" min="3" max="64" placeholder="random">
+          </label>
+          <label>
+            Start-only patterns
+            <input id="startOnlyCount" name="startOnlyCount" type="number" min="0" max="64" placeholder="all">
+          </label>
+          <label>
+            Pulse patterns
+            <input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="0">
+          </label>
+          <label>
+            Kit pool
+            <select id="kitPool" name="kitPool">
+              <option value="">all kits</option>
+              <option value="normal-drumset">normal drumset</option>
+              <option value="ethnic-percussion-kit">ethnic percussion kit</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset class="control-group">
+          <legend>Cycle</legend>
+          <label>
+            Base BPM
+            <input id="baseBpm" name="baseBpm" type="number" min="20" max="300" placeholder="random">
+          </label>
+          <label>
+            Base meter
+            <input id="baseMeter" name="baseMeter" type="number" min="1" max="64" placeholder="random">
+          </label>
+          <label>
+            First meter
+            <input id="meterStart" name="meterStart" type="number" min="1" max="64" placeholder="random">
+          </label>
+          <label>
+            Cycle length
+            <input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" placeholder="random">
+          </label>
+          <label>
+            Cycle unit
+            <select id="cycleLengthKind" name="cycleLengthKind">
+              <option value="">random</option>
+              <option value="resolving-sequences">resolving sequences</option>
+              <option value="bars">bars</option>
+            </select>
+          </label>
+          <label>
+            Next tempo basis
+            <select id="basisPolicy" name="basisPolicy">
+              <option value="">random</option>
+              <option value="next">next</option>
+              <option value="random">random</option>
+              <option value="closest">closest</option>
+              <option value="farmost">farmost</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset class="control-group output-group">
+          <legend>Output</legend>
+          <label>
+            Export sections
+            <input id="exportSections" name="exportSections" type="number" min="1" max="64" value="6">
+          </label>
+          <label>
+            MIDI output
+            <select id="midiOutput" name="midiOutput">
+              <option value="">none</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset id="paywall" class="control-group paywall">
+          <legend>Access</legend>
+          <label>
+            License key
+            <input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false">
+          </label>
+          <label>
+            Payment email
+            <input id="licenseEmail" name="licenseEmail" type="email" autocomplete="email">
+          </label>
+          <div class="paywall-actions">
+            <button id="unlockBtn" type="button">Unlock</button>
+            <button id="clearLicenseBtn" type="button" disabled>Clear</button>
+          </div>
+          <p id="paywallStatus">live open</p>
+        </fieldset>
+      </form>
     </main>
     <script type="module" src="./app.mjs"></script>
   </body>

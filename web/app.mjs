@@ -60,6 +60,16 @@ const readoutFields = {
   signal: document.querySelector('[data-field="signal"]'),
   signalFill: document.querySelector('[data-field="signalFill"]')
 };
+const hitFields = {
+  strip: document.querySelector("#hitStrip"),
+  lamp: document.querySelector('[data-field="hitLamp"]'),
+  instrument: document.querySelector('[data-field="hitInstrument"]'),
+  voice: document.querySelector('[data-field="hitVoice"]'),
+  meter: document.querySelector('[data-field="hitMeter"]'),
+  kit: document.querySelector('[data-field="hitKit"]'),
+  role: document.querySelector('[data-field="hitRole"]'),
+  pulse: document.querySelector('[data-field="hitPulse"]')
+};
 
 const commerceLinks = {
   donationUrl: donateLink.dataset.donationUrl,
@@ -100,6 +110,9 @@ let timer = null;
 let live = null;
 let entitlementValidationPending = entitlementUnlocks(entitlement);
 let statusHoldUntil = 0;
+const hitTimeouts = new Set();
+const voiceHitTimers = new Map();
+let stripHitTimer = null;
 
 const SCHEDULE_OFFSET_SECONDS = 0.02;
 const SCHEDULE_LOOKAHEAD_SECONDS = 0.35;
@@ -349,6 +362,7 @@ function stopLive() {
   if (timer) window.clearInterval(timer);
   timer = null;
   live = null;
+  clearHitIndicators();
   stopSignalMeter();
   signalPeak = 0;
   setSignalLevel(0);
@@ -486,7 +500,62 @@ function playEvent(event, when) {
     output.send([0x89, event.note, 0], timestamp + event.durationSeconds * 1000);
   }
   playAudio(event, when);
+  scheduleHitIndicator(event, when);
   setPlaybackStatus("playing");
+}
+
+function scheduleHitIndicator(event, when) {
+  if (!hitFields.strip || !audioContext) return;
+  const delay = Math.max(0, (when - audioContext.currentTime) * 1000);
+  const timeout = window.setTimeout(() => {
+    hitTimeouts.delete(timeout);
+    showHit(event);
+  }, delay);
+  hitTimeouts.add(timeout);
+}
+
+function showHit(event) {
+  hitFields.instrument.textContent = event.instrument.name;
+  hitFields.voice.textContent = event.voiceId;
+  hitFields.meter.textContent = String(event.meter);
+  hitFields.kit.textContent = event.kit;
+  hitFields.role.textContent = event.role;
+  hitFields.pulse.textContent = String(event.pulseIndex);
+  hitFields.strip.classList.add("is-hit");
+  hitFields.lamp.classList.add("is-hit");
+
+  if (stripHitTimer) window.clearTimeout(stripHitTimer);
+  stripHitTimer = window.setTimeout(() => {
+    hitFields.strip.classList.remove("is-hit");
+    hitFields.lamp.classList.remove("is-hit");
+    stripHitTimer = null;
+  }, 130);
+
+  const voiceNode = voicesEl.querySelector(`[data-voice-id="${event.voiceId}"]`);
+  if (!voiceNode) return;
+  const previousTimer = voiceHitTimers.get(event.voiceId);
+  if (previousTimer) window.clearTimeout(previousTimer);
+  voiceNode.classList.add("hit");
+  const timerId = window.setTimeout(() => {
+    voiceNode.classList.remove("hit");
+    voiceHitTimers.delete(event.voiceId);
+  }, 180);
+  voiceHitTimers.set(event.voiceId, timerId);
+}
+
+function clearHitIndicators() {
+  for (const timeout of hitTimeouts) window.clearTimeout(timeout);
+  hitTimeouts.clear();
+  if (stripHitTimer) window.clearTimeout(stripHitTimer);
+  stripHitTimer = null;
+  for (const timeout of voiceHitTimers.values()) window.clearTimeout(timeout);
+  voiceHitTimers.clear();
+  hitFields.strip?.classList.remove("is-hit");
+  hitFields.lamp?.classList.remove("is-hit");
+  voicesEl.querySelectorAll(".voice.hit").forEach((node) => node.classList.remove("hit"));
+  for (const field of ["instrument", "voice", "meter", "kit", "role", "pulse"]) {
+    if (hitFields[field]) hitFields[field].textContent = "-";
+  }
 }
 
 function setStatus(text, holdMs = 0) {
@@ -766,8 +835,8 @@ function makeStateFromControls(previousState = null) {
     baseBpm: readOptionalNumber("baseBpm", previousConfig?.baseBpm),
     baseMeter: readOptionalNumber("baseMeter", previousState?.baseMeter),
     patternCount: readOptionalNumber("patternCount", previousConfig?.patternCount),
-    startOnlyCount: readOptionalNumber("startOnlyCount", previousConfig?.startOnlyCount),
-    pulseCount: readOptionalNumber("pulseCount", previousConfig?.pulseCount),
+    startOnlyCount: readOptionalNumber("startOnlyCount"),
+    pulseCount: readOptionalNumber("pulseCount"),
     kitPool: readOptionalText("kitPool", previousConfig?.kitPool?.join(",")),
     meterStart: readOptionalNumber("meterStart", previousConfig?.meterStart),
     meterCount: readOptionalNumber("patternCount", previousConfig?.patternCount),
@@ -838,7 +907,7 @@ function drawTimeline() {
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#a5a5a1";
+  ctx.fillStyle = "#101415";
   ctx.fillRect(0, 0, width, height);
 
   const previewState = state;
@@ -852,7 +921,7 @@ function drawTimeline() {
   const rows = previewState.voices.length;
   const rowHeight = height / Math.max(1, rows);
 
-  ctx.strokeStyle = "#8b8d88";
+  ctx.strokeStyle = "#27302e";
   ctx.lineWidth = 1;
   for (let row = 0; row <= rows; row += 1) {
     const y = Math.round(row * rowHeight) + 0.5;
@@ -863,7 +932,7 @@ function drawTimeline() {
   }
 
   const baseBar = (60 / previewState.baseBpm) * previewState.baseMeter;
-  ctx.strokeStyle = "#747771";
+  ctx.strokeStyle = "#43514b";
   for (let time = 0; time <= previewSeconds; time += baseBar) {
     const x = (time / previewSeconds) * width;
     ctx.beginPath();
@@ -878,7 +947,7 @@ function drawTimeline() {
     const x = (event.localSeconds / previewSeconds) * width;
     const y = row * rowHeight + rowHeight * 0.2;
     ctx.fillStyle = event.instrument.color;
-    ctx.strokeStyle = "#111";
+    ctx.strokeStyle = "#080b0b";
     ctx.lineWidth = 2;
     ctx.fillRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
     ctx.strokeRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
@@ -890,8 +959,11 @@ function drawVoices() {
   for (const voice of state.voices) {
     const card = document.createElement("article");
     card.className = `voice${voice.id === state.baseVoiceId ? " base" : ""}`;
+    card.dataset.voiceId = voice.id;
+    card.style.setProperty("--voice-color", voice.instrument.color);
     const bpm = voiceBpm(state, voice);
     card.innerHTML = `
+      <span class="lane-lamp" aria-hidden="true"></span>
       <h2>${escapeHtml(voice.instrument.name)}</h2>
       <dl>
         <dt>voice</dt><dd>${escapeHtml(voice.id)}</dd>

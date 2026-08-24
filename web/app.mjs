@@ -216,6 +216,7 @@ clearLicenseBtn.addEventListener("click", () => {
 });
 
 async function startLive() {
+  if (!requireUnlocked()) return;
   state = makeStateFromControls(state);
   releaseBlankTouchedControls();
   await ensureAudioContext();
@@ -332,12 +333,12 @@ function requireUnlocked() {
 
 function updatePaywallUi() {
   const unlocked = !entitlementValidationPending && entitlementUnlocks(entitlement);
-  const accessText = entitlementValidationPending ? "checking license" : (unlocked ? "subscribed" : "live open");
+  const accessText = entitlementValidationPending ? "checking license" : (unlocked ? "subscribed" : "license required");
   startBtn.disabled = false;
   midiBtn.disabled = !unlocked;
   exportBtn.disabled = !unlocked;
   clearLicenseBtn.disabled = !unlocked;
-  startBtn.title = "Play live audio";
+  startBtn.title = unlocked ? "Play live audio" : "License required";
   midiBtn.title = unlocked ? "Connect MIDI output" : "License required";
   exportBtn.title = unlocked ? "Export MIDI file" : "License required";
   paywallStatus.textContent = accessText;
@@ -980,7 +981,7 @@ function drawReadout() {
   readoutFields.timing.textContent = "same pulse";
   readoutFields.access.textContent = entitlementValidationPending
     ? "checking license"
-    : (entitlementUnlocks(entitlement) ? "subscribed" : "live open");
+    : (entitlementUnlocks(entitlement) ? "subscribed" : "license required");
 }
 
 function updateCycleProgress(now) {

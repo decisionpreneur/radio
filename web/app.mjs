@@ -472,7 +472,8 @@ function nextCadenceSeconds(target) {
   const lastIndex = target.state.config.replacementCadence === "one-per-resolving-sequence"
     ? target.lastReplacementResolve
     : target.lastReplacementBar;
-  return target.sectionStart + ((lastIndex + 1) * unitSeconds);
+  const nextIndex = lastIndex < 0 ? 1 : lastIndex + 1;
+  return target.sectionStart + (nextIndex * unitSeconds);
 }
 
 function applyOneReplacement(target) {
@@ -587,14 +588,31 @@ function playAudio(event, when) {
     case "tom-low":
       drumSine(when, 95 + event.meter * 2, 0.17, 0.5 * level, "triangle", 0.45);
       break;
+    case "floor-tom-edge":
+      drumSine(when, 105 + event.meter * 2, 0.16, 0.43 * level, "triangle", 0.5);
+      woodHit(when, 760, 0.028, 0.07 * level);
+      break;
     case "snare":
       snareHit(when, level);
+      break;
+    case "snare-edge":
+      snareHit(when, level * 0.88);
+      woodHit(when, 1850, 0.025, 0.08 * level);
       break;
     case "rim":
       woodHit(when, 1750, 0.035, 0.34 * level);
       break;
     case "hihat-closed":
       noiseHit(when, 0.035, 0.18 * level, 7800, "highpass", 0.9);
+      break;
+    case "pedal-hihat":
+      noiseHit(when, 0.055, 0.13 * level, 5200, "highpass", 1.1);
+      break;
+    case "semi-open-hihat":
+      noiseHit(when, 0.115, 0.18 * level, 6800, "highpass", 0.8);
+      break;
+    case "swish-hihat":
+      noiseHit(when, 0.23, 0.16 * level, 4500, "highpass", 0.55);
       break;
     case "hihat-open":
       noiseHit(when, 0.16, 0.2 * level, 6200, "highpass", 0.7);
@@ -604,6 +622,9 @@ function playAudio(event, when) {
       break;
     case "ride":
       cymbalHit(when, 0.2, 0.2 * level, 4700);
+      break;
+    case "ride-bell":
+      metallicHit(when, [820, 1520, 2540], 0.18, 0.18 * level, "triangle");
       break;
     case "crash":
       cymbalHit(when, 0.42, 0.26 * level, 3400);
@@ -624,6 +645,28 @@ function playAudio(event, when) {
     case "conga-low":
       handDrum(when, 135, 0.18, 0.56 * level);
       break;
+    case "cajon-thump":
+      handDrum(when, 92, 0.13, 0.62 * level);
+      break;
+    case "finger-snap":
+      woodHit(when, 2600, 0.024, 0.22 * level);
+      break;
+    case "cajon-slap":
+      noiseHit(when, 0.055, 0.24 * level, 1800, "bandpass", 2.2);
+      woodHit(when, 980, 0.032, 0.12 * level);
+      break;
+    case "conga-left":
+      handDrum(when, 168, 0.14, 0.5 * level);
+      break;
+    case "conga-right":
+      handDrum(when, 205, 0.12, 0.48 * level);
+      break;
+    case "small-conga-left":
+      handDrum(when, 238, 0.1, 0.42 * level);
+      break;
+    case "small-conga-right":
+      handDrum(when, 282, 0.085, 0.4 * level);
+      break;
     case "timbales-high":
       metallicHit(when, [410, 790], 0.09, 0.3 * level, "square");
       break;
@@ -642,6 +685,10 @@ function playAudio(event, when) {
     case "maracas":
       shakerHit(when, 0.075, 0.18 * level, 6500);
       break;
+    case "foot-stomp":
+      drumSine(when, 66, 0.12, 0.42 * level, "sine", 0.5);
+      noiseHit(when, 0.035, 0.1 * level, 420, "lowpass", 0.8);
+      break;
     case "claves":
       woodHit(when, 2400, 0.045, 0.32 * level);
       break;
@@ -657,6 +704,48 @@ function playAudio(event, when) {
       break;
     case "cowbell":
       metallicHit(when, [540, 810, 1620], 0.12, 0.25 * level, "square");
+      break;
+    case "bucket":
+      drumSine(when, 118, 0.12, 0.32 * level, "triangle", 0.58);
+      metallicHit(when, [310, 470], 0.07, 0.12 * level, "square");
+      break;
+    case "bell-tree-down":
+      bellTreeHit(when, level, false);
+      break;
+    case "bell-tree-up":
+      bellTreeHit(when, level, true);
+      break;
+    case "djembe-bass":
+      handDrum(when, 96, 0.19, 0.64 * level);
+      break;
+    case "djembe-tone":
+      handDrum(when, 178, 0.14, 0.54 * level);
+      break;
+    case "djembe-slap":
+      handDrum(when, 250, 0.08, 0.42 * level);
+      woodHit(when, 1980, 0.022, 0.14 * level);
+      break;
+    case "dunun-low":
+      handDrum(when, 72, 0.24, 0.7 * level);
+      break;
+    case "dunun-high":
+      handDrum(when, 128, 0.18, 0.58 * level);
+      break;
+    case "udu-low":
+      drumSine(when, 82, 0.2, 0.52 * level, "sine", 0.38);
+      break;
+    case "udu-high":
+      drumSine(when, 156, 0.13, 0.4 * level, "sine", 0.45);
+      break;
+    case "talking-drum":
+      talkingDrumHit(when, level);
+      break;
+    case "shekere":
+      shakerHit(when, 0.12, 0.2 * level, 4100);
+      break;
+    case "metal-shaker":
+      shakerHit(when, 0.09, 0.18 * level, 7600);
+      metallicHit(when, [3100], 0.05, 0.06 * level, "triangle");
       break;
     default:
       drumSine(when, 220, 0.05, 0.18 * level, "sine", 0.5);
@@ -700,6 +789,28 @@ function shakerHit(when, duration, gainValue, frequency) {
 function tambourineHit(when, level) {
   shakerHit(when, 0.11, 0.16 * level, 5400);
   metallicHit(when, [820, 1210, 1880], 0.09, 0.13 * level, "triangle");
+}
+
+function bellTreeHit(when, level, ascending) {
+  const base = ascending ? 900 : 2300;
+  const step = ascending ? 240 : -240;
+  for (let index = 0; index < 5; index += 1) {
+    metallicHit(when + index * 0.012, [base + step * index], 0.12, 0.065 * level, "triangle");
+  }
+}
+
+function talkingDrumHit(when, level) {
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(145, when);
+  osc.frequency.exponentialRampToValueAtTime(245, when + 0.055);
+  osc.frequency.exponentialRampToValueAtTime(118, when + 0.16);
+  gain.gain.setValueAtTime(0.42 * level, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.18);
+  osc.connect(gain).connect(masterInput);
+  osc.start(when);
+  osc.stop(when + 0.2);
 }
 
 function drumSine(when, frequency, duration, gainValue, type = "sine", endRatio = 0.45) {
@@ -857,7 +968,8 @@ function drawReadout() {
   const baseVoice = state.voices.find((voice) => voice.id === state.baseVoiceId) ?? state.voices[0];
   const pending = state.pendingReplacements.length;
   const kits = [...new Set(state.voices.map((voice) => voice.kit))].join(", ");
-  readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"}; meter ${state.baseMeter}; ${state.baseBpm.toFixed(3)} bpm`;
+  const rethought = baseVoice?.rethoughtFromMeter ? `; from meter ${baseVoice.rethoughtFromMeter}` : "";
+  readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"}; meter ${state.baseMeter}${rethought}; ${state.baseBpm.toFixed(3)} bpm`;
   readoutFields.cycle.textContent = cycleProgressText(state);
   readoutFields.change.textContent = `${state.config.cycleLength} ${cycleUnitText(state.config.cycleLengthKind)}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacements`;
   readoutFields.basisPolicy.textContent = state.config.basisPolicy === "farthest" ? "farmost" : state.config.basisPolicy;
@@ -907,7 +1019,7 @@ function drawTimeline() {
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#101415";
+  ctx.fillStyle = "#f4f6f0";
   ctx.fillRect(0, 0, width, height);
 
   const previewState = state;
@@ -921,7 +1033,7 @@ function drawTimeline() {
   const rows = previewState.voices.length;
   const rowHeight = height / Math.max(1, rows);
 
-  ctx.strokeStyle = "#27302e";
+  ctx.strokeStyle = "#d6ddd3";
   ctx.lineWidth = 1;
   for (let row = 0; row <= rows; row += 1) {
     const y = Math.round(row * rowHeight) + 0.5;
@@ -932,7 +1044,7 @@ function drawTimeline() {
   }
 
   const baseBar = (60 / previewState.baseBpm) * previewState.baseMeter;
-  ctx.strokeStyle = "#43514b";
+  ctx.strokeStyle = "#9aa89d";
   for (let time = 0; time <= previewSeconds; time += baseBar) {
     const x = (time / previewSeconds) * width;
     ctx.beginPath();
@@ -947,7 +1059,7 @@ function drawTimeline() {
     const x = (event.localSeconds / previewSeconds) * width;
     const y = row * rowHeight + rowHeight * 0.2;
     ctx.fillStyle = event.instrument.color;
-    ctx.strokeStyle = "#080b0b";
+    ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 2;
     ctx.fillRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
     ctx.strokeRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
@@ -964,15 +1076,14 @@ function drawVoices() {
     const bpm = voiceBpm(state, voice);
     card.innerHTML = `
       <span class="lane-lamp" aria-hidden="true"></span>
-      <h2>${escapeHtml(voice.instrument.name)}</h2>
-      <dl>
-        <dt>voice</dt><dd>${escapeHtml(voice.id)}</dd>
-        <dt>kit</dt><dd>${escapeHtml(voice.kit)}</dd>
-        <dt>meter</dt><dd>${voice.meter}</dd>
-        <dt>role</dt><dd>${escapeHtml(voice.role)}</dd>
-        <dt>bpm</dt><dd>${bpm.toFixed(3)}</dd>
-        <dt>pattern</dt><dd>${voice.pattern.join("")}</dd>
-      </dl>
+      <span class="voice-id">${escapeHtml(voice.id)}</span>
+      <strong class="instrument-name">${escapeHtml(voice.instrument.name)}</strong>
+      <span class="kit-name">${escapeHtml(voice.kit)}</span>
+      <span class="meter-chip">m ${voice.meter}</span>
+      <span class="role-chip">${escapeHtml(voice.role)}</span>
+      <span class="bpm-chip">${bpm.toFixed(3)} bpm</span>
+      <span class="note-chip">n ${voice.instrument.note}</span>
+      <code class="pattern-chip">${voice.pattern.join("")}</code>
     `;
     voicesEl.append(card);
   }
@@ -985,12 +1096,12 @@ function randomizeControls() {
   document.querySelector("#baseMeter").value = "";
   document.querySelector("#patternCount").value = String(3 + Math.floor(Math.random() * 18));
   const patterns = readNumber("patternCount");
-  document.querySelector("#startOnlyCount").value = String(Math.floor(Math.random() * Math.max(1, patterns / 3)));
-  document.querySelector("#pulseCount").value = String(Math.floor(Math.random() * Math.max(1, patterns / 3)));
+  document.querySelector("#startOnlyCount").value = String(patterns);
+  document.querySelector("#pulseCount").value = "0";
   document.querySelector("#kitPool").value = "";
   document.querySelector("#meterStart").value = "";
   document.querySelector("#cycleLength").value = String(1 + Math.floor(Math.random() * 5));
-  const units = ["resolving-sequences", "bars"];
+  const units = ["bars", "resolving-sequences"];
   document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
   const policies = ["next", "random", "closest", "farmost"];
   document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];

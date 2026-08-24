@@ -8,9 +8,9 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <main class="station">
-      <section class="transport-ribbon" aria-label="Station">
-        <div class="brand-block">
+    <main class="radio-desk">
+      <section class="transport-rail" aria-label="Station">
+        <div>
           <h1>Polyrhythmic Radio</h1>
           <p class="runline"><span id="status">stopped</span><span id="accessBadge">live open</span></p>
         </div>
@@ -28,8 +28,8 @@
         </div>
       </section>
 
-      <section class="meter-wall">
-        <dl id="readout" class="readout-grid">
+      <section class="sequence-surface" aria-label="Polymeter state">
+        <dl id="readout" class="readout-strip">
           <div><dt>tempo basis</dt><dd data-field="tempoBasis"></dd></div>
           <div><dt>cycle</dt><dd data-field="cycle"></dd></div>
           <div><dt>change</dt><dd data-field="change"></dd></div>
@@ -48,9 +48,13 @@
             </dd>
           </div>
         </dl>
+        <canvas id="timeline" width="1280" height="420"></canvas>
+        <div id="voices" class="voices voice-board"></div>
+      </section>
 
-        <dl id="hitStrip" class="hit-strip" aria-live="polite">
-          <div class="hit-lamp-cell"><dt>hit</dt><dd><span class="hit-lamp" data-field="hitLamp"></span></dd></div>
+      <aside id="hitStrip" class="hit-panel" aria-live="polite">
+        <span class="hit-lamp" data-field="hitLamp"></span>
+        <dl>
           <div><dt>instrument</dt><dd data-field="hitInstrument">-</dd></div>
           <div><dt>lane</dt><dd data-field="hitVoice">-</dd></div>
           <div><dt>meter</dt><dd data-field="hitMeter">-</dd></div>
@@ -58,12 +62,9 @@
           <div><dt>role</dt><dd data-field="hitRole">-</dd></div>
           <div><dt>pulse</dt><dd data-field="hitPulse">-</dd></div>
         </dl>
+      </aside>
 
-        <canvas id="timeline" width="1280" height="420"></canvas>
-        <div id="voices" class="voices lane-board"></div>
-      </section>
-
-      <form id="controls" class="control-deck">
+      <form id="controls" class="tuning-dock">
         <fieldset class="control-group">
           <legend>Structure</legend>
           <label>
@@ -86,8 +87,9 @@
             Kit pool
             <select id="kitPool" name="kitPool">
               <option value="">all kits</option>
-              <option value="normal-drumset">normal drumset</option>
-              <option value="ethnic-percussion-kit">ethnic percussion kit</option>
+              <option value="avl-drumkits-generic">AVL Drumkits generic drums</option>
+              <option value="avl-buskmans-holiday-percussion">AVL Buskman's Holiday percussion</option>
+              <option value="perc-african-mpc">Perc African MPC</option>
             </select>
           </label>
         </fieldset>
@@ -113,7 +115,7 @@
           <label>
             Cycle unit
             <select id="cycleLengthKind" name="cycleLengthKind">
-              <option value="">random</option>
+              <option value="">bars</option>
               <option value="resolving-sequences">resolving sequences</option>
               <option value="bars">bars</option>
             </select>

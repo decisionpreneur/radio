@@ -92,7 +92,9 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
     meterCount,
     customMeters: Array.isArray(input.customMeters) ? input.customMeters.map(Number).filter(Number.isFinite) : null,
     meterTiming: LEAN_METER_TIMING_MODE,
-    cycleLengthKind: ensureMemberOrRandom(input.cycleLengthKind, CYCLE_LENGTH_KINDS, rng),
+    cycleLengthKind: hasValue(input.cycleLengthKind)
+      ? ensureMember(input.cycleLengthKind, CYCLE_LENGTH_KINDS, "bars")
+      : "bars",
     cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
     replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "one-per-bar"),
@@ -168,17 +170,24 @@ export function baseBarSeconds(state) {
 }
 
 export function voiceBpm(state, voice) {
-  if (voice.pulseSecondsOverride) {
-    return 60 / voice.pulseSecondsOverride;
-  }
-  return state.baseBpm;
+  return 60 / voicePulseSeconds(state, voice);
 }
 
 export function voicePulseSeconds(state, voice) {
   if (voice.pulseSecondsOverride) {
     return voice.pulseSecondsOverride;
   }
-  return 60 / voiceBpm(state, voice);
+  return 60 / state.baseBpm;
+}
+
+export function basisBpmForVoice(state, voice) {
+  const targetMeter = Math.max(1, state.config.meterStart);
+  const sourcePatternLength = Math.max(1, voice.pattern.length);
+  const pulseSeconds = voicePulseSeconds(state, voice);
+  if (voice.role === "start-only") {
+    return 60 * targetMeter / (sourcePatternLength * pulseSeconds);
+  }
+  return 60 / pulseSeconds;
 }
 
 export function resolvingBaseBars(state) {
@@ -295,7 +304,7 @@ export function chooseBasisVoice(state) {
   const withDistance = candidates.map((voice) => {
     return {
       voice,
-      distance: Math.abs(voiceBpm(state, voice) - state.baseBpm)
+      distance: Math.abs(basisBpmForVoice(state, voice) - state.baseBpm)
     };
   });
   withDistance.sort((a, b) => {
@@ -313,13 +322,11 @@ export function advanceCycle(state) {
   const currentState = completePendingReplacements(state);
   const selected = chooseBasisVoice(currentState);
   const oldBase = currentState.voices.find((voice) => voice.id === currentState.baseVoiceId);
-  const selectedBpm = voiceBpm(currentState, selected);
+  const selectedBpm = basisBpmForVoice(currentState, selected);
   const nextCycleIndex = currentState.cycleIndex + 1;
   const rng = makeRng(`${currentState.seed}:cycle:${nextCycleIndex}`);
-  const selectedClone = cloneVoice(selected);
-  selectedClone.rethoughtFromMeter = selectedClone.meter;
-  selectedClone.meter = currentState.config.meterStart;
-  delete selectedClone.pulseSecondsOverride;
+  const selectedClone = rethinkAsBaseVoice(currentState, selected);
+  selectedClone.rethoughtFromMeter = selected.meter;
   const retainedOldBase = oldBase && oldBase.id !== selected.id
     ? cloneVoiceWithPulseOverride(currentState, oldBase)
     : null;
@@ -549,13 +556,13 @@ function buildRoleStableReplacementPlan(startingVoices, replacementVoices, prese
 function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacementIndex }) {
   if (!state.pendingReplacements.length) return null;
   if (state.config.replacementCadence === "immediate") return null;
-  const localFrom = Math.max(0, fromSeconds - startSeconds);
   const unitSeconds = state.config.replacementCadence === "one-per-resolving-sequence"
     ? resolvingSeconds(state)
     : baseBarSeconds(state);
   if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
+  const localFrom = Math.max(0, fromSeconds - startSeconds);
   const currentIndex = Math.floor((localFrom + EPSILON) / unitSeconds);
-  const nextIndex = Math.max(lastReplacementIndex + 1, currentIndex);
+  const nextIndex = Math.max(lastReplacementIndex + 2, currentIndex + 1);
   return startSeconds + (nextIndex * unitSeconds);
 }
 
@@ -572,6 +579,29 @@ function cloneVoiceWithPulseOverride(state, voice) {
     ...cloneVoice(voice),
     pulseSecondsOverride: voicePulseSeconds(state, voice)
   };
+}
+
+function rethinkAsBaseVoice(state, voice) {
+  const targetMeter = Math.max(1, state.config.meterStart);
+  const clone = cloneVoice(voice);
+  clone.meter = targetMeter;
+  clone.pattern = patternForRethoughtMeter(voice, targetMeter);
+  delete clone.pulseSecondsOverride;
+  return clone;
+}
+
+function patternForRethoughtMeter(voice, targetMeter) {
+  const length = Math.max(1, targetMeter);
+  if (voice.role === "pulse") return Array.from({ length }, () => 1);
+  if (voice.role === "start-only") return Array.from({ length }, (_, index) => (index === 0 ? 1 : 0));
+  const pattern = Array.from({ length }, () => 0);
+  for (let index = 0; index < voice.pattern.length; index += 1) {
+    if (!voice.pattern[index]) continue;
+    const mapped = Math.min(length - 1, Math.round((index / voice.pattern.length) * length));
+    pattern[mapped] = 1;
+  }
+  if (!pattern.some(Boolean)) pattern[0] = 1;
+  return pattern;
 }
 
 function ensureOpeningHit(voices) {
@@ -614,10 +644,6 @@ function sortEvents(a, b) {
 
 function ensureMember(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
-}
-
-function ensureMemberOrRandom(value, allowed, rng) {
-  return allowed.includes(value) ? value : pick(rng, allowed);
 }
 
 function normalizeBasisPolicy(value, rng) {

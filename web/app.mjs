@@ -531,7 +531,7 @@ function showHit(event) {
     hitFields.strip.classList.remove("is-hit");
     hitFields.lamp.classList.remove("is-hit");
     stripHitTimer = null;
-  }, 130);
+  }, 320);
 
   const voiceNode = voicesEl.querySelector(`[data-voice-id="${event.voiceId}"]`);
   if (!voiceNode) return;
@@ -541,7 +541,7 @@ function showHit(event) {
   const timerId = window.setTimeout(() => {
     voiceNode.classList.remove("hit");
     voiceHitTimers.delete(event.voiceId);
-  }, 180);
+  }, 420);
   voiceHitTimers.set(event.voiceId, timerId);
 }
 

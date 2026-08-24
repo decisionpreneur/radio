@@ -8,19 +8,22 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <main class="radio-desk">
-      <section class="transport-rail" aria-label="Station">
-        <div>
+    <main class="radio-console">
+      <section class="command-deck" aria-label="Station">
+        <div class="station-mark">
+          <span class="station-kicker">live polymetric polymodulation</span>
           <h1>Polyrhythmic Radio</h1>
-          <p class="runline"><span id="status">stopped</span><span id="accessBadge">license required</span></p>
         </div>
-        <div class="transport-actions" aria-label="Transport">
-          <button id="startBtn" class="icon-button icon-play primary-play" type="button" title="Play live audio" aria-label="Play live audio"><span class="visually-hidden">Play</span></button>
-          <button id="stopBtn" class="icon-button icon-stop" type="button" title="Stop audio" aria-label="Stop audio"><span class="visually-hidden">Stop</span></button>
-          <button id="randomBtn" class="icon-button icon-random" type="button" title="Random controls" aria-label="Random controls"><span class="visually-hidden">Random</span></button>
-          <button id="shareBtn" class="icon-button icon-copy" type="button" title="Copy station link" aria-label="Copy station link"><span class="visually-hidden">Copy link</span></button>
-          <button id="midiBtn" class="icon-button icon-midi" type="button" disabled title="Connect MIDI output" aria-label="Connect MIDI output"><span class="visually-hidden">MIDI</span></button>
-          <button id="exportBtn" class="icon-button icon-export" type="button" disabled title="Export MIDI file" aria-label="Export MIDI file"><span class="visually-hidden">Export MIDI</span></button>
+        <div class="transport-cluster">
+          <p class="runline"><span id="status">stopped</span><span id="accessBadge">license required</span></p>
+          <div class="transport-actions" aria-label="Transport">
+            <button id="startBtn" class="icon-button icon-play primary-play" type="button" title="Play live audio" aria-label="Play live audio"><span class="visually-hidden">Play</span></button>
+            <button id="stopBtn" class="icon-button icon-stop" type="button" title="Stop audio" aria-label="Stop audio"><span class="visually-hidden">Stop</span></button>
+            <button id="randomBtn" class="icon-button icon-random" type="button" title="Random controls" aria-label="Random controls"><span class="visually-hidden">Random</span></button>
+            <button id="shareBtn" class="icon-button icon-copy" type="button" title="Copy station link" aria-label="Copy station link"><span class="visually-hidden">Copy link</span></button>
+            <button id="midiBtn" class="icon-button icon-midi" type="button" disabled title="Connect MIDI output" aria-label="Connect MIDI output"><span class="visually-hidden">MIDI</span></button>
+            <button id="exportBtn" class="icon-button icon-export" type="button" disabled title="Export MIDI file" aria-label="Export MIDI file"><span class="visually-hidden">Export MIDI</span></button>
+          </div>
         </div>
         <div class="commerce-actions" aria-label="Access">
           <a id="checkoutLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1" data-checkout-url="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1">Subscribe $5/mo USD</a>
@@ -28,7 +31,7 @@
         </div>
       </section>
 
-      <section class="sequence-surface" aria-label="Polymeter state">
+      <section class="signal-deck" aria-label="Polymeter state">
         <dl id="readout" class="readout-strip">
           <div><dt>tempo basis</dt><dd data-field="tempoBasis"></dd></div>
           <div><dt>cycle</dt><dd data-field="cycle"></dd></div>
@@ -48,11 +51,9 @@
             </dd>
           </div>
         </dl>
-        <canvas id="timeline" width="1280" height="420"></canvas>
-        <div id="voices" class="voices voice-board"></div>
       </section>
 
-      <aside id="hitStrip" class="hit-panel" aria-live="polite">
+      <section id="hitStrip" class="hit-panel" aria-live="polite">
         <span class="hit-lamp" data-field="hitLamp"></span>
         <dl>
           <div><dt>instrument</dt><dd data-field="hitInstrument">-</dd></div>
@@ -62,7 +63,12 @@
           <div><dt>role</dt><dd data-field="hitRole">-</dd></div>
           <div><dt>pulse</dt><dd data-field="hitPulse">-</dd></div>
         </dl>
-      </aside>
+      </section>
+
+      <section class="sequence-surface" aria-label="Live pattern surface">
+        <canvas id="timeline" width="1280" height="420"></canvas>
+        <div id="voices" class="voices voice-board"></div>
+      </section>
 
       <form id="controls" class="tuning-dock">
         <fieldset class="control-group">

@@ -15,22 +15,22 @@ function lane(kitId, kitName, value) {
 }
 
 export const DRUM_LANES = Object.freeze([
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Kick Drum", note: 36, color: "#566a79", sound: "kick-tight" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Sidestick", note: 37, color: "#9f655f", sound: "rim" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Center", note: 38, color: "#b66058", sound: "snare" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Edge", note: 39, color: "#c27a6d", sound: "snare-edge" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare High", note: 40, color: "#cf8b78", sound: "snare-edge" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Low Tom", note: 41, color: "#7a6152", sound: "tom-low" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Closed HiHat", note: 42, color: "#9da75f", sound: "hihat-closed" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Low-Mid Tom", note: 43, color: "#8b6a55", sound: "tom-low-mid" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Open HiHat", note: 44, color: "#b5b970", sound: "semi-open-hihat" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "High-Mid Tom", note: 45, color: "#93634f", sound: "tom-high-mid" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Open HiHat 2", note: 46, color: "#c5c881", sound: "swish-hihat" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "High Tom", note: 47, color: "#a87559", sound: "tom-high" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Crash Cymbal 1", note: 48, color: "#c6a94f", sound: "crash" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Crash Cymbal 2", note: 49, color: "#d2b85e", sound: "crash" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Ride Cymbal", note: 50, color: "#8ca1ad", sound: "ride" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Ride Cup", note: 51, color: "#9ab1bf", sound: "ride-bell" })
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Kick Tight Gen Purpose", note: 36, color: "#566a79", sound: "kick-tight" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Rim Sidestick Gen Purpose", note: 37, color: "#9f655f", sound: "rim" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Gen Purpose", note: 38, color: "#b66058", sound: "snare" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Gen Purpose 2", note: 39, color: "#c27a6d", sound: "snare-edge" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Gen Purpose 3", note: 40, color: "#cf8b78", sound: "snare-edge" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom Low Gen Purpose", note: 41, color: "#7a6152", sound: "tom-low" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Hihat Closed Gen Purpose", note: 42, color: "#9da75f", sound: "hihat-closed" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom Low-Mid Gen Purpose", note: 43, color: "#8b6a55", sound: "tom-low-mid" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Hihat Open Gen Purpose", note: 44, color: "#b5b970", sound: "semi-open-hihat" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom High-Mid Gen Purpose", note: 45, color: "#93634f", sound: "tom-high-mid" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Hihat Open Gen Purpose 2", note: 46, color: "#c5c881", sound: "swish-hihat" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom High Gen Purpose", note: 47, color: "#a87559", sound: "tom-high" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Crash Gen Purpose", note: 48, color: "#c6a94f", sound: "crash" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Crash Gen Purpose 2", note: 49, color: "#d2b85e", sound: "crash" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Ride Gen Purpose", note: 50, color: "#8ca1ad", sound: "ride" }),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Ride Cup Gen Purpose", note: 51, color: "#9ab1bf", sound: "ride-bell" })
 ]);
 
 export const ETHNIC_PERCUSSION_LANES = Object.freeze([

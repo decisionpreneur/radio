@@ -90,7 +90,8 @@ const tunedControlIds = [
   "meterStart",
   "cycleLength",
   "cycleLengthKind",
-  "basisPolicy"
+  "basisPolicy",
+  "replacementCadence"
 ];
 const touchedControls = new Set();
 
@@ -1014,7 +1015,8 @@ function makeStateFromControls(previousState = null) {
     meterTiming: "same-pulse-polymeter",
     cycleLength: readOptionalNumber("cycleLength", previousConfig?.cycleLength),
     cycleLengthKind: readOptionalText("cycleLengthKind", previousConfig?.cycleLengthKind),
-    basisPolicy: readOptionalText("basisPolicy", previousConfig?.basisPolicy)
+    basisPolicy: readOptionalText("basisPolicy", previousConfig?.basisPolicy),
+    replacementCadence: readOptionalText("replacementCadence", previousConfig?.replacementCadence)
   });
 }
 
@@ -1031,7 +1033,7 @@ function drawReadout() {
   const rethought = baseVoice?.rethoughtFromMeter ? `; from meter ${baseVoice.rethoughtFromMeter}` : "";
   readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"}; meter ${state.baseMeter}${rethought}; ${state.baseBpm.toFixed(3)} bpm`;
   readoutFields.cycle.textContent = cycleProgressText(state);
-  readoutFields.change.textContent = `${state.config.cycleLength} ${cycleUnitText(state.config.cycleLengthKind)}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacements`;
+  readoutFields.change.textContent = `${state.config.cycleLength} ${cycleUnitText(state.config.cycleLengthKind)}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacements; ${replacementCadenceText(state.config.replacementCadence)}`;
   readoutFields.basisPolicy.textContent = state.config.basisPolicy === "farthest" ? "farmost" : state.config.basisPolicy;
   readoutFields.voices.textContent = String(state.voices.length);
   readoutFields.roles.textContent = roleCountText(state);
@@ -1057,6 +1059,12 @@ function cycleProgressText(currentState, now = null, sectionStart = null) {
 
 function cycleUnitText(value) {
   return value === "resolving-sequences" ? "resolving sequences" : "bars";
+}
+
+function replacementCadenceText(value) {
+  if (value === "one-per-resolving-sequence") return "one per resolving sequence";
+  if (value === "immediate") return "immediate";
+  return "one per bar";
 }
 
 function roleCountText(currentState) {
@@ -1130,7 +1138,8 @@ function drawVoices() {
   voicesEl.innerHTML = "";
   for (const voice of state.voices) {
     const card = document.createElement("article");
-    card.className = `voice${voice.id === state.baseVoiceId ? " base" : ""}`;
+    const held = voice.protectedThroughCycle !== null && voice.protectedThroughCycle >= state.cycleIndex;
+    card.className = `voice${voice.id === state.baseVoiceId ? " base" : ""}${held ? " held" : ""}`;
     card.dataset.voiceId = voice.id;
     card.style.setProperty("--voice-color", voice.instrument.color);
     const bpm = voiceBpm(state, voice);
@@ -1141,6 +1150,7 @@ function drawVoices() {
       <span class="kit-name">${escapeHtml(voice.kit)}</span>
       <span class="meter-chip">m ${voice.meter}</span>
       <span class="role-chip">${escapeHtml(voice.role)}</span>
+      <span class="hold-chip">${held ? "held" : "-"}</span>
       <span class="bpm-chip">${bpm.toFixed(3)} bpm</span>
       <span class="note-chip">n ${voice.instrument.note}</span>
       <code class="pattern-chip">${voice.pattern.join("")}</code>
@@ -1165,6 +1175,7 @@ function randomizeControls() {
   document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
   const policies = ["next", "random", "closest", "farmost"];
   document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];
+  document.querySelector("#replacementCadence").value = "one-per-bar";
 }
 
 function applySharedConfigFromUrl() {
@@ -1193,6 +1204,7 @@ function stationHashParams() {
     cycleLength: config.cycleLength,
     cycleLengthKind: config.cycleLengthKind,
     basisPolicy: config.basisPolicy === "farthest" ? "farmost" : config.basisPolicy,
+    replacementCadence: config.replacementCadence,
     exportSections: value("exportSections") || "6"
   };
   for (const [key, value] of Object.entries(values)) {

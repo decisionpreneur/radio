@@ -354,7 +354,13 @@ export function advanceCycle(state) {
   };
 
   if (state.config.replacementCadence === "immediate") {
-    nextState.voices = replacementPlan.finalVoices;
+    nextState.voices = retainedOldBase
+      ? [
+          selectedClone,
+          retainedOldBase,
+          ...replacementPlan.finalVoices.filter((voice) => voice.id !== selectedClone.id)
+        ]
+      : replacementPlan.finalVoices;
     return nextState;
   }
 
@@ -365,10 +371,13 @@ export function advanceCycle(state) {
       .filter((voice) => voice.id !== selectedClone.id && voice.id !== retainedOldBase?.id)
       .map((voice) => cloneVoiceWithPulseOverride(currentState, voice))
   ];
+  const protectedIds = new Set(preserved.map((voice) => voice.id));
+  if (retainedOldBase) protectedIds.add(retainedOldBase.id);
+
   nextState.pendingReplacements = buildRoleStableReplacementPlan(
     nextState.voices,
     replacementPlan.replacementVoices,
-    new Set(preserved.map((voice) => voice.id))
+    protectedIds
   );
   return nextState;
 }
@@ -385,7 +394,11 @@ export function applyNextReplacement(state) {
   if (!state.pendingReplacements.length) return state;
   const [replacement, ...rest] = state.pendingReplacements;
   const voices = state.voices.slice();
-  voices[replacement.slot] = replacement.voice;
+  if (Number.isInteger(replacement.slot) && replacement.slot >= 0) {
+    voices[replacement.slot] = replacement.voice;
+  } else {
+    voices.push(replacement.voice);
+  }
   return {
     ...state,
     voices,
@@ -547,9 +560,9 @@ function buildRoleStableReplacementPlan(startingVoices, replacementVoices, prese
   return replacementVoices.map((voice) => {
     const matchingSlots = slotsByRole.get(voice.role) ?? [];
     const matchingSlot = matchingSlots.find((slot) => availableSlots.has(slot));
-    const slot = matchingSlot ?? availableSlots.values().next().value;
-    availableSlots.delete(slot);
-    const slotVoice = startingVoices[slot];
+    const slot = matchingSlot ?? availableSlots.values().next().value ?? null;
+    if (slot !== null) availableSlots.delete(slot);
+    const slotVoice = slot !== null ? startingVoices[slot] : null;
     const instrument = slotVoice?.instrument ? { ...slotVoice.instrument } : { ...voice.instrument };
     return {
       slot,

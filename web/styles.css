@@ -407,7 +407,7 @@ select:focus-visible {
   --voice-color: var(--green);
   min-width: 790px;
   display: grid;
-  grid-template-columns: 14px 44px minmax(160px, 1.35fr) minmax(138px, 1fr) 58px 92px 88px 56px minmax(92px, 1fr);
+  grid-template-columns: 14px 44px minmax(160px, 1.35fr) minmax(138px, 1fr) 58px 92px 58px 88px 56px minmax(92px, 1fr);
   gap: 10px;
   align-items: center;
   padding: 9px 12px;
@@ -426,6 +426,10 @@ select:focus-visible {
   box-shadow: inset 0 0 0 1px var(--voice-color);
 }
 
+.voice.held {
+  background: #20251f;
+}
+
 .lane-lamp {
   width: 13px;
   height: 13px;
@@ -441,6 +445,7 @@ select:focus-visible {
 .voice-id,
 .meter-chip,
 .role-chip,
+.hold-chip,
 .bpm-chip,
 .note-chip,
 .pattern-chip {
@@ -453,9 +458,14 @@ select:focus-visible {
 .voice-id,
 .meter-chip,
 .role-chip,
+.hold-chip,
 .bpm-chip,
 .note-chip {
   font-weight: 800;
+}
+
+.hold-chip {
+  color: var(--amber);
 }
 
 .instrument-name,

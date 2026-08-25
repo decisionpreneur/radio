@@ -116,6 +116,7 @@ let statusHoldUntil = 0;
 const hitTimeouts = new Set();
 const voiceHitTimers = new Map();
 let stripHitTimer = null;
+let lastHitVoiceId = null;
 
 const SCHEDULE_OFFSET_SECONDS = 0.02;
 const SCHEDULE_LOOKAHEAD_SECONDS = 0.35;
@@ -533,6 +534,7 @@ function showHit(event) {
   hitFields.kit.textContent = event.kit;
   hitFields.role.textContent = event.role;
   hitFields.pulse.textContent = String(event.pulseIndex);
+  lastHitVoiceId = event.voiceId;
   hitFields.strip.classList.add("is-hit");
   hitFields.lamp.classList.add("is-hit");
 
@@ -564,6 +566,7 @@ function clearHitIndicators() {
   stripHitTimer = null;
   for (const timeout of voiceHitTimers.values()) window.clearTimeout(timeout);
   voiceHitTimers.clear();
+  lastHitVoiceId = null;
   hitFields.strip?.classList.remove("is-hit");
   hitFields.lamp?.classList.remove("is-hit");
   voicesEl.querySelectorAll(".voice.hit, .voice.last-hit").forEach((node) => {
@@ -1203,7 +1206,8 @@ function drawVoices() {
   for (const voice of state.voices) {
     const card = document.createElement("article");
     const held = voice.protectedThroughCycle !== null && voice.protectedThroughCycle >= state.cycleIndex;
-    card.className = `voice${voice.id === state.baseVoiceId ? " base" : ""}${held ? " held" : ""}`;
+    const lastHit = voice.id === lastHitVoiceId;
+    card.className = `voice${voice.id === state.baseVoiceId ? " base" : ""}${held ? " held" : ""}${lastHit ? " last-hit" : ""}`;
     card.dataset.voiceId = voice.id;
     card.style.setProperty("--voice-color", voice.instrument.color);
     const bpm = voiceBpm(state, voice);

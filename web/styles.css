@@ -8,14 +8,14 @@
   --ink-soft: #34383c;
   --muted: #59646c;
   --muted-2: #737e85;
-  --line: #111418;
-  --line-soft: #8d989f;
+  --line: #1d2225;
+  --line-soft: #7f8a91;
   --panel: #ffffff;
   --panel-2: #f7f8f5;
   --panel-3: #dfe7e4;
   --control: #ffffff;
-  --stage: #151615;
-  --stage-2: #232420;
+  --stage: #111518;
+  --stage-2: #23271f;
   --amber: #d8a629;
   --cyan: #008b92;
   --green: #25834f;
@@ -52,6 +52,7 @@ body {
 
 body {
   color: var(--ink);
+  font-size: 14px;
 }
 
 button,
@@ -91,7 +92,7 @@ a {
 .transport-cluster,
 .commerce-actions {
   min-width: 0;
-  padding: 16px;
+  padding: 17px 16px;
 }
 
 .station-mark {
@@ -106,7 +107,7 @@ a {
 
 .transport-cluster {
   display: grid;
-  gap: 10px;
+  gap: 11px;
   background: var(--panel);
 }
 
@@ -176,9 +177,9 @@ html[data-access="unlocked"] #accessBadge {
 button,
 #donateLink,
 #checkoutLink {
-  min-height: 46px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
+  min-height: 48px;
+  border: 2px solid var(--line);
+  border-radius: 2px;
   padding: 0 12px;
   color: var(--ink);
   background: var(--panel-2);
@@ -190,6 +191,7 @@ button,
   line-height: 1.1;
   font-weight: 800;
   white-space: nowrap;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.12);
 }
 
 button:hover,
@@ -241,7 +243,7 @@ button:disabled {
 
 .icon-button {
   width: 100%;
-  min-height: 54px;
+  min-height: 58px;
   padding: 0;
   aspect-ratio: 1;
   position: relative;
@@ -354,15 +356,35 @@ select:focus-visible {
 .readout-strip {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 1px;
   background: var(--line);
 }
 
 .readout-strip div {
   min-width: 0;
-  padding: 9px 11px;
+  padding: 10px 11px;
   background: var(--panel);
+}
+
+.readout-strip div:nth-child(1),
+.readout-strip div:nth-child(3),
+.readout-strip div:nth-child(6),
+.readout-strip div:nth-child(8),
+.readout-strip div:nth-child(9),
+.readout-strip div:nth-child(10) {
+  grid-column: span 2;
+}
+
+.readout-strip div:nth-child(2),
+.readout-strip div:nth-child(4),
+.readout-strip div:nth-child(5),
+.readout-strip div:nth-child(7) {
+  grid-column: span 1;
+}
+
+.readout-strip div:nth-child(11) {
+  grid-column: span 8;
 }
 
 .change-rail {
@@ -554,7 +576,7 @@ select:focus-visible {
   grid-template-areas: "lamp id instrument kit meter role hold bpm note pattern";
   gap: 10px;
   align-items: center;
-  min-height: 48px;
+  min-height: 50px;
   padding: 8px 12px;
   border-left: 6px solid transparent;
   background: var(--panel);
@@ -722,12 +744,22 @@ label {
 input,
 select {
   width: 100%;
-  min-height: 36px;
-  border: 1px solid var(--line-soft);
-  border-radius: 3px;
-  padding: 6px 8px;
+  min-height: 38px;
+  border: 2px solid var(--line-soft);
+  border-radius: 2px;
+  padding: 7px 9px;
   color: var(--ink);
   background: var(--control);
+  font-weight: 700;
+}
+
+select {
+  appearance: none;
+  padding-right: 28px;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--ink-soft) 50%) calc(100% - 16px) 52% / 6px 6px no-repeat,
+    linear-gradient(135deg, var(--ink-soft) 50%, transparent 50%) calc(100% - 11px) 52% / 6px 6px no-repeat,
+    var(--control);
 }
 
 input::placeholder {
@@ -856,6 +888,18 @@ input::placeholder {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .readout-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .readout-strip div {
+    grid-column: span 2;
+  }
+
+  .readout-strip div:nth-child(11) {
+    grid-column: 1 / -1;
+  }
+
   .voice-header {
     display: none;
   }
@@ -884,6 +928,14 @@ input::placeholder {
 
   .readout-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .readout-strip div {
+    grid-column: span 1;
+  }
+
+  .readout-strip div:nth-child(11) {
+    grid-column: 1 / -1;
   }
 
   .hit-panel dl,

@@ -1032,12 +1032,11 @@ function draw() {
 
 function drawReadout() {
   const baseVoice = state.voices.find((voice) => voice.id === state.baseVoiceId) ?? state.voices[0];
-  const pending = state.pendingReplacements.length;
   const kits = [...new Set(state.voices.map((voice) => voice.kit))].join(", ");
   const rethought = baseVoice?.rethoughtFromMeter ? `; from meter ${baseVoice.rethoughtFromMeter}` : "";
   readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"}; meter ${state.baseMeter}${rethought}; ${state.baseBpm.toFixed(3)} bpm`;
   readoutFields.cycle.textContent = cycleProgressText(state);
-  readoutFields.change.textContent = `${state.config.cycleLength} ${cycleUnitText(state.config.cycleLengthKind)}; ${resolvingBaseBars(state)} resolving bars; ${pending} replacements; ${replacementCadenceText(state.config.replacementCadence)}`;
+  readoutFields.change.textContent = changeText(state);
   readoutFields.basisPolicy.textContent = state.config.basisPolicy === "farthest" ? "farmost" : state.config.basisPolicy;
   readoutFields.voices.textContent = String(state.voices.length);
   readoutFields.roles.textContent = roleCountText(state);
@@ -1052,6 +1051,7 @@ function drawReadout() {
 
 function updateCycleProgress(now) {
   readoutFields.cycle.textContent = cycleProgressText(live.state, now, live.sectionStart);
+  readoutFields.change.textContent = changeText(live.state, live);
   updateChangeRail(live.state, now, live.sectionStart, live);
 }
 
@@ -1065,6 +1065,13 @@ function cycleProgressText(currentState, now = null, sectionStart = null) {
 
 function cycleUnitText(value) {
   return value === "resolving-sequences" ? "resolving sequences" : "bars";
+}
+
+function changeText(currentState, liveState = null) {
+  const applied = Math.max(0, (liveState?.lastReplacementBar ?? -1) + 1);
+  const total = applied + currentState.pendingReplacements.length;
+  const replacements = total ? `${applied}/${total} replacements` : "basis";
+  return `${currentState.config.cycleLength} ${cycleUnitText(currentState.config.cycleLengthKind)}; ${resolvingBaseBars(currentState)} resolving bars; ${replacements}; ${replacementCadenceText()}`;
 }
 
 function updateChangeRail(currentState, now = null, sectionStart = null, liveState = null) {

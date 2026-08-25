@@ -618,6 +618,15 @@ select:focus-visible {
   box-shadow: inset 0 0 0 3px var(--voice-color);
 }
 
+.voice.last-hit {
+  box-shadow: inset 0 0 0 2px var(--voice-color);
+}
+
+.voice.last-hit .lane-lamp {
+  outline: 3px solid var(--voice-color);
+  outline-offset: 2px;
+}
+
 .voice.held {
   background: #edf1ef;
 }

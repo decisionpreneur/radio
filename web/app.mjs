@@ -545,6 +545,8 @@ function showHit(event) {
 
   const voiceNode = voicesEl.querySelector(`[data-voice-id="${event.voiceId}"]`);
   if (!voiceNode) return;
+  voicesEl.querySelectorAll(".voice.last-hit").forEach((node) => node.classList.remove("last-hit"));
+  voiceNode.classList.add("last-hit");
   const previousTimer = voiceHitTimers.get(event.voiceId);
   if (previousTimer) window.clearTimeout(previousTimer);
   voiceNode.classList.add("hit");
@@ -564,7 +566,10 @@ function clearHitIndicators() {
   voiceHitTimers.clear();
   hitFields.strip?.classList.remove("is-hit");
   hitFields.lamp?.classList.remove("is-hit");
-  voicesEl.querySelectorAll(".voice.hit").forEach((node) => node.classList.remove("hit"));
+  voicesEl.querySelectorAll(".voice.hit, .voice.last-hit").forEach((node) => {
+    node.classList.remove("hit");
+    node.classList.remove("last-hit");
+  });
   for (const field of ["instrument", "voice", "meter", "kit", "role", "pulse"]) {
     if (hitFields[field]) hitFields[field].textContent = "-";
   }

@@ -2,6 +2,7 @@ const LEMON_LICENSE_API = "https://api.lemonsqueezy.com/v1/licenses";
 const TEXT_ENCODER = new TextEncoder();
 const BUILT_IN_SPECIAL_USE_KEY_HASHES = `
 40ce837e0e42bb4f8d6484167fd384602f6e81bf5a4b896fb11488c6f25c1bb8
+47559c012b70351d4dfb51124dd3225341327a46256a4d271c0b26de57fec37f
 `;
 
 export async function handleLicenseRequest(context, action, options = {}) {

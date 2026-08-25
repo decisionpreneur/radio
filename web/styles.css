@@ -169,8 +169,8 @@ html[data-access="unlocked"] #accessBadge {
 
 .transport-actions {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(118px, 1.5fr) repeat(5, minmax(54px, 0.7fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: stretch;
 }
@@ -243,15 +243,19 @@ button:disabled {
 }
 
 .icon-button {
-  width: 100%;
-  min-height: 58px;
+  flex: 0 0 58px;
+  width: 58px;
+  min-width: 58px;
+  height: 58px;
+  min-height: 0;
   padding: 0;
-  aspect-ratio: 1;
   position: relative;
 }
 
 .primary-play.icon-button {
-  aspect-ratio: auto;
+  flex-basis: 118px;
+  width: 118px;
+  min-width: 118px;
 }
 
 .icon-button::before,
@@ -855,7 +859,7 @@ input::placeholder {
   }
 
   .transport-actions {
-    grid-template-columns: repeat(3, minmax(48px, 1fr));
+    align-items: stretch;
   }
 
   .hit-panel dl {
@@ -893,11 +897,11 @@ input::placeholder {
   }
 
   .transport-actions {
-    grid-template-columns: repeat(3, minmax(54px, 1fr));
+    align-items: stretch;
   }
 
   .primary-play {
-    grid-column: span 2;
+    flex-basis: 118px;
   }
 
   .commerce-actions {
@@ -995,6 +999,15 @@ input::placeholder {
   }
 
   .icon-button {
-    min-height: 54px;
+    flex-basis: 54px;
+    width: 54px;
+    min-width: 54px;
+    height: 54px;
+  }
+
+  .primary-play.icon-button {
+    flex-basis: 112px;
+    width: 112px;
+    min-width: 112px;
   }
 }

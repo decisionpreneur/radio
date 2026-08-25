@@ -39,7 +39,6 @@ const exportBtn = document.querySelector("#exportBtn");
 const midiOutputSelect = document.querySelector("#midiOutput");
 const donateLink = document.querySelector("#donateLink");
 const checkoutLink = document.querySelector("#checkoutLink");
-const donationAmountInput = document.querySelector("#donationAmount");
 const licenseKeyInput = document.querySelector("#licenseKey");
 const licenseEmailInput = document.querySelector("#licenseEmail");
 const unlockBtn = document.querySelector("#unlockBtn");
@@ -73,7 +72,6 @@ const hitFields = {
 
 const commerceLinks = {
   donationUrl: donateLink.dataset.donationUrl,
-  donationCheckout: false,
   checkoutUrl: checkoutLink.dataset.checkoutUrl
 };
 applyCommerceLinks();
@@ -180,31 +178,6 @@ donateLink.addEventListener("click", async (event) => {
     event.preventDefault();
     paywallStatus.textContent = "donation link unavailable";
     setStatus("donation link unavailable", 1600);
-    return;
-  }
-  if (donateLink.dataset.state !== "checkout") return;
-  event.preventDefault();
-  paywallStatus.textContent = "opening donation";
-  try {
-    const response = await fetch("/api/donation/checkout", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        amountUsd: donationAmountInput.value
-      })
-    });
-    const payload = await response.json().catch(() => ({}));
-    const url = normalizeRuntimeHttpsUrl(payload?.url);
-    if (!response.ok || !url) {
-      throw new Error(payload?.error || "donation checkout unavailable");
-    }
-    window.location.href = url;
-  } catch {
-    paywallStatus.textContent = "donation checkout unavailable";
-    setStatus("donation checkout unavailable", 1800);
   }
 });
 
@@ -337,7 +310,6 @@ async function loadPublicConfig() {
   if (config.donationUrl) {
     commerceLinks.donationUrl = config.donationUrl;
   }
-  commerceLinks.donationCheckout = config.donationCheckout === true;
   applyCommerceLinks();
 }
 
@@ -363,13 +335,6 @@ function configureCommerceLink(link, url, activeText, inactiveText) {
 function configureDonationLink() {
   if (commerceLinks.donationUrl) {
     configureCommerceLink(donateLink, commerceLinks.donationUrl, "Donate", "donation link unavailable");
-    return;
-  }
-  if (commerceLinks.donationCheckout) {
-    donateLink.href = "#donate";
-    donateLink.textContent = "Donate";
-    donateLink.removeAttribute("title");
-    donateLink.dataset.state = "checkout";
     return;
   }
   configureCommerceLink(donateLink, "", "Donate", "donation link unavailable");
@@ -1299,17 +1264,6 @@ function markTunedControlsTouched() {
 function releaseBlankTouchedControls() {
   for (const id of tunedControlIds) {
     if (value(id) === "") touchedControls.delete(id);
-  }
-}
-
-function normalizeRuntimeHttpsUrl(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  try {
-    const url = new URL(raw);
-    return url.protocol === "https:" ? url.href : "";
-  } catch {
-    return "";
   }
 }
 

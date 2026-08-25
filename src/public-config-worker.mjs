@@ -1,8 +1,7 @@
 export function publicConfig(env = {}) {
   return {
     checkoutUrl: normalizePublicUrl(env.RADIO_CHECKOUT_URL),
-    donationUrl: normalizePublicUrl(env.RADIO_DONATION_URL),
-    donationCheckout: hasDonationCheckout(env)
+    donationUrl: normalizePublicUrl(env.RADIO_DONATION_URL)
   };
 }
 
@@ -31,16 +30,4 @@ function normalizePublicUrl(value) {
   } catch {
     return "";
   }
-}
-
-function hasDonationCheckout(env) {
-  return Boolean(
-    normalizeText(env.RADIO_DONATION_LEMONSQUEEZY_API_KEY || env.RADIO_LEMONSQUEEZY_API_KEY) &&
-    normalizeText(env.RADIO_DONATION_STORE_ID || env.RADIO_LEMONSQUEEZY_STORE_ID) &&
-    normalizeText(env.RADIO_DONATION_VARIANT_ID)
-  );
-}
-
-function normalizeText(value) {
-  return String(value ?? "").trim();
 }

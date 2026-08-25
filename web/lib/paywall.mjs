@@ -87,8 +87,7 @@ export async function fetchPublicConfig(fetcher = globalThis.fetch) {
     const payload = await response.json();
     return {
       checkoutUrl: normalizeHttpsUrl(payload?.checkoutUrl),
-      donationUrl: normalizeHttpsUrl(payload?.donationUrl),
-      donationCheckout: payload?.donationCheckout === true
+      donationUrl: normalizeHttpsUrl(payload?.donationUrl)
     };
   } catch {
     return {};

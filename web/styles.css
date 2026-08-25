@@ -1,23 +1,23 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: Inter, Arial, Helvetica, sans-serif;
-  background: #101214;
-  color: #eef2f1;
-  --bg: #101214;
-  --panel: #15191c;
-  --panel-2: #1b2125;
-  --panel-3: #22292e;
-  --ink: #eef2f1;
-  --muted: #9ca7aa;
-  --muted-2: #737f84;
-  --line: #303941;
-  --line-strong: #48545c;
-  --control: #0f1214;
-  --amber: #d5a13d;
-  --cyan: #60b6c8;
-  --green: #65b985;
-  --red: #c66555;
-  --violet: #9d86c8;
+  background: #ebe7d8;
+  color: #151512;
+  --bg: #ebe7d8;
+  --panel: #fbfaf2;
+  --panel-2: #f5f2e7;
+  --panel-3: #ece8d8;
+  --ink: #151512;
+  --muted: #626159;
+  --muted-2: #777468;
+  --line: #25241f;
+  --line-strong: #454237;
+  --control: #fffef7;
+  --amber: #d9a12e;
+  --cyan: #177e89;
+  --green: #287a4e;
+  --red: #a43f32;
+  --violet: #6457a6;
 }
 
 * {
@@ -68,16 +68,15 @@ a {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(220px, 0.85fr) minmax(360px, 1.55fr) minmax(220px, 0.7fr);
-  gap: 1px;
+  gap: 2px;
   background: var(--line);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 2px solid var(--line);
 }
 
 .station-mark,
 .transport-cluster,
 .commerce-actions {
   min-width: 0;
-  background: var(--panel);
   padding: 16px;
 }
 
@@ -85,19 +84,29 @@ a {
   display: grid;
   align-content: center;
   gap: 6px;
+  color: #f7f2df;
+  background: #171713;
+}
+
+.transport-cluster {
+  background: #fbfaf2;
+}
+
+.commerce-actions {
+  background: #e7eadf;
 }
 
 .station-kicker {
-  color: var(--cyan);
+  color: #e9c059;
   font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(25px, 3.8vw, 52px);
+  font-size: 42px;
   line-height: 0.98;
   letter-spacing: 0;
 }
@@ -124,7 +133,7 @@ h1 {
   align-items: center;
   padding: 0 10px;
   border: 1px solid var(--line-strong);
-  border-radius: 5px;
+  border-radius: 3px;
   background: var(--control);
 }
 
@@ -165,7 +174,7 @@ button,
 #checkoutLink {
   min-height: 46px;
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: 3px;
   padding: 0 12px;
   color: var(--ink);
   background: var(--panel-2);
@@ -205,20 +214,20 @@ button:hover,
 
 #donateLink {
   border-color: var(--green);
-  color: #eaf7ef;
-  background: #1e3b30;
+  color: #f7fff7;
+  background: var(--green);
 }
 
 #donateLink[data-state="unavailable"] {
-  color: #aab4b7;
-  background: #202529;
+  color: #706f67;
+  background: #f3f1e7;
   border-style: dashed;
 }
 
 #donateLink[data-state="checkout"] {
   border-color: var(--green);
-  color: #eaf7ef;
-  background: #1e3b30;
+  color: #f7fff7;
+  background: var(--green);
 }
 
 button:disabled {
@@ -290,14 +299,14 @@ select:focus-visible {
 .signal-deck {
   min-width: 0;
   background: var(--line);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 2px solid var(--line);
 }
 
 .readout-strip {
   margin: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
-  gap: 1px;
+  gap: 2px;
   background: var(--line);
 }
 
@@ -334,7 +343,7 @@ select:focus-visible {
   height: 9px;
   overflow: hidden;
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: 3px;
   background: var(--control);
 }
 
@@ -355,15 +364,15 @@ select:focus-visible {
   gap: 14px;
   align-items: center;
   padding: 12px 16px;
-  background: #13171a;
-  border-bottom: 1px solid var(--line);
+  background: #faf7ed;
+  border-bottom: 2px solid var(--line);
 }
 
 .hit-panel .hit-lamp {
   width: 64px;
   height: 64px;
   border: 2px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: 3px;
   background: var(--control);
 }
 
@@ -371,7 +380,7 @@ select:focus-visible {
 .hit-lamp.is-hit {
   border-color: var(--amber);
   background: var(--amber);
-  box-shadow: 0 0 0 8px rgba(213, 161, 61, 0.18);
+  box-shadow: 0 0 0 8px rgba(217, 161, 46, 0.22);
 }
 
 .hit-panel dl {
@@ -379,7 +388,7 @@ select:focus-visible {
   margin: 0;
   display: grid;
   grid-template-columns: repeat(6, minmax(86px, 1fr));
-  gap: 1px;
+  gap: 2px;
   background: var(--line);
 }
 
@@ -402,8 +411,8 @@ select:focus-visible {
   height: 100%;
   min-height: 280px;
   display: block;
-  background: #111519;
-  border-bottom: 1px solid var(--line);
+  background: #f7f4e9;
+  border-bottom: 2px solid var(--line);
 }
 
 .voice-board {
@@ -411,7 +420,7 @@ select:focus-visible {
   overflow: auto;
   display: grid;
   align-content: start;
-  gap: 1px;
+  gap: 2px;
   background: var(--line);
 }
 
@@ -430,16 +439,16 @@ select:focus-visible {
 
 .voice.base {
   border-left-color: var(--amber);
-  background: #1f211c;
+  background: #fff5d8;
 }
 
 .voice.hit {
-  background: #24312d;
+  background: #e8f4ec;
   box-shadow: inset 0 0 0 1px var(--voice-color);
 }
 
 .voice.held {
-  background: #20251f;
+  background: #f2eedc;
 }
 
 .lane-lamp {
@@ -462,7 +471,7 @@ select:focus-visible {
 .note-chip,
 .pattern-chip {
   min-width: 0;
-  color: #cad2d4;
+  color: #49473f;
   font-size: 12px;
   line-height: 1.2;
 }
@@ -500,9 +509,9 @@ select:focus-visible {
   display: block;
   padding: 5px 6px;
   border: 1px solid var(--line-strong);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--control);
-  color: #dbe2e3;
+  color: #1d1b16;
   font-family: Consolas, "Liberation Mono", monospace;
   overflow-wrap: anywhere;
 }
@@ -511,9 +520,9 @@ select:focus-visible {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(260px, 1.45fr) minmax(260px, 1.35fr) minmax(190px, 0.75fr) minmax(260px, 1fr);
-  gap: 1px;
+  gap: 2px;
   padding: 0;
-  border-top: 1px solid var(--line);
+  border-top: 2px solid var(--line);
   background: var(--line);
 }
 
@@ -550,14 +559,14 @@ select {
   width: 100%;
   min-height: 36px;
   border: 1px solid var(--line-strong);
-  border-radius: 5px;
+  border-radius: 3px;
   padding: 6px 8px;
   color: var(--ink);
   background: var(--control);
 }
 
 input::placeholder {
-  color: #6f7a7e;
+  color: #8d897b;
 }
 
 .paywall-actions {
@@ -601,6 +610,10 @@ input::placeholder {
   .transport-cluster,
   .commerce-actions {
     padding: 14px;
+  }
+
+  h1 {
+    font-size: 31px;
   }
 
   .transport-actions {

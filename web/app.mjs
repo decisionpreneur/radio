@@ -530,7 +530,7 @@ function scheduleHitIndicator(event, when) {
 
 function showHit(event) {
   hitFields.instrument.textContent = event.instrument.name;
-  hitFields.voice.textContent = event.voiceId;
+  hitFields.voice.textContent = laneLabel(event.voiceSlot, event.voiceId);
   hitFields.meter.textContent = String(event.meter);
   hitFields.kit.textContent = event.kit;
   hitFields.role.textContent = event.role;
@@ -1218,7 +1218,7 @@ function drawVoices() {
     const bpm = voiceBpm(state, voice);
     card.innerHTML = `
       <span class="lane-lamp" aria-hidden="true"></span>
-      <span class="voice-id">${escapeHtml(voice.id)}</span>
+      <span class="voice-id">${escapeHtml(laneLabel(slotIndex, voice.id))}</span>
       <strong class="instrument-name">${escapeHtml(voice.instrument.name)}</strong>
       <span class="kit-name">${escapeHtml(voice.kit)}</span>
       <span class="meter-chip">m ${voice.meter}</span>
@@ -1256,6 +1256,10 @@ function randomizeControls() {
   document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
   const policies = ["next", "random", "closest", "farmost"];
   document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];
+}
+
+function laneLabel(slotIndex, fallback) {
+  return Number.isInteger(slotIndex) ? `L${slotIndex + 1}` : fallback;
 }
 
 function applySharedConfigFromUrl() {

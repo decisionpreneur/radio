@@ -555,26 +555,45 @@ function showHit(event) {
   const timerKey = voiceNode.dataset.voiceSlot ?? event.voiceId;
   const previousTimer = voiceHitTimers.get(timerKey);
   if (previousTimer) window.clearTimeout(previousTimer);
-  restoreHitInstrument(voiceNode);
-  const instrumentNode = voiceNode.querySelector(".instrument-name");
-  if (voiceNode.dataset.voiceId !== event.voiceId && instrumentNode) {
-    instrumentNode.dataset.restingInstrument = instrumentNode.textContent;
-    instrumentNode.textContent = event.instrument.name;
+  restoreTransientVoiceHit(voiceNode);
+  if (voiceNode.dataset.voiceId !== event.voiceId) {
+    applyTransientVoiceHit(voiceNode, event);
   }
   voiceNode.classList.add("hit");
   const timerId = window.setTimeout(() => {
     voiceNode.classList.remove("hit");
-    restoreHitInstrument(voiceNode);
+    restoreTransientVoiceHit(voiceNode);
     voiceHitTimers.delete(timerKey);
   }, 420);
   voiceHitTimers.set(timerKey, timerId);
 }
 
-function restoreHitInstrument(voiceNode) {
-  const instrumentNode = voiceNode.querySelector(".instrument-name");
-  if (!instrumentNode?.dataset.restingInstrument) return;
-  instrumentNode.textContent = instrumentNode.dataset.restingInstrument;
-  delete instrumentNode.dataset.restingInstrument;
+function applyTransientVoiceHit(voiceNode, event) {
+  voiceNode.dataset.restingVoiceHtml = voiceNode.innerHTML;
+  voiceNode.dataset.restingVoiceColor = voiceNode.style.getPropertyValue("--voice-color");
+  voiceNode.style.setProperty("--voice-color", event.instrument.color);
+  const slotIndex = Number.parseInt(voiceNode.dataset.voiceSlot ?? "", 10);
+  const bpm = Number.isFinite(event.bpm) ? event.bpm : voiceBpm(live.state, event);
+  voiceNode.innerHTML = `
+      <span class="lane-lamp" aria-hidden="true"></span>
+      <span class="voice-id">${escapeHtml(laneLabel(slotIndex, event.voiceId))}</span>
+      <strong class="instrument-name">${escapeHtml(event.instrument.name)}</strong>
+      <span class="kit-name">${escapeHtml(event.kit)}</span>
+      <span class="meter-chip">m ${event.meter}</span>
+      <span class="role-chip">${escapeHtml(event.role)}</span>
+      <span class="hold-chip">hit</span>
+      <span class="bpm-chip">${bpm.toFixed(3)} bpm</span>
+      <span class="note-chip">n ${event.note}</span>
+      ${patternMapHtml(Array.isArray(event.pattern) ? event.pattern : [1])}
+    `;
+}
+
+function restoreTransientVoiceHit(voiceNode) {
+  if (!voiceNode.dataset.restingVoiceHtml) return;
+  voiceNode.innerHTML = voiceNode.dataset.restingVoiceHtml;
+  voiceNode.style.setProperty("--voice-color", voiceNode.dataset.restingVoiceColor);
+  delete voiceNode.dataset.restingVoiceHtml;
+  delete voiceNode.dataset.restingVoiceColor;
 }
 
 function clearHitIndicators() {
@@ -591,6 +610,7 @@ function clearHitIndicators() {
   voicesEl.querySelectorAll(".voice.hit, .voice.last-hit").forEach((node) => {
     node.classList.remove("hit");
     node.classList.remove("last-hit");
+    restoreTransientVoiceHit(node);
   });
   for (const field of ["instrument", "voice", "meter", "kit", "role", "pulse"]) {
     if (hitFields[field]) hitFields[field].textContent = "-";

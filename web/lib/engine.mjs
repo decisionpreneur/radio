@@ -259,6 +259,8 @@ export function generateEventsInWindow(state, options) {
           kitId: voice.kitId,
           kit: voice.kit,
           instrument: voice.instrument,
+          pattern: voice.pattern.slice(),
+          bpm: voiceBpm(state, voice),
           note: voice.instrument.note,
           velocity: voice.velocity,
           durationSeconds: state.config.noteDurationSeconds

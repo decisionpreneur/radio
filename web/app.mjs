@@ -117,6 +117,7 @@ const hitTimeouts = new Set();
 const voiceHitTimers = new Map();
 let stripHitTimer = null;
 let lastHitVoiceId = null;
+let lastHitSlotIndex = null;
 
 const SCHEDULE_OFFSET_SECONDS = 0.02;
 const SCHEDULE_LOOKAHEAD_SECONDS = 0.35;
@@ -535,6 +536,7 @@ function showHit(event) {
   hitFields.role.textContent = event.role;
   hitFields.pulse.textContent = String(event.pulseIndex);
   lastHitVoiceId = event.voiceId;
+  lastHitSlotIndex = Number.isInteger(event.voiceSlot) ? event.voiceSlot : null;
   hitFields.strip.classList.add("is-hit");
   hitFields.lamp.classList.add("is-hit");
 
@@ -545,7 +547,8 @@ function showHit(event) {
     stripHitTimer = null;
   }, 320);
 
-  const voiceNode = voicesEl.querySelector(`[data-voice-id="${event.voiceId}"]`);
+  const voiceNode = voicesEl.querySelector(`[data-voice-id="${event.voiceId}"]`)
+    ?? (Number.isInteger(event.voiceSlot) ? voicesEl.querySelector(`[data-voice-slot="${event.voiceSlot}"]`) : null);
   if (!voiceNode) return;
   voicesEl.querySelectorAll(".voice.last-hit").forEach((node) => node.classList.remove("last-hit"));
   voiceNode.classList.add("last-hit");
@@ -567,6 +570,7 @@ function clearHitIndicators() {
   for (const timeout of voiceHitTimers.values()) window.clearTimeout(timeout);
   voiceHitTimers.clear();
   lastHitVoiceId = null;
+  lastHitSlotIndex = null;
   hitFields.strip?.classList.remove("is-hit");
   hitFields.lamp?.classList.remove("is-hit");
   voicesEl.querySelectorAll(".voice.hit, .voice.last-hit").forEach((node) => {
@@ -1203,12 +1207,13 @@ function drawTimeline() {
 
 function drawVoices() {
   voicesEl.innerHTML = "";
-  for (const voice of state.voices) {
+  for (const [slotIndex, voice] of state.voices.entries()) {
     const card = document.createElement("article");
     const held = voice.protectedThroughCycle !== null && voice.protectedThroughCycle >= state.cycleIndex;
-    const lastHit = voice.id === lastHitVoiceId;
+    const lastHit = voice.id === lastHitVoiceId || slotIndex === lastHitSlotIndex;
     card.className = `voice${voice.id === state.baseVoiceId ? " base" : ""}${held ? " held" : ""}${lastHit ? " last-hit" : ""}`;
     card.dataset.voiceId = voice.id;
+    card.dataset.voiceSlot = String(slotIndex);
     card.style.setProperty("--voice-color", voice.instrument.color);
     const bpm = voiceBpm(state, voice);
     card.innerHTML = `

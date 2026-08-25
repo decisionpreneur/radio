@@ -228,7 +228,8 @@ export function generateEventsInWindow(state, options) {
   const maxEvents = options.maxEvents ?? 2000;
   const events = [];
 
-  for (const voice of state.voices) {
+  for (let voiceSlot = 0; voiceSlot < state.voices.length; voiceSlot += 1) {
+    const voice = state.voices[voiceSlot];
     const pulseSeconds = voicePulseSeconds(state, voice);
     const firstPulse = Math.max(0, Math.floor((fromLocal - EPSILON) / pulseSeconds));
     const lastPulse = Math.ceil((toLocal + EPSILON) / pulseSeconds);
@@ -252,6 +253,7 @@ export function generateEventsInWindow(state, options) {
           localSeconds: localTime,
           pulseIndex,
           voiceId: voice.id,
+          voiceSlot,
           meter: voice.meter,
           role: voice.role,
           kitId: voice.kitId,

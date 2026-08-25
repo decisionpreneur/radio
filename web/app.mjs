@@ -552,14 +552,29 @@ function showHit(event) {
   if (!voiceNode) return;
   voicesEl.querySelectorAll(".voice.last-hit").forEach((node) => node.classList.remove("last-hit"));
   voiceNode.classList.add("last-hit");
-  const previousTimer = voiceHitTimers.get(event.voiceId);
+  const timerKey = voiceNode.dataset.voiceSlot ?? event.voiceId;
+  const previousTimer = voiceHitTimers.get(timerKey);
   if (previousTimer) window.clearTimeout(previousTimer);
+  restoreHitInstrument(voiceNode);
+  const instrumentNode = voiceNode.querySelector(".instrument-name");
+  if (voiceNode.dataset.voiceId !== event.voiceId && instrumentNode) {
+    instrumentNode.dataset.restingInstrument = instrumentNode.textContent;
+    instrumentNode.textContent = event.instrument.name;
+  }
   voiceNode.classList.add("hit");
   const timerId = window.setTimeout(() => {
     voiceNode.classList.remove("hit");
-    voiceHitTimers.delete(event.voiceId);
+    restoreHitInstrument(voiceNode);
+    voiceHitTimers.delete(timerKey);
   }, 420);
-  voiceHitTimers.set(event.voiceId, timerId);
+  voiceHitTimers.set(timerKey, timerId);
+}
+
+function restoreHitInstrument(voiceNode) {
+  const instrumentNode = voiceNode.querySelector(".instrument-name");
+  if (!instrumentNode?.dataset.restingInstrument) return;
+  instrumentNode.textContent = instrumentNode.dataset.restingInstrument;
+  delete instrumentNode.dataset.restingInstrument;
 }
 
 function clearHitIndicators() {

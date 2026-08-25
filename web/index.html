@@ -70,7 +70,10 @@
       </section>
 
       <section class="sequence-surface" aria-label="Live pattern surface">
-        <canvas id="timeline" width="1280" height="420"></canvas>
+        <div id="timelineShell" class="timeline-shell" data-state="stopped">
+          <canvas id="timeline" width="1280" height="420"></canvas>
+          <span class="timeline-playhead" aria-hidden="true"></span>
+        </div>
         <div class="voice-table">
           <div class="voice-header" aria-hidden="true">
             <span></span>

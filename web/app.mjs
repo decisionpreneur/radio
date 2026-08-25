@@ -29,6 +29,7 @@ const controls = document.querySelector("#controls");
 const statusEl = document.querySelector("#status");
 const voicesEl = document.querySelector("#voices");
 const canvas = document.querySelector("#timeline");
+const timelineShell = document.querySelector("#timelineShell");
 const ctx = canvas.getContext("2d");
 const startBtn = document.querySelector("#startBtn");
 const stopBtn = document.querySelector("#stopBtn");
@@ -237,6 +238,7 @@ async function startLive() {
     scheduled: new Map()
   };
   draw();
+  timelineShell.dataset.state = "playing";
   tick();
   statusEl.textContent = live.scheduled.size ? "playing" : "waiting for hit";
   timer = window.setInterval(tick, 25);
@@ -386,6 +388,8 @@ function stopLive() {
   stopSignalMeter();
   signalPeak = 0;
   setSignalLevel(0);
+  timelineShell.dataset.state = "stopped";
+  timelineShell.style.setProperty("--playhead-x", "0%");
   statusEl.textContent = "stopped";
 }
 
@@ -1053,6 +1057,7 @@ function updateCycleProgress(now) {
   readoutFields.cycle.textContent = cycleProgressText(live.state, now, live.sectionStart);
   readoutFields.change.textContent = changeText(live.state, live);
   updateChangeRail(live.state, now, live.sectionStart, live);
+  updateTimelinePlayhead(live.state, now, live.sectionStart);
 }
 
 function cycleProgressText(currentState, now = null, sectionStart = null) {
@@ -1086,6 +1091,13 @@ function updateChangeRail(currentState, now = null, sectionStart = null, liveSta
   readoutFields.changeFill.style.transform = `scaleX(${Math.min(1, cycleProgress)})`;
   readoutFields.changeCue.style.left = `${Math.round(Math.min(1, replacementProgress) * 100)}%`;
   readoutFields.changeCue.textContent = total ? `${applied}/${total}` : "basis";
+}
+
+function updateTimelinePlayhead(currentState, now, sectionStart) {
+  const duration = Math.min(sectionSeconds(currentState), 24);
+  const elapsed = Math.max(0, now - sectionStart);
+  const progress = duration > 0 ? (elapsed % duration) / duration : 0;
+  timelineShell.style.setProperty("--playhead-x", `${Math.min(100, Math.max(0, progress * 100))}%`);
 }
 
 function replacementCadenceText() {
@@ -1200,10 +1212,18 @@ function drawVoices() {
       <span class="hold-chip">${held ? "held" : "-"}</span>
       <span class="bpm-chip">${bpm.toFixed(3)} bpm</span>
       <span class="note-chip">n ${voice.instrument.note}</span>
-      <code class="pattern-chip">${voice.pattern.join("")}</code>
+      ${patternMapHtml(voice.pattern)}
     `;
     voicesEl.append(card);
   }
+}
+
+function patternMapHtml(pattern) {
+  const binary = pattern.join("");
+  const cells = pattern
+    .map((hit, index) => `<span class="pattern-cell${hit ? " on" : ""}" data-step="${index + 1}"></span>`)
+    .join("");
+  return `<span class="pattern-chip" aria-label="pattern ${binary}" title="${binary}" data-pattern="${binary}">${cells}</span>`;
 }
 
 function randomizeControls() {

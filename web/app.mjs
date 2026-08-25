@@ -343,6 +343,7 @@ function configureDonationLink() {
 function requireUnlocked() {
   if (entitlementUnlocks(entitlement)) return true;
   paywallStatus.textContent = licenseErrorMessage("license_required");
+  setStatus("license required", 1600);
   return false;
 }
 
@@ -1107,7 +1108,7 @@ function drawTimeline() {
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#f4f6f0";
+  ctx.fillStyle = "#101316";
   ctx.fillRect(0, 0, width, height);
 
   const previewState = state;
@@ -1121,7 +1122,7 @@ function drawTimeline() {
   const rows = previewState.voices.length;
   const rowHeight = height / Math.max(1, rows);
 
-  ctx.strokeStyle = "#d6ddd3";
+  ctx.strokeStyle = "#30363d";
   ctx.lineWidth = 1;
   for (let row = 0; row <= rows; row += 1) {
     const y = Math.round(row * rowHeight) + 0.5;
@@ -1132,7 +1133,7 @@ function drawTimeline() {
   }
 
   const baseBar = (60 / previewState.baseBpm) * previewState.baseMeter;
-  ctx.strokeStyle = "#9aa89d";
+  ctx.strokeStyle = "#c7a22c";
   for (let time = 0; time <= previewSeconds; time += baseBar) {
     const x = (time / previewSeconds) * width;
     ctx.beginPath();
@@ -1147,7 +1148,7 @@ function drawTimeline() {
     const x = (event.localSeconds / previewSeconds) * width;
     const y = row * rowHeight + rowHeight * 0.2;
     ctx.fillStyle = event.instrument.color;
-    ctx.strokeStyle = "#ffffff";
+    ctx.strokeStyle = "#f7f8f4";
     ctx.lineWidth = 2;
     ctx.fillRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
     ctx.strokeRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));

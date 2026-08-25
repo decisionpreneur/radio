@@ -275,7 +275,6 @@ export function chooseBasisVoice(state) {
   const currentIndex = state.voices.findIndex((voice) => voice.id === state.baseVoiceId);
   const candidates = state.voices.filter((voice) => {
     return voice.id !== state.baseVoiceId
-      && voice.id !== state.previousBaseVoiceId
       && voice.meter !== state.baseMeter;
   });
   if (!candidates.length) {

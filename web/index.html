@@ -27,7 +27,7 @@
         </div>
         <div class="commerce-actions" aria-label="Access">
           <a id="checkoutLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1" data-checkout-url="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1">Subscribe $5/mo USD</a>
-          <a id="donateLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9" data-donation-url="https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9">Donate</a>
+          <a id="donateLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9?embed=1" data-donation-url="https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9?embed=1">Donate</a>
         </div>
       </section>
 
@@ -67,7 +67,21 @@
 
       <section class="sequence-surface" aria-label="Live pattern surface">
         <canvas id="timeline" width="1280" height="420"></canvas>
-        <div id="voices" class="voices voice-board"></div>
+        <div class="voice-table">
+          <div class="voice-header" aria-hidden="true">
+            <span></span>
+            <span>lane</span>
+            <span>instrument</span>
+            <span>kit</span>
+            <span>meter</span>
+            <span>role</span>
+            <span>hold</span>
+            <span>bpm</span>
+            <span>note</span>
+            <span>pattern</span>
+          </div>
+          <div id="voices" class="voices voice-board"></div>
+        </div>
       </section>
 
       <form id="controls" class="tuning-dock">

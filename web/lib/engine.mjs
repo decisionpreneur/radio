@@ -223,14 +223,17 @@ export function renderArrangement(start, options = {}) {
     const secondsTotal = sectionSeconds(station);
     let cursor = elapsed;
     let segmentStation = station;
+    let sectionEvents = 0;
     while (cursor < elapsed + secondsTotal - 1e-9) {
+      const remainingBudget = maxEventsPerSection - sectionEvents;
+      if (remainingBudget <= 0) break;
       const cut = nextReplacementSecond(segmentStation, elapsed);
       const end = cut === null ? elapsed + secondsTotal : Math.min(elapsed + secondsTotal, cut);
       for (const event of eventsBetween(segmentStation, {
         fromSecond: cursor,
         toSecond: end,
         originSecond: elapsed,
-        maxEvents: maxEventsPerSection
+        maxEvents: remainingBudget
       })) {
         events.push({
           tick: Math.round(tickCursor + (event.timeSecond - elapsed) * bpm * ppq / 60),
@@ -238,6 +241,7 @@ export function renderArrangement(start, options = {}) {
           velocity: event.velocity,
           durationTicks: Math.max(1, Math.round(event.seconds * bpm * ppq / 60))
         });
+        sectionEvents += 1;
       }
       cursor = end;
       if (cut !== null && cut <= end + 1e-9) segmentStation = replaceOne(segmentStation);

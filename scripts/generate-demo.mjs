@@ -1,63 +1,53 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createInitialState, renderArrangement } from "../web/lib/engine.mjs";
+import { makeStation, renderArrangement } from "../web/lib/engine.mjs";
 import { encodeMidiFile } from "../web/lib/midi-file.mjs";
 
-const artifactDir = process.argv[2] ?? process.env.RADIO_ARTIFACT_DIR;
-if (!artifactDir) {
-  throw new Error("Artifact directory required");
-}
+const outDir = process.argv[2] ?? process.env.RADIO_ARTIFACT_DIR;
+if (!outDir) throw new Error("Artifact directory required");
 
-const demos = [
-  {
-    basename: "radio-polymetric-demo",
-    state: createInitialState({
+const rows = [
+  [
+    "radio-polymetric-demo.mid",
+    makeStation({
       seed: "radio-demo",
-      patternCount: 8,
-      startOnlyCount: 8,
+      voiceCount: 8,
+      startCount: 8,
       pulseCount: 0,
       meterStart: 1,
-      meterCount: 8,
+      baseMeter: 1,
       baseBpm: 127,
-      baseMeter: 1,
-      cycleLengthKind: "bars",
+      cycleUnit: "bars",
       cycleLength: 4,
-      basisPolicy: "next",
-      replacementCadence: "one-by-one",
-      meterTiming: "same-pulse-polymeter"
+      basisMode: "next"
     }),
-    sections: 6,
-    maxEventsPerSection: 50000
-  },
-  {
-    basename: "radio-polymetric-20-meter-demo",
-    state: createInitialState({
+    6
+  ],
+  [
+    "radio-polymetric-20-meter-demo.mid",
+    makeStation({
       seed: "radio-20-meter-demo",
-      patternCount: 20,
-      startOnlyCount: 20,
+      voiceCount: 20,
+      startCount: 20,
       pulseCount: 0,
       meterStart: 1,
-      meterCount: 20,
-      baseBpm: 120,
       baseMeter: 1,
-      cycleLengthKind: "resolving-sequences",
+      baseBpm: 120,
+      cycleUnit: "resolving-sequences",
       cycleLength: 3,
-      basisPolicy: "next",
-      replacementCadence: "one-by-one",
-      meterTiming: "same-pulse-polymeter"
+      basisMode: "next"
     }),
-    sections: 1,
-    maxEventsPerSection: 50000
-  }
+    1
+  ]
 ];
 
-for (const demo of demos) {
-  const rendered = renderArrangement(demo.state, {
-    sectionCount: demo.sections,
+for (const [name, station, sectionCount] of rows) {
+  const midi = encodeMidiFile(renderArrangement(station, {
+    sectionCount,
     ppq: 480,
-    maxEventsPerSection: demo.maxEventsPerSection
-  });
-  const midi = encodeMidiFile(rendered);
-  await writeFile(join(artifactDir, `${demo.basename}.mid`), midi);
-  console.log(join(artifactDir, `${demo.basename}.mid`));
+    maxEventsPerSection: 50000
+  }));
+  const path = join(outDir, name);
+  await writeFile(path, midi);
+  console.log(path);
 }

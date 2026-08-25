@@ -1,114 +1,84 @@
-export const FOSS_DRUMSET_ID = "avl-drumkits-generic";
-export const FOSS_ETHNIC_PERCUSSION_KIT_ID = "avl-buskmans-holiday-percussion";
-
-const FOSS_DRUMSET_NAME = "Generic drum set";
-const FOSS_ETHNIC_PERCUSSION_KIT_NAME = "Ethnic percussion kit";
-
-const lane = (kitId, kitName, name, note, color, sound) =>
-  Object.freeze({ kitId, kitName, name, note, color, sound });
-
-export const GENERIC_DRUMSET_LANES = Object.freeze([
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Kick Tight Gen Purpose", 36, "#315f72", "kick-tight"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Rim Sidestick Gen Purpose", 37, "#8c4f45", "rim"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Snare Gen Purpose", 38, "#ba4a3d", "snare"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Snare Gen Purpose 2", 39, "#d06148", "snare-edge"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Snare Gen Purpose 3", 40, "#df7a57", "snare-edge"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom Low Gen Purpose", 41, "#6f5b46", "tom-low"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Hihat Closed Gen Purpose", 42, "#7d8d39", "hihat-closed"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom Low-Mid Gen Purpose", 43, "#8a6748", "tom-low-mid"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Hihat Open Gen Purpose", 44, "#a1a943", "semi-open-hihat"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom High-Mid Gen Purpose", 45, "#9b6d45", "tom-high-mid"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Hihat Open Gen Purpose 2", 46, "#bec55a", "swish-hihat"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom High Gen Purpose", 47, "#af7850", "tom-high"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Crash Gen Purpose", 48, "#d09b34", "crash"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Crash Gen Purpose 2", 49, "#e0b14b", "crash"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Ride Gen Purpose", 50, "#46909b", "ride"),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Ride Cup Gen Purpose", 51, "#62aeb8", "ride-cup")
-]);
-
-export const ETHNIC_PERCUSSION_LANES = Object.freeze([
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Stick Click", 35, "#a56a48", "stick-click"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cajon Thump", 36, "#be734b", "cajon-low"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Finger Snaps", 37, "#e7b48a", "finger-snap"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cajon Slap Left", 38, "#d19867", "cajon-slap"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Hand Clap", 39, "#c85e3f", "hand-clap"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cajon Slap Right", 40, "#d77a56", "cajon-slap"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Large Conga Left", 41, "#b65c45", "conga-low"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Shakers", 42, "#7cab52", "shaker-soft"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Large Conga Right", 43, "#9abf59", "conga-high"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Shake Tambourine", 44, "#c9ba44", "tambourine"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Small Conga Left", 45, "#8c6f48", "hand-drum-small"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bump Tambourine", 46, "#a88452", "tambourine"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Small Conga Right", 47, "#4d7d8a", "hand-drum-small-high"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Claves", 48, "#b9885a", "claves"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cymbal", 49, "#e0c45c", "cymbal-hand"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cymbal Bell", 50, "#6d8ba7", "cymbal-bell"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cowbell", 51, "#9ca7ad", "cowbell"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Foot Stomp", 52, "#6f6251", "foot-stomp"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bucket", 53, "#4d7d8a", "bucket"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bell Tree Down", 54, "#9278bd", "bell-tree-down"),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bell Tree Up", 55, "#b692d6", "bell-tree-up")
-]);
-
 export const KITS = Object.freeze([
-  Object.freeze({
-    id: FOSS_DRUMSET_ID,
-    name: FOSS_DRUMSET_NAME,
-    aliases: Object.freeze(["generic drum set", "normal drumset"]),
-    lanes: GENERIC_DRUMSET_LANES
-  }),
-  Object.freeze({
-    id: FOSS_ETHNIC_PERCUSSION_KIT_ID,
-    name: FOSS_ETHNIC_PERCUSSION_KIT_NAME,
-    aliases: Object.freeze(["ethnic percussion kit"]),
-    lanes: ETHNIC_PERCUSSION_LANES
-  })
+  {
+    id: "generic-drums",
+    name: "Generic drum set",
+    source: "AVL Drumkits",
+    lanes: freezeLanes("generic-drums", "Generic drum set", [
+      [36, "Kick Tight", "kick", "#7a4a35"],
+      [37, "Rim Sidestick", "wood", "#8a5d2b"],
+      [38, "Snare", "snare", "#a43f45"],
+      [39, "Snare 2", "snare", "#b6535c"],
+      [40, "Snare 3", "snare", "#c66b63"],
+      [41, "Low Tom", "tom", "#55713f"],
+      [42, "Closed Hihat", "hat", "#587c88"],
+      [43, "Low-Mid Tom", "tom", "#638449"],
+      [44, "Open Hihat", "hat", "#638f9f"],
+      [45, "High-Mid Tom", "tom", "#758f4f"],
+      [46, "Open Hihat 2", "hat", "#79a9b6"],
+      [47, "High Tom", "tom", "#8a9c55"],
+      [48, "Crash", "crash", "#bd8d28"],
+      [49, "Crash 2", "crash", "#c99b39"],
+      [50, "Ride", "ride", "#a77e2d"],
+      [51, "Ride Cup", "ride", "#8f7330"]
+    ])
+  },
+  {
+    id: "ethnic-percussion",
+    name: "Ethnic percussion kit",
+    source: "Buskman's Holiday percussion",
+    lanes: freezeLanes("ethnic-percussion", "Ethnic percussion kit", [
+      [35, "Frame Drum", "hand", "#5f6140"],
+      [36, "Djembe Bass", "hand", "#6c5533"],
+      [37, "Djembe Tone", "hand", "#765f36"],
+      [38, "Djembe Slap", "hand", "#86533d"],
+      [39, "Conga Open", "hand", "#916b40"],
+      [40, "Conga Slap", "hand", "#9d7647"],
+      [41, "Bongo Low", "hand", "#a27e49"],
+      [42, "Bongo High", "hand", "#b0844b"],
+      [43, "Udu Low", "hand", "#6b6f7a"],
+      [44, "Udu High", "hand", "#777f91"],
+      [45, "Darbuka", "hand", "#8b5667"],
+      [46, "Talking Drum", "hand", "#9a6174"],
+      [47, "Clave", "wood", "#8c6c31"],
+      [48, "Wood Block", "wood", "#a07634"],
+      [49, "Cowbell", "metal", "#778377"],
+      [50, "Agogo Low", "metal", "#829184"],
+      [51, "Agogo High", "metal", "#8b9e91"],
+      [52, "Shaker", "shake", "#6f8d7a"],
+      [53, "Shekere", "shake", "#789a83"],
+      [54, "Tambourine", "shake", "#b28b36"],
+      [55, "Bell Tree", "metal", "#9280a7"]
+    ])
+  }
 ]);
 
-export const KIT_BY_ID = Object.freeze(
-  Object.fromEntries(KITS.map((kit) => [kit.id, kit]))
-);
-
+export const DEFAULT_KIT_IDS = Object.freeze(KITS.map((kit) => kit.id));
 export const ALL_LANES = Object.freeze(KITS.flatMap((kit) => kit.lanes));
 
-const KIT_ID_ALIASES = new Map([
-  [FOSS_DRUMSET_ID, FOSS_DRUMSET_ID],
-  ["drums", FOSS_DRUMSET_ID],
-  ["generic", FOSS_DRUMSET_ID],
-  ["generic drum set", FOSS_DRUMSET_ID],
-  ["normal drumset", FOSS_DRUMSET_ID],
-  [FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_ID],
-  ["ethnic", FOSS_ETHNIC_PERCUSSION_KIT_ID],
-  ["percussion", FOSS_ETHNIC_PERCUSSION_KIT_ID],
-  ["ethnic percussion kit", FOSS_ETHNIC_PERCUSSION_KIT_ID],
-  ["buskmans", FOSS_ETHNIC_PERCUSSION_KIT_ID]
-]);
-
-export function kitById(id) {
-  const normalizedId = KIT_ID_ALIASES.get(id) ?? id;
-  return KITS.find((kit) => kit.id === normalizedId);
+export function cleanKitIds(input) {
+  const accepted = new Set(DEFAULT_KIT_IDS);
+  const ids = Array.isArray(input) ? input : String(input ?? "").split(",");
+  const clean = ids.map((id) => String(id).trim()).filter((id) => accepted.has(id));
+  return Object.freeze(clean.length ? [...new Set(clean)] : [...DEFAULT_KIT_IDS]);
 }
 
-export function normalizeKitPool(value) {
-  const requested = Array.isArray(value)
-    ? value
-    : String(value ?? "").split(",").map((entry) => entry.trim()).filter(Boolean);
-  const normalized = requested
-    .map((id) => KIT_ID_ALIASES.get(id) ?? id)
-    .filter((id, index, ids) => kitById(id) && ids.indexOf(id) === index);
-  return Object.freeze(normalized.length ? normalized : KITS.map((kit) => kit.id));
+export function kitNameList(ids) {
+  const names = cleanKitIds(ids).map((id) => KITS.find((kit) => kit.id === id)?.name).filter(Boolean);
+  return names.join(", ");
 }
 
-export function laneByName(name) {
-  return ALL_LANES.find((candidate) => candidate.name === name);
+export function pickLane(rng, kitIds) {
+  const active = ALL_LANES.filter((lane) => cleanKitIds(kitIds).includes(lane.kitId));
+  return active[Math.floor(rng() * active.length) % active.length];
 }
 
-export function pickKit(rng, kitPool) {
-  const pool = normalizeKitPool(kitPool);
-  return kitById(pool[Math.floor(rng() * pool.length)]);
-}
-
-export function pickLane(rng, kitPool) {
-  const kit = pickKit(rng, kitPool);
-  return kit.lanes[Math.floor(rng() * kit.lanes.length)];
+function freezeLanes(kitId, kitName, rows) {
+  return Object.freeze(rows.map(([note, name, family, color]) => Object.freeze({
+    kitId,
+    kitName,
+    note,
+    name,
+    family,
+    color
+  })));
 }

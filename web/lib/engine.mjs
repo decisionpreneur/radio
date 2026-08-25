@@ -1,699 +1,420 @@
-import { ALL_LANES, pickLane, normalizeKitPool } from "./instruments.mjs";
-import { makeRng, pick, randomInt, shuffled } from "./prng.mjs";
+import { cleanKitIds, kitNameList, pickLane } from "./instruments.mjs";
 
-export const BASIS_POLICIES = Object.freeze(["next", "random", "closest", "farthest"]);
-export const METER_TIMING_MODES = Object.freeze(["same-pulse-polymeter"]);
-export const CYCLE_LENGTH_KINDS = Object.freeze(["bars", "resolving-sequences"]);
-export const REPLACEMENT_CADENCES = Object.freeze(["one-by-one"]);
-export const STRONG_BEAT_MODES = Object.freeze(["every-beat", "downbeat-only"]);
-const BASIS_POLICY_TYPOS = Object.freeze({ farmost: "farthest" });
-const LEAN_METER_TIMING_MODE = "same-pulse-polymeter";
+export const BASIS_MODES = Object.freeze(["next", "random", "closest", "farthest"]);
+export const CYCLE_UNITS = Object.freeze(["bars", "resolving-sequences"]);
 
-const EPSILON = 1e-9;
-
-export function createInitialState(input = {}) {
-  const seed = input.seed ?? `seed-${Date.now()}`;
-  const rng = makeRng(seed);
-  const config = normalizeConfig(input, rng, seed);
-  const meters = buildMeterValues(config);
-  const roles = buildRoles(config, rng);
-  const pickBalancedLane = createLanePicker(rng, config.kitPool);
-  const voices = meters.slice(0, config.patternCount).map((meter, index) => {
-    return createVoice({
-      id: `v${index + 1}`,
-      meter,
-      role: roles[index],
-      rng,
-      cycleIndex: 0,
-      lane: pickBalancedLane(),
-      kitPool: config.kitPool
-    });
-  });
-  ensureOpeningHit(voices);
-  const baseVoice = voices[0];
-
-  return {
-    config,
-    seed,
-    cycleIndex: 0,
-    nextVoiceNumber: voices.length + 1,
-    baseVoiceId: baseVoice.id,
-    previousBaseVoiceId: null,
-    baseMeter: baseVoice.meter,
-    baseBpm: config.baseBpm,
-    voices,
-    pendingReplacements: []
-  };
-}
-
-export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.seed) {
-  const patternCountInput = hasValue(input.patternCount)
-    ? input.patternCount
-    : randomInt(rng, 2, 20);
-  const patternCount = clampNumber(
-    patternCountInput,
-    2,
-    64
-  );
-  const baseMeter = hasValue(input.baseMeter) ? clampNumber(input.baseMeter, 1, 64) : undefined;
-  const baseBpm = clampNumber(hasValue(input.baseBpm) ? input.baseBpm : randomInt(rng, 72, 156), 20, 300);
-  const meterStart = clampNumber(
-    hasValue(input.meterStart) ? input.meterStart : (baseMeter ?? randomInt(rng, 1, 20)),
-    1,
-    64
-  );
-  const meterCount = clampNumber(hasValue(input.meterCount) ? input.meterCount : patternCount, 1, 64);
-  const maxSpecial = patternCount;
-  const pulseRequested = hasValue(input.pulseCount);
-  const pulseRequestedCount = pulseRequested ? clampNumber(input.pulseCount, 0, maxSpecial) : 0;
-  const defaultStartOnlyCount = pulseRequested && !hasValue(input.startOnlyCount)
-    ? maxSpecial - pulseRequestedCount
-    : maxSpecial;
-  const startOnlyCount = clampNumber(
-    hasValue(input.startOnlyCount) ? input.startOnlyCount : defaultStartOnlyCount,
-    0,
-    maxSpecial
-  );
-  const remainingAfterStartOnly = maxSpecial - startOnlyCount;
-  const pulseCount = clampNumber(
-    pulseRequested ? pulseRequestedCount : 0,
-    0,
-    remainingAfterStartOnly
-  );
+export function makeStation(input = {}) {
+  const seed = text(input.seed) || `s-${Date.now().toString(36)}`;
+  const rng = randomSource(seed);
+  const count = whole(input.voiceCount, 2, 64, integer(rng, 2, 20));
+  const startDefault = has(input.startCount) ? input.startCount : count;
+  const startCount = whole(startDefault, 0, count, count);
+  const pulseLimit = count - startCount;
+  const pulseCount = whole(has(input.pulseCount) ? input.pulseCount : 0, 0, pulseLimit, 0);
+  const meterStart = whole(input.meterStart, 1, 64, integer(rng, 1, 20));
+  const baseMeter = whole(has(input.baseMeter) ? input.baseMeter : meterStart, 1, 64, meterStart);
+  const baseBpm = decimal(input.baseBpm, 20, 300, integer(rng, 72, 156));
+  const unit = member(input.cycleUnit, CYCLE_UNITS, CYCLE_UNITS[integer(rng, 0, CYCLE_UNITS.length - 1)]);
+  const basisMode = normalizeBasis(input.basisMode, rng);
+  const kitIds = cleanKitIds(input.kits);
+  const meterLine = metersFor({ count, meterStart, baseMeter });
+  const kitPlan = kitPlanFor(count, kitIds, rng);
+  const roles = shuffled(rng, [
+    ...Array.from({ length: startCount }, () => "start-only"),
+    ...Array.from({ length: pulseCount }, () => "pulse"),
+    ...Array.from({ length: count - startCount - pulseCount }, () => "binary")
+  ]);
+  const voices = meterLine.map((meter, index) => voice({
+    uid: `r${index + 1}`,
+    meter,
+    role: roles[index],
+    rng,
+    kitIds: [kitPlan[index]],
+    serial: index + 1,
+    cycle: 0
+  }));
 
   return {
     seed,
-    patternCount,
-    startOnlyCount,
-    pulseCount,
+    cycle: 0,
+    serial: voices.length + 1,
+    baseUid: voices[0].uid,
+    priorBaseUid: null,
+    baseMeter: voices[0].meter,
     baseBpm,
-    baseMeter,
-    meterStart,
-    meterCount,
-    customMeters: Array.isArray(input.customMeters) ? input.customMeters.map(Number).filter(Number.isFinite) : null,
-    meterTiming: LEAN_METER_TIMING_MODE,
-    cycleLengthKind: hasValue(input.cycleLengthKind)
-      ? ensureMember(input.cycleLengthKind, CYCLE_LENGTH_KINDS, "bars")
-      : pick(rng, CYCLE_LENGTH_KINDS),
-    cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
-    basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
-    replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "one-by-one"),
-    strongBeatMode: ensureMember(input.strongBeatMode, STRONG_BEAT_MODES, "every-beat"),
-    noteDurationSeconds: clampFloat(hasValue(input.noteDurationSeconds) ? input.noteDurationSeconds : 0.08, 0.01, 2),
-    kitPool: normalizeKitPool(input.kitPool)
+    config: {
+      voiceCount: count,
+      startCount,
+      pulseCount,
+      meterStart,
+      baseMeter,
+      cycleLength: whole(input.cycleLength, 1, 4096, integer(rng, 1, 4)),
+      cycleUnit: unit,
+      basisMode,
+      kitIds
+    },
+    voices,
+    pending: [],
+    replacementsDone: 0
   };
 }
 
-export function buildMeterValues(config) {
-  const raw = config.customMeters?.length
-    ? config.customMeters
-    : Array.from({ length: config.meterCount }, (_, index) => config.meterStart + index);
-  const unique = [];
-  for (const meter of raw) {
-    const value = Math.max(1, Math.floor(Number(meter)));
-    if (!unique.includes(value)) unique.push(value);
-  }
-  while (unique.length < config.patternCount) {
-    unique.push(unique[unique.length - 1] + 1);
-  }
-  if (config.baseMeter) {
-    const baseMeter = Math.max(1, Math.floor(Number(config.baseMeter)));
-    const baseIndex = unique.indexOf(baseMeter);
-    if (baseIndex >= 0) unique.splice(baseIndex, 1);
-    unique.unshift(baseMeter);
-  }
-  return unique;
-}
-
-export function buildRoles(config, rng) {
-  const roles = [
-    ...Array.from({ length: config.startOnlyCount }, () => "start-only"),
-    ...Array.from({ length: config.pulseCount }, () => "pulse")
-  ];
-  while (roles.length < config.patternCount) roles.push("binary");
-  return shuffled(rng, roles);
-}
-
-export function createVoice({ id, meter, role, rng, cycleIndex, lane, kitPool }) {
-  const instrument = lane ?? pickLane(rng, kitPool);
+export function cloneStation(station) {
   return {
-    id,
+    ...station,
+    config: { ...station.config, kitIds: [...station.config.kitIds] },
+    voices: station.voices.map((item) => ({
+      ...item,
+      pattern: [...item.pattern],
+      instrument: { ...item.instrument }
+    })),
+    pending: station.pending.map((job) => ({ ...job }))
+  };
+}
+
+export function pulseSeconds(station) {
+  return 60 / station.baseBpm;
+}
+
+export function baseBarSeconds(station) {
+  return pulseSeconds(station) * station.baseMeter;
+}
+
+export function resolveBars(station) {
+  return lcmAll(station.voices.map((item) => item.pattern.length)) / station.baseMeter;
+}
+
+export function sectionBars(station) {
+  const factor = station.config.cycleUnit === "resolving-sequences" ? resolveBars(station) : 1;
+  return factor * station.config.cycleLength;
+}
+
+export function sectionSeconds(station) {
+  return sectionBars(station) * baseBarSeconds(station);
+}
+
+export function voiceBpm(station, item) {
+  return 60 / pulseSeconds(station, item);
+}
+
+export function beginNextCycle(station) {
+  const rng = randomSource(`${station.seed}:cycle:${station.cycle + 1}`);
+  const selected = chooseBasis(station, rng);
+  const targetMeters = metersFor({
+    count: station.config.voiceCount,
+    meterStart: station.config.meterStart,
+    baseMeter: station.config.meterStart
+  });
+  const currentPulse = pulseSeconds(station);
+  const nextBaseBpm = bpmForRethoughtBasis(selected, targetMeters[0], currentPulse);
+  const nextBase = {
+    ...selected,
+    meter: targetMeters[0],
+    pattern: rethinkPattern(selected, targetMeters[0]),
+    rethoughtFrom: selected.meter,
+    protectedThrough: station.cycle + 1
+  };
+  const remaining = station.voices.filter((item) => item.uid !== selected.uid);
+  const voices = [nextBase, ...remaining].slice(0, station.config.voiceCount);
+  const rolePlan = rolesFor(station.config, rng);
+  const kitPlan = kitPlanFor(Math.max(0, voices.length - 1), station.config.kitIds, rng, selected.instrument.kitId);
+  const pending = voices.slice(1).map((item, index) => ({
+    slot: index + 1,
+    meter: targetMeters[index + 1],
+    role: rolePlan[index + 1],
+    kitId: kitPlan[index],
+    replacedUid: item.uid
+  }));
+
+  return {
+    ...station,
+    cycle: station.cycle + 1,
+    serial: station.serial,
+    baseUid: nextBase.uid,
+    priorBaseUid: station.baseUid,
+    baseMeter: nextBase.meter,
+    baseBpm: nextBaseBpm,
+    voices,
+    pending,
+    replacementsDone: 0
+  };
+}
+
+export function replaceOne(station) {
+  if (!station.pending.length) return station;
+  const rng = randomSource(`${station.seed}:replace:${station.cycle}:${station.replacementsDone}`);
+  const [job, ...pending] = station.pending;
+  const next = voice({
+    uid: `r${station.serial}`,
+    meter: job.meter,
+    role: job.role,
+    rng,
+    kitIds: [job.kitId],
+    serial: station.serial,
+    cycle: station.cycle
+  });
+  const voices = station.voices.map((item, index) => (index === job.slot ? next : item));
+  return {
+    ...station,
+    serial: station.serial + 1,
+    voices,
+    pending,
+    replacementsDone: station.replacementsDone + 1
+  };
+}
+
+export function nextReplacementSecond(station, sectionStartSecond) {
+  if (!station.pending.length) return null;
+  const total = station.replacementsDone + station.pending.length;
+  return sectionStartSecond + (sectionSeconds(station) * (station.replacementsDone + 1) / (total + 1));
+}
+
+export function eventsBetween(station, window) {
+  const from = Math.max(0, Number(window.fromSecond ?? 0));
+  const to = Math.max(from, Number(window.toSecond ?? from));
+  const origin = Number(window.originSecond ?? 0);
+  const maxEvents = Math.max(1, Math.floor(Number(window.maxEvents ?? 10000)));
+  const step = pulseSeconds(station);
+  const events = [];
+  for (const [slot, item] of station.voices.entries()) {
+    if (events.length >= maxEvents) break;
+    const firstPulse = Math.max(0, Math.floor((from - origin) / step) - 1);
+    const lastPulse = Math.ceil((to - origin) / step) + 1;
+    for (let pulse = firstPulse; pulse <= lastPulse; pulse += 1) {
+      if (events.length >= maxEvents) break;
+      if (item.pattern[pulse % item.pattern.length] !== 1) continue;
+      const at = origin + pulse * step;
+      if (at < from - 1e-9 || at >= to - 1e-9) continue;
+      events.push({
+        timeSecond: at,
+        localSecond: at - origin,
+        pulse,
+        slot,
+        uid: item.uid,
+        meter: item.meter,
+        role: item.role,
+        pattern: [...item.pattern],
+        instrument: item.instrument,
+        kit: item.instrument.kitName,
+        note: item.instrument.note,
+        velocity: item.velocity,
+        seconds: 0.075,
+        bpm: voiceBpm(station, item)
+      });
+    }
+  }
+  events.sort((a, b) => a.timeSecond - b.timeSecond || a.slot - b.slot);
+  return events.slice(0, maxEvents);
+}
+
+export function renderArrangement(start, options = {}) {
+  const ppq = whole(options.ppq, 24, 3840, 480);
+  const sectionCount = whole(options.sectionCount, 1, 64, 4);
+  const maxEventsPerSection = whole(options.maxEventsPerSection, 1, 100000, 30000);
+  const tempos = [];
+  const events = [];
+  let station = cloneStation(start);
+  let elapsed = 0;
+  let tickCursor = 0;
+
+  for (let section = 0; section < sectionCount; section += 1) {
+    const bpm = station.baseBpm;
+    tempos.push({ tick: Math.round(tickCursor), bpm });
+    const secondsTotal = sectionSeconds(station);
+    let cursor = elapsed;
+    let segmentStation = station;
+    while (cursor < elapsed + secondsTotal - 1e-9) {
+      const cut = nextReplacementSecond(segmentStation, elapsed);
+      const end = cut === null ? elapsed + secondsTotal : Math.min(elapsed + secondsTotal, cut);
+      for (const event of eventsBetween(segmentStation, {
+        fromSecond: cursor,
+        toSecond: end,
+        originSecond: elapsed,
+        maxEvents: maxEventsPerSection
+      })) {
+        events.push({
+          tick: Math.round(tickCursor + (event.timeSecond - elapsed) * bpm * ppq / 60),
+          note: event.note,
+          velocity: event.velocity,
+          durationTicks: Math.max(1, Math.round(event.seconds * bpm * ppq / 60))
+        });
+      }
+      cursor = end;
+      if (cut !== null && cut <= end + 1e-9) segmentStation = replaceOne(segmentStation);
+    }
+    station = beginNextCycle(segmentStation);
+    tickCursor += secondsTotal * bpm * ppq / 60;
+    elapsed += secondsTotal;
+  }
+
+  return { ppq, tempos, events };
+}
+
+export function kitSummary(station) {
+  return kitNameList(station.config.kitIds);
+}
+
+function voice({ uid, meter, role, rng, kitIds, serial, cycle }) {
+  const instrument = pickLane(rng, kitIds);
+  return {
+    uid,
     meter,
     role,
-    pattern: createPattern(meter, role, rng),
+    pattern: patternFor(meter, role, rng),
     instrument,
-    kitId: instrument.kitId,
-    kit: instrument.kitName,
-    velocity: randomInt(rng, 78, 120),
-    createdAtCycle: cycleIndex,
-    protectedThroughCycle: null
+    velocity: integer(rng, 78, 118),
+    madeInCycle: cycle,
+    serial,
+    protectedThrough: null
   };
 }
 
-export function createPattern(meter, role, rng) {
-  const length = Math.max(1, Math.floor(meter));
-  if (role === "start-only") {
-    return Array.from({ length }, (_, index) => (index === 0 ? 1 : 0));
-  }
-  if (role === "pulse") {
-    return Array.from({ length }, () => 1);
-  }
-  const pattern = Array.from({ length }, () => (rng() >= 0.5 ? 1 : 0));
-  if (!pattern.some(Boolean)) {
-    pattern[randomInt(rng, 0, length - 1)] = 1;
-  }
-  return pattern;
+function patternFor(meter, role, rng) {
+  const size = Math.max(1, Math.floor(meter));
+  if (role === "start-only") return Array.from({ length: size }, (_, index) => (index === 0 ? 1 : 0));
+  if (role === "pulse") return Array.from({ length: size }, () => 1);
+  const row = Array.from({ length: size }, () => (rng() < 0.5 ? 0 : 1));
+  if (row.includes(1)) return row;
+  row[integer(rng, 0, size - 1)] = 1;
+  return row;
 }
 
-export function baseBarSeconds(state) {
-  return (60 / state.baseBpm) * state.baseMeter;
+function rethinkPattern(item, meter) {
+  const size = Math.max(1, Math.floor(meter));
+  if (item.role === "pulse") return Array.from({ length: size }, () => 1);
+  const hits = item.pattern.map((value, index) => value ? index / item.pattern.length : null).filter((value) => value !== null);
+  const out = Array.from({ length: size }, () => 0);
+  for (const hit of hits) out[Math.min(size - 1, Math.round(hit * size))] = 1;
+  if (!out.includes(1)) out[0] = 1;
+  return out;
 }
 
-export function voiceBpm(state, voice) {
-  return 60 / voicePulseSeconds(state, voice);
+function bpmForRethoughtBasis(item, targetMeter, oldPulse) {
+  if (item.role === "pulse") return 60 / oldPulse;
+  const oldPeriod = item.pattern.length * oldPulse;
+  return 60 * targetMeter / oldPeriod;
 }
 
-export function voicePulseSeconds(state, voice) {
-  if (voice.pulseSecondsOverride) {
-    return voice.pulseSecondsOverride;
-  }
-  return 60 / state.baseBpm;
-}
-
-export function basisBpmForVoice(state, voice) {
-  const targetMeter = Math.max(1, state.config.meterStart);
-  const sourcePatternLength = Math.max(1, voice.pattern.length);
-  const pulseSeconds = voicePulseSeconds(state, voice);
-  if (voice.role === "start-only") {
-    return 60 * targetMeter / (sourcePatternLength * pulseSeconds);
-  }
-  return 60 / pulseSeconds;
-}
-
-export function resolvingBaseBars(state) {
-  const patternLcm = lcmAll(state.voices.map((voice) => voice.pattern.length));
-  return patternLcm / state.baseMeter;
-}
-
-export function sectionBaseBars(state) {
-  const unit = state.config.cycleLengthKind === "resolving-sequences"
-    ? resolvingBaseBars(state)
-    : 1;
-  return unit * state.config.cycleLength;
-}
-
-export function resolvingSeconds(state) {
-  return resolvingBaseBars(state) * baseBarSeconds(state);
-}
-
-export function sectionSeconds(state) {
-  return sectionBaseBars(state) * baseBarSeconds(state);
-}
-
-export function generateSectionEvents(state, options = {}) {
-  const startSeconds = options.startSeconds ?? 0;
-  const endSeconds = startSeconds + Math.min(sectionSeconds(state), options.maxSeconds ?? Infinity);
-  return generateEventsInWindow(state, {
-    fromSeconds: startSeconds,
-    toSeconds: endSeconds,
-    sectionStartSeconds: startSeconds,
-    maxEvents: options.maxEvents ?? 20000
-  });
-}
-
-export function generateEventsInWindow(state, options) {
-  const sectionStart = options.sectionStartSeconds ?? 0;
-  const fromLocal = Math.max(0, (options.fromSeconds ?? sectionStart) - sectionStart);
-  const toLocal = Math.min(sectionSeconds(state), (options.toSeconds ?? sectionStart) - sectionStart);
-  const maxEvents = options.maxEvents ?? 2000;
-  const events = [];
-
-  for (let voiceSlot = 0; voiceSlot < state.voices.length; voiceSlot += 1) {
-    const voice = state.voices[voiceSlot];
-    const pulseSeconds = voicePulseSeconds(state, voice);
-    const firstPulse = Math.max(0, Math.floor((fromLocal - EPSILON) / pulseSeconds));
-    const lastPulse = Math.ceil((toLocal + EPSILON) / pulseSeconds);
-    const hitOffsets = voice.pattern
-      .map((hit, index) => (hit ? index : -1))
-      .filter((index) => index >= 0);
-    if (!hitOffsets.length) continue;
-    const patternLength = voice.pattern.length;
-    const firstPatternCycle = Math.max(0, Math.floor(firstPulse / patternLength));
-    const lastPatternCycle = Math.floor(lastPulse / patternLength);
-
-    for (let patternCycle = firstPatternCycle; patternCycle <= lastPatternCycle; patternCycle += 1) {
-      for (const offset of hitOffsets) {
-        const pulseIndex = patternCycle * patternLength + offset;
-        if (pulseIndex < firstPulse || pulseIndex > lastPulse) continue;
-        const localTime = pulseIndex * pulseSeconds;
-        if (localTime + EPSILON < fromLocal || localTime - EPSILON >= toLocal) continue;
-        if (state.config.strongBeatMode === "downbeat-only" && pulseIndex % voice.meter !== 0) continue;
-        events.push({
-          timeSeconds: sectionStart + localTime,
-          localSeconds: localTime,
-          pulseIndex,
-          voiceId: voice.id,
-          voiceSlot,
-          meter: voice.meter,
-          role: voice.role,
-          kitId: voice.kitId,
-          kit: voice.kit,
-          instrument: voice.instrument,
-          pattern: voice.pattern.slice(),
-          bpm: voiceBpm(state, voice),
-          note: voice.instrument.note,
-          velocity: voice.velocity,
-          durationSeconds: state.config.noteDurationSeconds
-        });
-        if (events.length >= maxEvents) {
-          return { events: events.sort(sortEvents), truncated: true };
-        }
-      }
+function chooseBasis(station, rng) {
+  const candidates = station.voices.filter((item) => item.uid !== station.baseUid);
+  if (station.config.basisMode === "next") {
+    const current = station.voices.findIndex((item) => item.uid === station.baseUid);
+    for (let step = 1; step <= station.voices.length; step += 1) {
+      const item = station.voices[(current + step) % station.voices.length];
+      if (item.uid !== station.baseUid) return item;
     }
   }
-
-  return { events: events.sort(sortEvents), truncated: false };
-}
-
-export function chooseBasisVoice(state) {
-  const currentIndex = state.voices.findIndex((voice) => voice.id === state.baseVoiceId);
-  const candidates = state.voices.filter((voice) => {
-    return voice.id !== state.baseVoiceId
-      && voice.meter !== state.baseMeter;
-  });
-  if (!candidates.length) {
-    throw new Error("No eligible next basis voice");
+  if (station.config.basisMode === "closest" || station.config.basisMode === "farthest") {
+    const target = station.baseBpm;
+    const ordered = candidates
+      .map((item) => ({ item, distance: Math.abs(bpmForRethoughtBasis(item, station.config.meterStart, pulseSeconds(station)) - target) }))
+      .sort((a, b) => a.distance - b.distance);
+    return station.config.basisMode === "closest" ? ordered[0].item : ordered[ordered.length - 1].item;
   }
+  return candidates[integer(rng, 0, candidates.length - 1)];
+}
 
-  if (state.config.basisPolicy === "next") {
-    const meterOrder = buildMeterValues(state.config);
-    const orderIndex = Math.max(0, meterOrder.indexOf(state.baseMeter));
-    for (let offset = 1; offset <= meterOrder.length; offset += 1) {
-      const targetMeter = meterOrder[(orderIndex + offset) % meterOrder.length];
-      const candidate = candidates.find((voice) => voice.meter === targetMeter);
-      if (candidate) return candidate;
-    }
-    for (let offset = 1; offset <= state.voices.length; offset += 1) {
-      const candidate = state.voices[(currentIndex + offset) % state.voices.length];
-      if (candidates.includes(candidate)) return candidate;
-    }
+function rolesFor(config, rng) {
+  return shuffled(rng, [
+    ...Array.from({ length: config.startCount }, () => "start-only"),
+    ...Array.from({ length: config.pulseCount }, () => "pulse"),
+    ...Array.from({ length: config.voiceCount - config.startCount - config.pulseCount }, () => "binary")
+  ]);
+}
+
+function kitPlanFor(count, kitIds, rng, differentFrom = "") {
+  const clean = cleanKitIds(kitIds);
+  const out = [];
+  if (differentFrom && clean.length > 1 && count > 0) {
+    const other = shuffled(rng, clean.filter((id) => id !== differentFrom));
+    out.push(other[0]);
   }
-
-  if (state.config.basisPolicy === "random") {
-    const rng = makeRng(`${state.seed}:basis:${state.cycleIndex}`);
-    return pick(rng, candidates);
+  for (let index = out.length; index < count; index += 1) {
+    out.push(clean[index % clean.length]);
   }
-
-  const withDistance = candidates.map((voice) => {
-    return {
-      voice,
-      distance: Math.abs(basisBpmForVoice(state, voice) - state.baseBpm)
-    };
-  });
-  withDistance.sort((a, b) => {
-    if (a.distance !== b.distance) {
-      return state.config.basisPolicy === "closest"
-        ? a.distance - b.distance
-        : b.distance - a.distance;
-    }
-    return state.voices.indexOf(a.voice) - state.voices.indexOf(b.voice);
-  });
-  return withDistance[0].voice;
+  return shuffled(rng, out);
 }
 
-export function advanceCycle(state) {
-  const currentState = completePendingReplacements(state);
-  const selected = chooseBasisVoice(currentState);
-  const oldBase = currentState.voices.find((voice) => voice.id === currentState.baseVoiceId);
-  const selectedBpm = basisBpmForVoice(currentState, selected);
-  const nextCycleIndex = currentState.cycleIndex + 1;
-  const rng = makeRng(`${currentState.seed}:cycle:${nextCycleIndex}`);
-  const selectedClone = rethinkAsBaseVoice(currentState, selected);
-  selectedClone.rethoughtFromMeter = selected.meter;
-  selectedClone.protectedThroughCycle = nextCycleIndex;
-  const retainedOldBase = oldBase && oldBase.id !== selected.id
-    ? cloneVoiceWithPulseOverride(currentState, oldBase)
-    : null;
-  const preserved = [selectedClone];
-
-  const replacementPlan = buildReplacementVoices({
-    previousState: currentState,
-    preserved,
-    cycleIndex: nextCycleIndex,
-    rng
-  });
-
-  const nextState = {
-    ...currentState,
-    cycleIndex: nextCycleIndex,
-    baseVoiceId: selectedClone.id,
-    previousBaseVoiceId: oldBase.id,
-    baseMeter: selectedClone.meter,
-    baseBpm: selectedBpm,
-    nextVoiceNumber: replacementPlan.nextVoiceNumber,
-    pendingReplacements: []
-  };
-
-  nextState.voices = [
-    selectedClone,
-    ...(retainedOldBase ? [retainedOldBase] : []),
-    ...currentState.voices
-      .filter((voice) => voice.id !== selectedClone.id && voice.id !== retainedOldBase?.id)
-      .map((voice) => cloneVoiceWithPulseOverride(currentState, voice))
-  ];
-  const protectedIds = new Set(preserved.map((voice) => voice.id));
-
-  nextState.pendingReplacements = buildRoleStableReplacementPlan(
-    nextState.voices,
-    replacementPlan.replacementVoices,
-    protectedIds
-  );
-  return nextState;
-}
-
-export function completePendingReplacements(state) {
-  let nextState = state;
-  while (nextState.pendingReplacements.length) {
-    nextState = applyNextReplacement(nextState);
+function metersFor({ count, meterStart, baseMeter }) {
+  const line = Array.from({ length: count }, (_, index) => meterStart + index);
+  const found = line.indexOf(baseMeter);
+  if (found > 0) {
+    line.splice(found, 1);
+    line.unshift(baseMeter);
   }
-  return nextState;
+  return line;
 }
 
-export function applyNextReplacement(state) {
-  if (!state.pendingReplacements.length) return state;
-  const [replacement, ...rest] = state.pendingReplacements;
-  const voices = state.voices.slice();
-  if (Number.isInteger(replacement.slot) && replacement.slot >= 0) {
-    voices[replacement.slot] = replacement.voice;
-  } else {
-    voices.push(replacement.voice);
+function normalizeBasis(value, rng) {
+  const raw = text(value);
+  if (raw === "farmost") return "farthest";
+  if (BASIS_MODES.includes(raw)) return raw;
+  return BASIS_MODES[integer(rng, 0, BASIS_MODES.length - 1)];
+}
+
+function member(value, options, fallback) {
+  const raw = text(value);
+  return options.includes(raw) ? raw : fallback;
+}
+
+function shuffled(rng, values) {
+  const out = [...values];
+  for (let index = out.length - 1; index > 0; index -= 1) {
+    const swap = integer(rng, 0, index);
+    [out[index], out[swap]] = [out[swap], out[index]];
   }
-  return {
-    ...state,
-    voices,
-    pendingReplacements: rest
-  };
+  return out;
 }
 
-export function renderArrangement(initialState, options = {}) {
-  let state = cloneState(initialState);
-  const sectionCount = options.sectionCount ?? 4;
-  const ppq = options.ppq ?? 480;
-  const maxEventsPerSection = options.maxEventsPerSection ?? 50000;
-  let startSeconds = 0;
-  let startTick = 0;
-  const events = [];
-  const tempos = [];
-  const sections = [];
+function whole(value, min, max, fallback) {
+  const number = has(value) ? Math.floor(Number(value)) : fallback;
+  return Math.min(max, Math.max(min, Number.isFinite(number) ? number : fallback));
+}
 
-  for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex += 1) {
-    const beatSeconds = 60 / state.baseBpm;
-    const currentSectionSeconds = sectionSeconds(state);
-    tempos.push({ tick: startTick, bpm: state.baseBpm });
-    const result = generateSectionEventsWithCadence(state, {
-      startSeconds,
-      maxEvents: maxEventsPerSection
-    });
+function decimal(value, min, max, fallback) {
+  const number = has(value) ? Number(value) : fallback;
+  return Math.min(max, Math.max(min, Number.isFinite(number) ? number : fallback));
+}
 
-    for (const event of result.events) {
-      const relativeSeconds = event.timeSeconds - startSeconds;
-      const tick = startTick + Math.round((relativeSeconds / beatSeconds) * ppq);
-      const durationTicks = Math.max(1, Math.round((event.durationSeconds / beatSeconds) * ppq));
-      events.push({ ...event, tick, durationTicks, sectionIndex });
-    }
+function integer(rng, min, max) {
+  return min + Math.floor(rng() * (max - min + 1));
+}
 
-    sections.push({
-      sectionIndex,
-      startSeconds,
-      startTick,
-      baseBpm: state.baseBpm,
-      baseMeter: state.baseMeter,
-      baseVoiceId: state.baseVoiceId,
-      sectionSeconds: currentSectionSeconds,
-      truncated: result.truncated
-    });
+function has(value) {
+  return value !== undefined && value !== null && String(value).trim() !== "";
+}
 
-    startSeconds += currentSectionSeconds;
-    startTick += Math.round((currentSectionSeconds / beatSeconds) * ppq);
-    state = advanceCycle(state);
+function text(value) {
+  return String(value ?? "").trim();
+}
+
+function randomSource(seed) {
+  let state = 0x811c9dc5;
+  for (const char of String(seed)) {
+    state ^= char.charCodeAt(0);
+    state = Math.imul(state, 0x01000193);
   }
-
-  return { events, tempos, sections, ppq, finalState: state };
-}
-
-export function generateSectionEventsWithCadence(state, options = {}) {
-  let workingState = cloneState(state);
-  const startSeconds = options.startSeconds ?? 0;
-  const maxEvents = options.maxEvents ?? 20000;
-  const endSeconds = startSeconds + Math.min(sectionSeconds(workingState), options.maxSeconds ?? Infinity);
-  const events = [];
-  let from = startSeconds;
-  let replacementIndex = -1;
-  let truncated = false;
-
-  while (from < endSeconds - EPSILON && events.length < maxEvents) {
-    const nextReplacementAt = nextReplacementTime(workingState, {
-      startSeconds,
-      fromSeconds: from,
-      lastReplacementIndex: replacementIndex
-    });
-    const to = Math.min(endSeconds, nextReplacementAt ?? endSeconds);
-    if (to > from + EPSILON) {
-      const result = generateEventsInWindow(workingState, {
-        fromSeconds: from,
-        toSeconds: to,
-        sectionStartSeconds: startSeconds,
-        maxEvents: maxEvents - events.length
-      });
-      events.push(...result.events);
-      truncated = truncated || result.truncated;
-      if (result.truncated || events.length >= maxEvents) break;
-    }
-    if (nextReplacementAt == null || nextReplacementAt >= endSeconds - EPSILON) break;
-    workingState = applyNextReplacement(workingState);
-    replacementIndex += 1;
-    from = nextReplacementAt;
-  }
-
-  return { events: events.sort(sortEvents), truncated };
-}
-
-export function cloneState(state) {
-  return {
-    ...state,
-    config: { ...state.config, customMeters: state.config.customMeters ? state.config.customMeters.slice() : null },
-    voices: state.voices.map(cloneVoice),
-    pendingReplacements: state.pendingReplacements.map((replacement) => ({
-      ...replacement,
-      voice: cloneVoice(replacement.voice)
-    }))
-  };
-}
-
-function buildReplacementVoices({ previousState, preserved, cycleIndex, rng }) {
-  const config = previousState.config;
-  const targetCount = config.patternCount;
-  const usedMeters = new Set(preserved.map((voice) => voice.meter));
-  const meters = buildMeterValues(config).filter((meter) => !usedMeters.has(meter));
-  const preservedRoleCounts = countRoles(preserved);
-  const pickBalancedLane = createLanePicker(
-    rng,
-    config.kitPool,
-    preserved.map((voice) => voice.instrument)
-  );
-  const roleList = [];
-  for (let i = 0; i < Math.max(0, config.startOnlyCount - preservedRoleCounts["start-only"]); i += 1) {
-    roleList.push("start-only");
-  }
-  for (let i = 0; i < Math.max(0, config.pulseCount - preservedRoleCounts.pulse); i += 1) {
-    roleList.push("pulse");
-  }
-  while (roleList.length < targetCount - preserved.length) roleList.push("binary");
-  const roles = shuffled(rng, roleList);
-  const finalVoices = preserved.slice();
-  const replacementVoices = [];
-  let nextVoiceNumber = previousState.nextVoiceNumber;
-
-  while (finalVoices.length < targetCount) {
-    const meter = meters.shift() ?? (Math.max(...finalVoices.map((voice) => voice.meter)) + 1);
-    const role = roles.shift() ?? "binary";
-    const voice = createVoice({
-      id: `v${nextVoiceNumber}`,
-      meter,
-      role,
-      rng,
-      cycleIndex,
-      lane: pickBalancedLane(),
-      kitPool: config.kitPool
-    });
-    finalVoices.push(voice);
-    replacementVoices.push(voice);
-    nextVoiceNumber += 1;
-  }
-
-  return { finalVoices, replacementVoices, nextVoiceNumber };
-}
-
-function buildRoleStableReplacementPlan(startingVoices, replacementVoices, preservedIds) {
-  const availableSlots = new Set();
-  const slotsByRole = new Map();
-  for (let slot = 0; slot < startingVoices.length; slot += 1) {
-    const voice = startingVoices[slot];
-    if (preservedIds.has(voice.id)) continue;
-    availableSlots.add(slot);
-    const slots = slotsByRole.get(voice.role) ?? [];
-    slots.push(slot);
-    slotsByRole.set(voice.role, slots);
-  }
-
-  return replacementVoices.map((voice) => {
-    const matchingSlots = slotsByRole.get(voice.role) ?? [];
-    const matchingSlot = matchingSlots.find((slot) => availableSlots.has(slot));
-    const slot = matchingSlot ?? availableSlots.values().next().value ?? null;
-    if (slot !== null) availableSlots.delete(slot);
-    const instrument = { ...voice.instrument };
-    return {
-      slot,
-      voice: {
-        ...voice,
-        instrument,
-        kitId: instrument.kitId,
-        kit: instrument.kitName
-      }
-    };
-  });
-}
-
-function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacementIndex }) {
-  if (!state.pendingReplacements.length) return null;
-  const duration = sectionSeconds(state);
-  if (!Number.isFinite(duration) || duration <= 0) return null;
-  const completed = Math.max(0, lastReplacementIndex + 1);
-  const total = completed + state.pendingReplacements.length;
-  const scheduled = startSeconds + (duration * (completed + 1) / (total + 1));
-  return Math.max(scheduled, fromSeconds);
-}
-
-function cloneVoice(voice) {
-  return {
-    ...voice,
-    pattern: voice.pattern.slice(),
-    instrument: { ...voice.instrument }
-  };
-}
-
-function cloneVoiceWithPulseOverride(state, voice) {
-  return {
-    ...cloneVoice(voice),
-    pulseSecondsOverride: voicePulseSeconds(state, voice)
-  };
-}
-
-function rethinkAsBaseVoice(state, voice) {
-  const targetMeter = Math.max(1, state.config.meterStart);
-  const clone = cloneVoice(voice);
-  clone.meter = targetMeter;
-  clone.pattern = patternForRethoughtMeter(voice, targetMeter);
-  delete clone.pulseSecondsOverride;
-  return clone;
-}
-
-function patternForRethoughtMeter(voice, targetMeter) {
-  const length = Math.max(1, targetMeter);
-  if (voice.role === "pulse") return Array.from({ length }, () => 1);
-  if (voice.role === "start-only") return Array.from({ length }, (_, index) => (index === 0 ? 1 : 0));
-  if (voice.role === "binary") return voice.pattern.slice();
-  const pattern = Array.from({ length }, () => 0);
-  for (let index = 0; index < voice.pattern.length; index += 1) {
-    if (!voice.pattern[index]) continue;
-    const mapped = Math.min(length - 1, Math.round((index / voice.pattern.length) * length));
-    pattern[mapped] = 1;
-  }
-  if (!pattern.some(Boolean)) pattern[0] = 1;
-  return pattern;
-}
-
-function ensureOpeningHit(voices) {
-  if (!voices.length || voices.some((voice) => voice.pattern[0] === 1)) return;
-  voices[0].pattern[0] = 1;
-}
-
-function createLanePicker(rng, kitPool, usedLanes = []) {
-  const allowedKitIds = normalizeKitPool(kitPool);
-  const allAllowed = ALL_LANES.filter((lane) => allowedKitIds.includes(lane.kitId));
-  const used = new Set(usedLanes.map(laneKey));
-  let lanes = [];
   return () => {
-    if (!lanes.length) {
-      const unused = allAllowed.filter((lane) => !used.has(laneKey(lane)));
-      if (!unused.length) used.clear();
-      lanes = shuffled(rng, unused.length ? unused : allAllowed);
-    }
-    const lane = lanes.shift();
-    used.add(laneKey(lane));
-    return lane;
+    state += 0x6d2b79f5;
+    let word = state;
+    word = Math.imul(word ^ (word >>> 15), word | 1);
+    word ^= word + Math.imul(word ^ (word >>> 7), word | 61);
+    return ((word ^ (word >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function laneKey(lane) {
-  return `${lane.kitId}:${lane.name}`;
-}
-
-function countRoles(voices) {
-  return voices.reduce((acc, voice) => {
-    acc[voice.role] = (acc[voice.role] ?? 0) + 1;
-    return acc;
-  }, { "start-only": 0, pulse: 0, binary: 0 });
-}
-
-function sortEvents(a, b) {
-  if (a.timeSeconds !== b.timeSeconds) return a.timeSeconds - b.timeSeconds;
-  return a.voiceId.localeCompare(b.voiceId);
-}
-
-function ensureMember(value, allowed, fallback) {
-  return allowed.includes(value) ? value : fallback;
-}
-
-function normalizeBasisPolicy(value, rng) {
-  const corrected = BASIS_POLICY_TYPOS[value] ?? value;
-  return ensureMember(corrected, BASIS_POLICIES, pick(rng, BASIS_POLICIES));
-}
-
-function hasValue(value) {
-  return value !== undefined && value !== null && value !== "";
-}
-
-function clampNumber(value, min, max) {
-  const number = Math.floor(Number(value));
-  if (!Number.isFinite(number)) return min;
-  return Math.max(min, Math.min(max, number));
-}
-
-function clampFloat(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return min;
-  return Math.max(min, Math.min(max, number));
-}
-
-function gcd(a, b) {
-  let x = Math.abs(Math.floor(a));
-  let y = Math.abs(Math.floor(b));
-  while (y) {
-    [x, y] = [y, x % y];
-  }
-  return x || 1;
-}
-
-function lcm(a, b) {
-  return Math.abs(a * b) / gcd(a, b);
 }
 
 function lcmAll(values) {
   return values.reduce((acc, value) => lcm(acc, value), 1);
 }
 
-export function assertInstrumentsWithinLeanSet(state) {
-  const names = new Set(ALL_LANES.map((lane) => lane.name));
-  return state.voices.every((voice) => names.has(voice.instrument.name) && state.config.kitPool.includes(voice.kitId));
+function lcm(a, b) {
+  const next = Math.abs(a * b) / gcd(a, b);
+  return next > Number.MAX_SAFE_INTEGER ? Number.MAX_SAFE_INTEGER : next;
+}
+
+function gcd(a, b) {
+  let x = Math.abs(Math.floor(a));
+  let y = Math.abs(Math.floor(b));
+  while (y) [x, y] = [y, x % y];
+  return x || 1;
 }

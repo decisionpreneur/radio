@@ -1,1325 +1,751 @@
 import {
-  advanceCycle,
-  applyNextReplacement,
   baseBarSeconds,
-  cloneState,
-  createInitialState,
-  generateEventsInWindow,
+  beginNextCycle,
+  cloneStation,
+  eventsBetween,
+  kitSummary,
+  makeStation,
+  nextReplacementSecond,
+  replaceOne,
   renderArrangement,
-  resolvingBaseBars,
-  sectionBaseBars,
+  resolveBars,
+  sectionBars,
   sectionSeconds,
   voiceBpm
 } from "./lib/engine.mjs";
 import { encodeMidiFile } from "./lib/midi-file.mjs";
-import {
-  activateLicense,
-  clearEntitlement,
-  entitlementUnlocks,
-  fetchPublicConfig,
-  getOrCreateInstanceName,
-  licenseErrorMessage,
-  makeEntitlement,
-  readEntitlement,
-  validateLicense,
-  writeEntitlement
-} from "./lib/paywall.mjs";
 
-const controls = document.querySelector("#controls");
-const statusEl = document.querySelector("#status");
-const voicesEl = document.querySelector("#voices");
-const canvas = document.querySelector("#timeline");
-const timelineShell = document.querySelector("#timelineShell");
-const ctx = canvas.getContext("2d");
-const startBtn = document.querySelector("#startBtn");
-const stopBtn = document.querySelector("#stopBtn");
-const randomBtn = document.querySelector("#randomBtn");
-const shareBtn = document.querySelector("#shareBtn");
-const midiBtn = document.querySelector("#midiBtn");
-const exportBtn = document.querySelector("#exportBtn");
-const midiOutputSelect = document.querySelector("#midiOutput");
-const donateLink = document.querySelector("#donateLink");
-const checkoutLink = document.querySelector("#checkoutLink");
-const licenseKeyInput = document.querySelector("#licenseKey");
-const licenseEmailInput = document.querySelector("#licenseEmail");
-const unlockBtn = document.querySelector("#unlockBtn");
-const clearLicenseBtn = document.querySelector("#clearLicenseBtn");
-const paywallStatus = document.querySelector("#paywallStatus");
-const readoutFields = {
-  tempoBasis: document.querySelector('[data-field="tempoBasis"]'),
-  cycle: document.querySelector('[data-field="cycle"]'),
-  change: document.querySelector('[data-field="change"]'),
-  basisPolicy: document.querySelector('[data-field="basisPolicy"]'),
-  voices: document.querySelector('[data-field="voices"]'),
-  roles: document.querySelector('[data-field="roles"]'),
-  meters: document.querySelector('[data-field="meters"]'),
-  kits: document.querySelector('[data-field="kits"]'),
-  timing: document.querySelector('[data-field="timing"]'),
-  access: document.querySelector('[data-field="access"]'),
-  accessBadge: document.querySelector("#accessBadge"),
-  signal: document.querySelector('[data-field="signal"]'),
-  signalFill: document.querySelector('[data-field="signalFill"]'),
-  changeFill: document.querySelector('[data-field="changeFill"]'),
-  changeCue: document.querySelector('[data-field="changeCue"]')
+const accessStore = "radio-access-v4";
+const instanceStore = "radio-instance-v4";
+const sessionSeed = `r-${Date.now().toString(36)}`;
+const q = (selector) => document.querySelector(selector);
+const qa = (selector) => [...document.querySelectorAll(selector)];
+const ui = {
+  tune: q("#tune"),
+  run: q("#runState"),
+  lock: q("#lockState"),
+  play: q("#play"),
+  stop: q("#stop"),
+  fresh: q("#fresh"),
+  copy: q("#copyLink"),
+  midi: q("#midiConnect"),
+  save: q("#midiSave"),
+  buy: q("#buy"),
+  give: q("#give"),
+  license: q("#license"),
+  email: q("#email"),
+  unlock: q("#unlock"),
+  forget: q("#forget"),
+  accessText: q("#accessText"),
+  midiOut: q("#midiOut"),
+  canvas: q("#map"),
+  mapWrap: q("#mapWrap"),
+  needle: q("#mapWrap > span"),
+  parts: q("#partList"),
+  cycleMeter: q("#cycleMeter"),
+  reads: Object.fromEntries(qa("[data-read]").map((node) => [node.dataset.read, node])),
+  hit: q("#hit"),
+  hitLamp: q('[data-hit="lamp"]'),
+  hitReads: Object.fromEntries(qa("[data-hit]").map((node) => [node.dataset.hit, node]))
 };
-const hitFields = {
-  strip: document.querySelector("#hitStrip"),
-  lamp: document.querySelector('[data-field="hitLamp"]'),
-  instrument: document.querySelector('[data-field="hitInstrument"]'),
-  voice: document.querySelector('[data-field="hitVoice"]'),
-  meter: document.querySelector('[data-field="hitMeter"]'),
-  kit: document.querySelector('[data-field="hitKit"]'),
-  role: document.querySelector('[data-field="hitRole"]'),
-  pulse: document.querySelector('[data-field="hitPulse"]')
-};
+const paper = ui.canvas.getContext("2d");
 
-const commerceLinks = {
-  donationUrl: donateLink.dataset.donationUrl,
-  checkoutUrl: checkoutLink.dataset.checkoutUrl
-};
-applyCommerceLinks();
-const sessionSeed = makeSessionSeed();
-loadPublicConfig();
-
-const tunedControlIds = [
-  "seed",
-  "baseBpm",
-  "baseMeter",
-  "patternCount",
-  "startOnlyCount",
-  "pulseCount",
-  "kitPool",
-  "meterStart",
-  "cycleLength",
-  "cycleLengthKind",
-  "basisPolicy"
-];
-const touchedControls = new Set();
-
-applySharedConfigFromUrl();
-
-let state = makeStateFromControls(null);
-let entitlement = readEntitlement();
-let audioContext = null;
-let masterInput = null;
-let signalAnalyser = null;
-let signalSamples = null;
-let signalFrame = null;
-let signalPeak = 0;
-let currentHitPan = 0;
+let station = makeStation(valuesFromForm());
+let listening = null;
+let audio = null;
 let midiAccess = null;
-let midiOutput = null;
-let timer = null;
-let live = null;
-let entitlementValidationPending = entitlementUnlocks(entitlement);
-let statusHoldUntil = 0;
-const hitTimeouts = new Set();
-const voiceHitTimers = new Map();
-let stripHitTimer = null;
-let lastHitVoiceId = null;
-let lastHitSlotIndex = null;
+let midiOut = null;
+let savedAccess = readStoredAccess();
+let accessCheckPending = savedAccess?.unlocked === true;
+let lastHitUid = "";
+let lastHitSlot = -1;
+let signalFrame = 0;
+let signalPeak = 0;
+let hitBlink = 0;
 
-const SCHEDULE_OFFSET_SECONDS = 0.02;
-const SCHEDULE_LOOKAHEAD_SECONDS = 0.35;
-const SCHEDULE_PRUNE_SECONDS = 1;
-const EPSILON_SECONDS = 1e-6;
+applyHash();
+station = makeStation(valuesFromForm());
+loadPaymentLinks();
+refreshAccessFromStorage();
+paint();
 
-updatePaywallUi();
-validateExistingEntitlement();
-draw();
+ui.tune.addEventListener("input", rebuild);
+ui.tune.addEventListener("change", rebuild);
+ui.play.addEventListener("click", start);
+ui.stop.addEventListener("click", stop);
+ui.fresh.addEventListener("click", randomize);
+ui.copy.addEventListener("click", copyLink);
+ui.unlock.addEventListener("click", unlock);
+ui.forget.addEventListener("click", clearAccess);
+ui.midi.addEventListener("click", connectMidi);
+ui.midiOut.addEventListener("change", chooseMidiOut);
+ui.save.addEventListener("click", saveMidi);
 
-controls.addEventListener("input", syncControls);
-controls.addEventListener("change", syncControls);
-
-function syncControls(event) {
-  if (event?.target?.closest?.("#paywall, .output-group")) return;
-  markTouchedControl(event?.target);
-  state = makeStateFromControls(state);
-  releaseBlankTouchedControls();
-  if (timer && live && audioContext) {
-    live.state = state;
-    live.sectionStart = audioContext.currentTime + 0.08;
-    live.lastReplacementBar = -1;
-    live.lastReplacementResolve = -1;
-    live.scheduled.clear();
+function rebuild(event) {
+  if (event?.target?.closest?.(".access") || event?.target?.id === "sections" || event?.target?.id === "midiOut") return;
+  station = makeStation(valuesFromForm());
+  if (listening) {
+    listening.station = cloneStation(station);
+    listening.started = audio.context.currentTime + 0.08;
+    listening.sent.clear();
   }
-  draw();
+  paint();
 }
 
-startBtn.addEventListener("click", async () => {
-  try {
-    await startLive();
-  } catch {
-    stopLive();
-    statusEl.textContent = "audio unavailable";
+async function start() {
+  if (!unlocked()) {
+    phrase("license required");
+    return;
   }
-});
-
-stopBtn.addEventListener("click", () => {
-  stopLive();
-});
-
-randomBtn.addEventListener("click", () => {
-  randomizeControls();
-  markTunedControlsTouched();
-  syncControls();
-});
-
-shareBtn.addEventListener("click", async () => {
-  await shareStation();
-});
-
-for (const link of [checkoutLink]) {
-  link.addEventListener("click", (event) => {
-    if (link.dataset.state !== "unavailable") return;
-    event.preventDefault();
-    paywallStatus.textContent = "subscription link unavailable";
-    setStatus("subscription link unavailable", 1600);
-  });
-}
-
-donateLink.addEventListener("click", async (event) => {
-  if (donateLink.dataset.state === "unavailable") {
-    event.preventDefault();
-    paywallStatus.textContent = "donation link unavailable";
-    setStatus("donation link unavailable", 1600);
-  }
-});
-
-midiBtn.addEventListener("click", async () => {
-  if (!requireUnlocked()) return;
-  try {
-    await connectMidi();
-  } catch {
-    midiAccess = null;
-    midiOutput = null;
-    midiOutputSelect.innerHTML = '<option value="">none</option>';
-    statusEl.textContent = "midi unavailable";
-  }
-});
-
-midiOutputSelect.addEventListener("change", () => {
-  midiOutput = midiAccess?.outputs.get(midiOutputSelect.value) ?? null;
-});
-
-exportBtn.addEventListener("click", () => {
-  if (!requireUnlocked()) return;
-  const sections = readNumber("exportSections");
-  const rendered = renderArrangement(makeStateFromControls(state), { sectionCount: sections, ppq: 480 });
-  const midi = encodeMidiFile(rendered);
-  const blob = new Blob([midi], { type: "audio/midi" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "radio-polymetric-export.mid";
-  link.click();
-  URL.revokeObjectURL(url);
-});
-
-unlockBtn.addEventListener("click", async () => {
-  await unlockWithLicense();
-});
-
-clearLicenseBtn.addEventListener("click", () => {
-  clearEntitlement();
-  entitlement = null;
-  stopLive();
-  updatePaywallUi();
-});
-
-async function startLive() {
-  if (!requireUnlocked()) return;
-  state = makeStateFromControls(state);
-  releaseBlankTouchedControls();
-  await ensureAudioContext();
-  live = {
-    state,
-    sectionStart: audioContext.currentTime + 0.08,
-    lastReplacementBar: -1,
-    lastReplacementResolve: -1,
-    scheduled: new Map()
+  if (!audio) audio = audioGraph();
+  await audio.context.resume();
+  const now = audio.context.currentTime;
+  listening = {
+    station: cloneStation(station),
+    started: now + 0.08,
+    sent: new Map(),
+    timer: window.setInterval(tick, 25)
   };
-  draw();
-  timelineShell.dataset.state = "playing";
+  ui.mapWrap.dataset.live = "yes";
+  phrase("playing");
   tick();
-  statusEl.textContent = live.scheduled.size ? "playing" : "waiting for hit";
-  timer = window.setInterval(tick, 25);
-  startSignalMeter();
+  signalLoop();
 }
 
-async function unlockWithLicense() {
-  const licenseKey = licenseKeyInput.value;
-  const email = licenseEmailInput.value;
-  if (!licenseKey.trim()) {
-    paywallStatus.textContent = licenseErrorMessage("license_key_required");
-    return;
-  }
-  paywallStatus.textContent = "checking license";
-  unlockBtn.disabled = true;
-  try {
-    const verdict = await activateLicense({
-      licenseKey,
-      email,
-      instanceName: getOrCreateInstanceName()
-    });
-    if (!verdict.unlocked) {
-      paywallStatus.textContent = licenseErrorMessage(verdict.error);
-      return;
-    }
-    entitlement = makeEntitlement({ licenseKey, email, verdict });
-    entitlementValidationPending = false;
-    writeEntitlement(entitlement);
-    licenseKeyInput.value = "";
-    updatePaywallUi();
-  } catch {
-    paywallStatus.textContent = licenseErrorMessage("license_check_failed");
-  } finally {
-    unlockBtn.disabled = false;
-  }
-}
-
-async function validateExistingEntitlement() {
-  if (!entitlementUnlocks(entitlement)) {
-    entitlementValidationPending = false;
-    updatePaywallUi();
-    return;
-  }
-  try {
-    const verdict = await validateLicense(entitlement);
-    if (!verdict.unlocked) {
-      clearEntitlement();
-      entitlement = null;
-      stopLive();
-    } else {
-      entitlement = makeEntitlement({
-        licenseKey: entitlement.licenseKey,
-        email: entitlement.email,
-        verdict
-      });
-      writeEntitlement(entitlement);
-    }
-  } catch {
-    clearEntitlement();
-    entitlement = null;
-    stopLive();
-  } finally {
-    entitlementValidationPending = false;
-  }
-  updatePaywallUi();
-}
-
-async function loadPublicConfig() {
-  const config = await fetchPublicConfig();
-  if (config.checkoutUrl) {
-    commerceLinks.checkoutUrl = config.checkoutUrl;
-  }
-  if (config.donationUrl) {
-    commerceLinks.donationUrl = config.donationUrl;
-  }
-  applyCommerceLinks();
-}
-
-function applyCommerceLinks() {
-  configureCommerceLink(checkoutLink, commerceLinks.checkoutUrl, "Subscribe $5/mo USD", "subscription link unavailable");
-  configureDonationLink();
-}
-
-function configureCommerceLink(link, url, activeText, inactiveText) {
-  if (url) {
-    link.href = url;
-    link.textContent = activeText;
-    link.removeAttribute("title");
-    link.dataset.state = "active";
-    return;
-  }
-  link.href = "#paywall";
-  link.textContent = activeText;
-  link.title = inactiveText;
-  link.dataset.state = "unavailable";
-}
-
-function configureDonationLink() {
-  if (commerceLinks.donationUrl) {
-    configureCommerceLink(donateLink, commerceLinks.donationUrl, "Donate", "donation link unavailable");
-    return;
-  }
-  configureCommerceLink(donateLink, "", "Donate", "donation link unavailable");
-}
-
-function requireUnlocked() {
-  if (!entitlementValidationPending && entitlementUnlocks(entitlement)) return true;
-  const message = entitlementValidationPending ? "checking license" : licenseErrorMessage("license_required");
-  paywallStatus.textContent = message;
-  setStatus(message, 1600);
-  return false;
-}
-
-function updatePaywallUi() {
-  const unlocked = !entitlementValidationPending && entitlementUnlocks(entitlement);
-  const accessText = entitlementValidationPending ? "checking license" : (unlocked ? "subscribed" : "license required");
-  startBtn.disabled = false;
-  midiBtn.disabled = !unlocked;
-  exportBtn.disabled = !unlocked;
-  clearLicenseBtn.disabled = !unlocked;
-  startBtn.title = unlocked ? "Play live audio" : "License required";
-  midiBtn.title = unlocked ? "Connect MIDI output" : "License required";
-  exportBtn.title = unlocked ? "Export MIDI file" : "License required";
-  paywallStatus.textContent = accessText;
-  readoutFields.access.textContent = accessText;
-  readoutFields.accessBadge.textContent = accessText;
-  document.documentElement.dataset.access = unlocked ? "unlocked" : "locked";
-}
-
-async function shareStation() {
-  const url = new URL(window.location.href);
-  url.hash = stationHashParams().toString();
-  try {
-    await navigator.clipboard.writeText(url.href);
-    setStatus("link copied", 1600);
-  } catch {
-    window.location.hash = url.hash;
-    setStatus("link ready", 1600);
-  }
-}
-
-function stopLive() {
-  if (timer) window.clearInterval(timer);
-  timer = null;
-  live = null;
-  clearHitIndicators();
-  stopSignalMeter();
-  signalPeak = 0;
-  setSignalLevel(0);
-  timelineShell.dataset.state = "stopped";
-  timelineShell.style.setProperty("--playhead-x", "0%");
-  statusEl.textContent = "stopped";
+function stop() {
+  if (listening?.timer) window.clearInterval(listening.timer);
+  listening = null;
+  ui.mapWrap.dataset.live = "no";
+  ui.cycleMeter.value = 0;
+  ui.needle.style.setProperty("--needle-x", "50%");
+  phrase("stopped");
 }
 
 function tick() {
-  if (!live || !audioContext) return;
-  const now = audioContext.currentTime;
-  catchUpLiveState(now);
-  pruneScheduled(now);
-  scheduleWindow(now + SCHEDULE_OFFSET_SECONDS, now + SCHEDULE_LOOKAHEAD_SECONDS);
-  updateCycleProgress(now);
+  if (!listening || !audio) return;
+  const now = audio.context.currentTime;
+  carryTo(now);
+  schedule(now + 0.015, now + 0.35);
+  showTime(now);
 }
 
-function catchUpLiveState(now) {
+function carryTo(now) {
   let changed = false;
-  while (now >= live.sectionStart + sectionSeconds(live.state) - EPSILON_SECONDS) {
-    live.sectionStart += sectionSeconds(live.state);
-    live.state = advanceCycle(live.state);
-    live.lastReplacementBar = -1;
-    live.lastReplacementResolve = -1;
+  while (now >= listening.started + sectionSeconds(listening.station) - 1e-9) {
+    listening.started += sectionSeconds(listening.station);
+    listening.station = beginNextCycle(listening.station);
+    listening.sent.clear();
     changed = true;
   }
-  changed = applyCadenceUntil(live, now) || changed;
+  while (true) {
+    const cut = nextReplacementSecond(listening.station, listening.started);
+    if (cut === null || cut > now + 1e-9) break;
+    listening.station = replaceOne(listening.station);
+    changed = true;
+  }
   if (changed) {
-    state = live.state;
-    draw();
+    station = cloneStation(listening.station);
+    paint();
   }
 }
 
-function scheduleWindow(fromSeconds, toSeconds) {
-  const cursorState = {
-    state: cloneState(live.state),
-    sectionStart: live.sectionStart,
-    lastReplacementBar: live.lastReplacementBar,
-    lastReplacementResolve: live.lastReplacementResolve
+function schedule(fromSecond, toSecond) {
+  for (const [key, at] of listening.sent) {
+    if (at < fromSecond - 1) listening.sent.delete(key);
+  }
+  let cursor = fromSecond;
+  let local = cloneStation(listening.station);
+  let origin = listening.started;
+  while (cursor < toSecond - 1e-9) {
+    const cycleEnd = origin + sectionSeconds(local);
+    const replacementAt = nextReplacementSecond(local, origin);
+    const edge = Math.min(toSecond, cycleEnd, replacementAt ?? Number.POSITIVE_INFINITY);
+    for (const hit of eventsBetween(local, {
+      fromSecond: cursor,
+      toSecond: edge,
+      originSecond: origin,
+      maxEvents: 2200
+    })) {
+      const key = `${local.cycle}:${local.replacementsDone}:${hit.uid}:${hit.pulse}`;
+      if (listening.sent.has(key)) continue;
+      listening.sent.set(key, hit.timeSecond);
+      sound(hit, hit.timeSecond);
+    }
+    cursor = edge;
+    if (replacementAt !== null && replacementAt <= edge + 1e-9) {
+      local = replaceOne(local);
+      continue;
+    }
+    if (cycleEnd <= edge + 1e-9) {
+      origin = cycleEnd;
+      local = beginNextCycle(local);
+    }
+  }
+}
+
+function sound(hit, when) {
+  if (midiOut) {
+    const at = performance.now() + Math.max(0, (when - audio.context.currentTime) * 1000);
+    midiOut.send([0x99, hit.note, hit.velocity], at);
+    midiOut.send([0x89, hit.note, 0], at + hit.seconds * 1000);
+  }
+  renderHit(hit, when);
+  signalPeak = Math.max(signalPeak, hit.velocity / 127);
+  const delay = Math.max(0, (when - audio.context.currentTime) * 1000);
+  window.setTimeout(() => showHit(hit), delay);
+}
+
+function renderHit(hit, when) {
+  const loud = (hit.velocity / 127) * Math.max(0.38, Math.min(0.9, 2.8 / Math.sqrt(Math.max(1, station.voices.length))));
+  const family = hit.instrument.family;
+  if (family === "kick") {
+    tone(82, 0.16, loud * 0.76, "sine", when, 0.38);
+    noise(0.026, loud * 0.16, 2600, "highpass", when);
+  } else if (family === "snare") {
+    noise(0.11, loud * 0.34, 980, "bandpass", when);
+    tone(185, 0.06, loud * 0.13, "triangle", when, 0.55);
+  } else if (family === "tom") {
+    const freq = 112 + (hit.note - 41) * 22;
+    tone(freq, 0.18, loud * 0.42, "sine", when, 0.52);
+  } else if (family === "hat") {
+    noise(hit.instrument.name.includes("Open") ? 0.18 : 0.055, loud * 0.18, 6200, "highpass", when);
+    metal([3800, 5700], 0.06, loud * 0.05, when);
+  } else if (family === "crash") {
+    noise(0.32, loud * 0.24, 3600, "highpass", when);
+    metal([730, 1190, 2110], 0.22, loud * 0.09, when);
+  } else if (family === "ride") {
+    noise(0.18, loud * 0.16, 4700, "highpass", when);
+    metal([610, 920], 0.12, loud * 0.08, when);
+  } else if (family === "hand") {
+    const freq = 96 + (hit.note - 35) * 15;
+    tone(freq, 0.15, loud * 0.45, "triangle", when, 0.58);
+    noise(0.03, loud * 0.08, freq * 9, "bandpass", when);
+  } else if (family === "wood") {
+    metal([520 + hit.note * 5, 780 + hit.note * 6], 0.08, loud * 0.16, when, "square");
+  } else if (family === "metal") {
+    metal([820 + hit.note * 8, 1310 + hit.note * 6, 2190 + hit.note * 4], 0.13, loud * 0.15, when);
+  } else {
+    noise(0.095, loud * 0.15, 5200, "highpass", when);
+  }
+}
+
+function audioGraph() {
+  const context = new AudioContext();
+  const master = context.createGain();
+  const compressor = context.createDynamicsCompressor();
+  const analyser = context.createAnalyser();
+  master.gain.value = 0.52;
+  compressor.threshold.value = -18;
+  compressor.knee.value = 22;
+  compressor.ratio.value = 6;
+  compressor.attack.value = 0.004;
+  compressor.release.value = 0.18;
+  analyser.fftSize = 512;
+  master.connect(compressor).connect(analyser).connect(context.destination);
+  return {
+    context,
+    master,
+    analyser,
+    samples: new Uint8Array(analyser.frequencyBinCount),
+    noiseBuffer: makeNoise(context)
   };
-  applyCadenceUntil(cursorState, fromSeconds);
-
-  let cursor = fromSeconds;
-  while (cursor < toSeconds - EPSILON_SECONDS) {
-    const sectionEnd = cursorState.sectionStart + sectionSeconds(cursorState.state);
-    const nextCadence = nextCadenceSeconds(cursorState);
-    const segmentEnd = Math.min(toSeconds, sectionEnd, nextCadence ?? Number.POSITIVE_INFINITY);
-
-    if (segmentEnd > cursor + EPSILON_SECONDS) {
-      const result = generateEventsInWindow(cursorState.state, {
-        fromSeconds: cursor,
-        toSeconds: segmentEnd,
-        sectionStartSeconds: cursorState.sectionStart,
-        maxEvents: 600
-      });
-      for (const event of result.events) scheduleEvent(cursorState.state, event);
-    }
-
-    if (nextCadence !== null && nextCadence <= segmentEnd + EPSILON_SECONDS && nextCadence <= toSeconds + EPSILON_SECONDS) {
-      applyOneReplacement(cursorState);
-      cursor = Math.max(segmentEnd, nextCadence);
-      continue;
-    }
-
-    if (sectionEnd <= segmentEnd + EPSILON_SECONDS && sectionEnd <= toSeconds + EPSILON_SECONDS) {
-      cursorState.sectionStart = sectionEnd;
-      cursorState.state = advanceCycle(cursorState.state);
-      cursorState.lastReplacementBar = -1;
-      cursorState.lastReplacementResolve = -1;
-      cursor = Math.max(segmentEnd, sectionEnd);
-      continue;
-    }
-
-    cursor = segmentEnd;
-  }
 }
 
-function scheduleEvent(currentState, event) {
-  const key = `${currentState.cycleIndex}:${event.voiceId}:${event.pulseIndex}`;
-  if (live.scheduled.has(key)) return;
-  live.scheduled.set(key, event.timeSeconds);
-  playEvent(event, event.timeSeconds);
-}
-
-function pruneScheduled(now) {
-  for (const [key, timeSeconds] of live.scheduled.entries()) {
-    if (timeSeconds < now - SCHEDULE_PRUNE_SECONDS) live.scheduled.delete(key);
-  }
-}
-
-function applyCadenceUntil(target, untilSeconds) {
-  let changed = false;
-  while (target.state.pendingReplacements.length) {
-    const nextCadence = nextCadenceSeconds(target);
-    if (nextCadence === null || nextCadence > untilSeconds + EPSILON_SECONDS) break;
-    applyOneReplacement(target);
-    changed = true;
-  }
-  return changed;
-}
-
-function nextCadenceSeconds(target) {
-  if (!target.state.pendingReplacements.length) return null;
-  const duration = sectionSeconds(target.state);
-  if (!Number.isFinite(duration) || duration <= 0) return null;
-  const completed = Math.max(0, target.lastReplacementBar + 1);
-  const total = completed + target.state.pendingReplacements.length;
-  return target.sectionStart + (duration * (completed + 1) / (total + 1));
-}
-
-function applyOneReplacement(target) {
-  const atSeconds = nextCadenceSeconds(target);
-  if (atSeconds === null) return false;
-  const nextIndex = Math.max(0, target.lastReplacementBar + 1);
-  target.state = applyNextReplacement(target.state);
-  target.lastReplacementBar = nextIndex;
-  return true;
-}
-
-function playEvent(event, when) {
-  const output = midiOutput;
-  if (output) {
-    const timestamp = performance.now() + Math.max(0, (when - audioContext.currentTime) * 1000);
-    output.send([0x99, event.note, event.velocity], timestamp);
-    output.send([0x89, event.note, 0], timestamp + event.durationSeconds * 1000);
-  }
-  playAudio(event, when);
-  scheduleHitIndicator(event, when);
-  setPlaybackStatus("playing");
-}
-
-function scheduleHitIndicator(event, when) {
-  if (!hitFields.strip || !audioContext) return;
-  const delay = Math.max(0, (when - audioContext.currentTime) * 1000);
-  const timeout = window.setTimeout(() => {
-    hitTimeouts.delete(timeout);
-    showHit(event);
-  }, delay);
-  hitTimeouts.add(timeout);
-}
-
-function showHit(event) {
-  hitFields.instrument.textContent = event.instrument.name;
-  hitFields.voice.textContent = laneLabel(event.voiceSlot, event.voiceId);
-  hitFields.meter.textContent = String(event.meter);
-  hitFields.kit.textContent = event.kit;
-  hitFields.role.textContent = event.role;
-  hitFields.pulse.textContent = String(event.pulseIndex);
-  lastHitVoiceId = event.voiceId;
-  lastHitSlotIndex = Number.isInteger(event.voiceSlot) ? event.voiceSlot : null;
-  hitFields.strip.classList.add("is-hit");
-  hitFields.lamp.classList.add("is-hit");
-
-  if (stripHitTimer) window.clearTimeout(stripHitTimer);
-  stripHitTimer = window.setTimeout(() => {
-    hitFields.strip.classList.remove("is-hit");
-    hitFields.lamp.classList.remove("is-hit");
-    stripHitTimer = null;
-  }, 320);
-
-  const voiceNode = voicesEl.querySelector(`[data-voice-id="${event.voiceId}"]`)
-    ?? (Number.isInteger(event.voiceSlot) ? voicesEl.querySelector(`[data-voice-slot="${event.voiceSlot}"]`) : null);
-  if (!voiceNode) return;
-  voicesEl.querySelectorAll(".voice.last-hit").forEach((node) => node.classList.remove("last-hit"));
-  voiceNode.classList.add("last-hit");
-  const timerKey = voiceNode.dataset.voiceSlot ?? event.voiceId;
-  const previousTimer = voiceHitTimers.get(timerKey);
-  if (previousTimer) window.clearTimeout(previousTimer);
-  restoreTransientVoiceHit(voiceNode);
-  if (voiceNode.dataset.voiceId !== event.voiceId) {
-    applyTransientVoiceHit(voiceNode, event);
-  }
-  voiceNode.classList.add("hit");
-  const timerId = window.setTimeout(() => {
-    voiceNode.classList.remove("hit");
-    restoreTransientVoiceHit(voiceNode);
-    voiceHitTimers.delete(timerKey);
-  }, 420);
-  voiceHitTimers.set(timerKey, timerId);
-}
-
-function applyTransientVoiceHit(voiceNode, event) {
-  voiceNode.dataset.restingVoiceHtml = voiceNode.innerHTML;
-  voiceNode.dataset.restingVoiceColor = voiceNode.style.getPropertyValue("--voice-color");
-  voiceNode.style.setProperty("--voice-color", event.instrument.color);
-  const slotIndex = Number.parseInt(voiceNode.dataset.voiceSlot ?? "", 10);
-  const bpm = Number.isFinite(event.bpm) ? event.bpm : voiceBpm(live.state, event);
-  voiceNode.innerHTML = `
-      <span class="lane-lamp" aria-hidden="true"></span>
-      <span class="voice-id">${escapeHtml(laneLabel(slotIndex, event.voiceId))}</span>
-      <strong class="instrument-name">${escapeHtml(event.instrument.name)}</strong>
-      <span class="kit-name">${escapeHtml(event.kit)}</span>
-      <span class="meter-chip">m ${event.meter}</span>
-      <span class="role-chip">${escapeHtml(event.role)}</span>
-      <span class="hold-chip">hit</span>
-      <span class="bpm-chip">${bpm.toFixed(3)} bpm</span>
-      <span class="note-chip">n ${event.note}</span>
-      ${patternMapHtml(Array.isArray(event.pattern) ? event.pattern : [1])}
-    `;
-}
-
-function restoreTransientVoiceHit(voiceNode) {
-  if (!voiceNode.dataset.restingVoiceHtml) return;
-  voiceNode.innerHTML = voiceNode.dataset.restingVoiceHtml;
-  voiceNode.style.setProperty("--voice-color", voiceNode.dataset.restingVoiceColor);
-  delete voiceNode.dataset.restingVoiceHtml;
-  delete voiceNode.dataset.restingVoiceColor;
-}
-
-function clearHitIndicators() {
-  for (const timeout of hitTimeouts) window.clearTimeout(timeout);
-  hitTimeouts.clear();
-  if (stripHitTimer) window.clearTimeout(stripHitTimer);
-  stripHitTimer = null;
-  for (const timeout of voiceHitTimers.values()) window.clearTimeout(timeout);
-  voiceHitTimers.clear();
-  lastHitVoiceId = null;
-  lastHitSlotIndex = null;
-  hitFields.strip?.classList.remove("is-hit");
-  hitFields.lamp?.classList.remove("is-hit");
-  voicesEl.querySelectorAll(".voice.hit, .voice.last-hit").forEach((node) => {
-    node.classList.remove("hit");
-    node.classList.remove("last-hit");
-    restoreTransientVoiceHit(node);
-  });
-  for (const field of ["instrument", "voice", "meter", "kit", "role", "pulse"]) {
-    if (hitFields[field]) hitFields[field].textContent = "-";
-  }
-}
-
-function setStatus(text, holdMs = 0) {
-  statusEl.textContent = text;
-  statusHoldUntil = holdMs ? performance.now() + holdMs : 0;
-}
-
-function setPlaybackStatus(text) {
-  if (performance.now() >= statusHoldUntil) {
-    statusEl.textContent = text;
-  }
-}
-
-function playAudio(event, when) {
-  const level = eventLevel(event);
-  currentHitPan = eventPan(event);
-  switch (event.instrument.sound) {
-    case "kick-tight":
-      kickHit(when, level);
-      break;
-    case "tom-high":
-      drumSine(when, 185 + event.meter * 2, 0.11, 0.42 * level, "triangle", 0.54);
-      break;
-    case "tom-high-mid":
-      drumSine(when, 152 + event.meter * 2, 0.13, 0.45 * level, "triangle", 0.52);
-      break;
-    case "tom-low-mid":
-      drumSine(when, 122 + event.meter * 2, 0.15, 0.48 * level, "triangle", 0.48);
-      break;
-    case "tom-low":
-      drumSine(when, 95 + event.meter * 2, 0.17, 0.5 * level, "triangle", 0.45);
-      break;
-    case "snare":
-      snareHit(when, level);
-      break;
-    case "snare-edge":
-      snareHit(when, level * 0.88);
-      woodHit(when, 1850, 0.025, 0.08 * level);
-      break;
-    case "rim":
-      woodHit(when, 1750, 0.035, 0.34 * level);
-      break;
-    case "hihat-closed":
-      noiseHit(when, 0.035, 0.18 * level, 7800, "highpass", 0.9);
-      break;
-    case "semi-open-hihat":
-      noiseHit(when, 0.115, 0.18 * level, 6800, "highpass", 0.8);
-      break;
-    case "swish-hihat":
-      noiseHit(when, 0.23, 0.16 * level, 4500, "highpass", 0.55);
-      break;
-    case "ride-cup":
-      metallicHit(when, [930, 1400, 2280], 0.16, 0.16 * level, "triangle");
-      break;
-    case "ride":
-      cymbalHit(when, 0.2, 0.2 * level, 4700);
-      break;
-    case "crash":
-      cymbalHit(when, 0.42, 0.26 * level, 3400);
-      break;
-    case "stick-click":
-      woodHit(when, 3100, 0.018, 0.2 * level);
-      break;
-    case "conga-high":
-      handDrum(when, 190, 0.14, 0.5 * level);
-      break;
-    case "conga-low":
-      handDrum(when, 135, 0.18, 0.56 * level);
-      break;
-    case "cajon-low":
-      handDrum(when, 92, 0.13, 0.62 * level);
-      break;
-    case "finger-snap":
-      woodHit(when, 2600, 0.024, 0.22 * level);
-      break;
-    case "cajon-slap":
-      noiseHit(when, 0.055, 0.24 * level, 1800, "bandpass", 2.2);
-      woodHit(when, 980, 0.032, 0.12 * level);
-      break;
-    case "hand-clap":
-      noiseHit(when, 0.07, 0.28 * level, 1400, "bandpass", 1.8);
-      woodHit(when, 2400, 0.018, 0.08 * level);
-      break;
-    case "hand-drum-small":
-      handDrum(when, 238, 0.1, 0.42 * level);
-      break;
-    case "hand-drum-small-high":
-      handDrum(when, 282, 0.085, 0.4 * level);
-      break;
-    case "shaker-soft":
-      shakerHit(when, 0.055, 0.16 * level, 7200);
-      break;
-    case "foot-stomp":
-      drumSine(when, 66, 0.12, 0.42 * level, "sine", 0.5);
-      noiseHit(when, 0.035, 0.1 * level, 420, "lowpass", 0.8);
-      break;
-    case "claves":
-      woodHit(when, 2400, 0.045, 0.32 * level);
-      break;
-    case "tambourine":
-      tambourineHit(when, level);
-      break;
-    case "cymbal-hand":
-      cymbalHit(when, 0.32, 0.22 * level, 3900);
-      break;
-    case "cymbal-bell":
-      metallicHit(when, [980, 1470, 2450], 0.18, 0.18 * level, "triangle");
-      break;
-    case "cowbell":
-      metallicHit(when, [540, 810, 1620], 0.12, 0.25 * level, "square");
-      break;
-    case "bucket":
-      drumSine(when, 118, 0.12, 0.32 * level, "triangle", 0.58);
-      metallicHit(when, [310, 470], 0.07, 0.12 * level, "square");
-      break;
-    case "bell-tree-down":
-      bellTreeHit(when, level, false);
-      break;
-    case "bell-tree-up":
-      bellTreeHit(when, level, true);
-      break;
-  }
-}
-
-function eventLevel(event) {
-  const voices = Math.max(1, live.state?.voices.length ?? 1);
-  const densityTrim = Math.max(0.38, Math.min(0.95, 3.4 / Math.sqrt(voices)));
-  return (event.velocity / 127) * densityTrim;
-}
-
-function eventPan(event) {
-  const meter = Number.isFinite(event.meter) ? event.meter : 1;
-  const voiceNumber = Number.parseInt(String(event.voiceId ?? "").replace(/\D+/g, ""), 10);
-  const laneOffset = Number.isFinite(voiceNumber) ? ((voiceNumber % 7) - 3) / 6 : 0;
-  const meterOffset = ((meter % 5) - 2) / 10;
-  return Math.max(-0.62, Math.min(0.62, laneOffset + meterOffset));
-}
-
-function kickHit(when, level) {
-  drumSine(when, 82, 0.14, 0.72 * level, "sine", 0.42);
-  noiseHit(when, 0.018, 0.14 * level, 3600, "highpass", 0.8);
-}
-
-function snareHit(when, level) {
-  noiseHit(when, 0.095, 0.34 * level, 1100, "bandpass", 1.6);
-  drumSine(when, 185, 0.055, 0.12 * level, "triangle", 0.72);
-}
-
-function cymbalHit(when, duration, gainValue, frequency) {
-  noiseHit(when, duration, gainValue, frequency, "highpass", 0.55);
-  metallicHit(when, [frequency * 0.19, frequency * 0.27], Math.min(duration, 0.16), gainValue * 0.18, "triangle");
-}
-
-function handDrum(when, frequency, duration, gainValue) {
-  drumSine(when, frequency, duration, gainValue, "triangle", 0.62);
-  noiseHit(when, Math.min(0.035, duration), gainValue * 0.18, frequency * 9, "bandpass", 4);
-}
-
-function woodHit(when, frequency, duration, gainValue) {
-  metallicHit(when, [frequency, frequency * 1.34], duration, gainValue, "square");
-}
-
-function shakerHit(when, duration, gainValue, frequency) {
-  noiseHit(when, duration, gainValue, frequency, "highpass", 1.2);
-}
-
-function tambourineHit(when, level) {
-  shakerHit(when, 0.11, 0.16 * level, 5400);
-  metallicHit(when, [820, 1210, 1880], 0.09, 0.13 * level, "triangle");
-}
-
-function bellTreeHit(when, level, ascending) {
-  const base = ascending ? 900 : 2300;
-  const step = ascending ? 240 : -240;
-  for (let index = 0; index < 5; index += 1) {
-    metallicHit(when + index * 0.012, [base + step * index], 0.12, 0.065 * level, "triangle");
-  }
-}
-
-function drumSine(when, frequency, duration, gainValue, type = "sine", endRatio = 0.45) {
-  const osc = audioContext.createOscillator();
-  const gain = audioContext.createGain();
+function tone(freq, seconds, gainValue, type, when, fall = 0.5) {
+  const osc = audio.context.createOscillator();
+  const gain = audio.context.createGain();
   osc.type = type;
-  osc.frequency.setValueAtTime(frequency, when);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(20, frequency * endRatio), when + duration);
+  osc.frequency.setValueAtTime(freq, when);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(18, freq * fall), when + seconds);
   gain.gain.setValueAtTime(gainValue, when);
-  gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-  osc.connect(gain);
-  connectHitOutput(gain);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + seconds);
+  osc.connect(gain).connect(audio.master);
   osc.start(when);
-  osc.stop(when + duration + 0.02);
+  osc.stop(when + seconds + 0.02);
 }
 
-function metallicHit(when, frequencies, duration, gainValue, type) {
-  frequencies.forEach((frequency, index) => {
-    const osc = audioContext.createOscillator();
-    const gain = audioContext.createGain();
-    const share = gainValue / Math.max(1, frequencies.length);
-    osc.type = type;
-    osc.frequency.setValueAtTime(frequency, when);
-    gain.gain.setValueAtTime(share * (index === 0 ? 1 : 0.72), when);
-    gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-    osc.connect(gain);
-    connectHitOutput(gain);
-    osc.start(when);
-    osc.stop(when + duration + 0.02);
-  });
-}
-
-function noiseHit(when, duration, gainValue, frequency, filterType = "highpass", q = 0.7) {
-  const sampleRate = audioContext.sampleRate;
-  const buffer = audioContext.createBuffer(1, Math.ceil(sampleRate * duration), sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
-  const source = audioContext.createBufferSource();
-  const filter = audioContext.createBiquadFilter();
-  const gain = audioContext.createGain();
-  filter.type = filterType;
-  filter.frequency.value = frequency;
-  filter.Q.value = q;
+function noise(seconds, gainValue, freq, type, when) {
+  const source = audio.context.createBufferSource();
+  const filter = audio.context.createBiquadFilter();
+  const gain = audio.context.createGain();
+  source.buffer = audio.noiseBuffer;
+  filter.type = type;
+  filter.frequency.setValueAtTime(freq, when);
   gain.gain.setValueAtTime(gainValue, when);
-  gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-  source.buffer = buffer;
-  source.connect(filter).connect(gain);
-  connectHitOutput(gain);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + seconds);
+  source.connect(filter).connect(gain).connect(audio.master);
   source.start(when);
-  source.stop(when + duration + 0.02);
+  source.stop(when + seconds + 0.02);
 }
 
-function connectHitOutput(node) {
-  if (!audioContext?.createStereoPanner) {
-    node.connect(masterInput);
-    return;
-  }
-  const pan = audioContext.createStereoPanner();
-  pan.pan.value = currentHitPan;
-  node.connect(pan).connect(masterInput);
+function metal(freqs, seconds, gainValue, when, type = "triangle") {
+  for (const freq of freqs) tone(freq, seconds, gainValue / freqs.length, type, when, 0.92);
 }
 
-async function ensureAudioContext() {
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor) throw new Error("AudioContext unavailable");
-  audioContext = audioContext ?? new AudioContextCtor();
-  if (!masterInput) {
-    const inputBus = audioContext.createGain();
-    const lowShelf = audioContext.createBiquadFilter();
-    const presence = audioContext.createBiquadFilter();
-    const air = audioContext.createBiquadFilter();
-    const compressor = audioContext.createDynamicsCompressor();
-    const limiter = audioContext.createDynamicsCompressor();
-    const masterGain = audioContext.createGain();
-    const roomSend = audioContext.createGain();
-    const roomDelay = audioContext.createDelay(0.08);
-    const roomFeedback = audioContext.createGain();
-    const roomFilter = audioContext.createBiquadFilter();
-    const roomReturn = audioContext.createGain();
-    signalAnalyser = audioContext.createAnalyser();
-    inputBus.gain.value = 0.92;
-    lowShelf.type = "lowshelf";
-    lowShelf.frequency.value = 90;
-    lowShelf.gain.value = 1.2;
-    presence.type = "peaking";
-    presence.frequency.value = 2350;
-    presence.Q.value = 0.75;
-    presence.gain.value = 1.4;
-    air.type = "highshelf";
-    air.frequency.value = 8200;
-    air.gain.value = -0.8;
-    compressor.threshold.value = -20;
-    compressor.knee.value = 24;
-    compressor.ratio.value = 4.8;
-    compressor.attack.value = 0.004;
-    compressor.release.value = 0.22;
-    limiter.threshold.value = -2;
-    limiter.knee.value = 3;
-    limiter.ratio.value = 18;
-    limiter.attack.value = 0.001;
-    limiter.release.value = 0.055;
-    roomSend.gain.value = 0.08;
-    roomDelay.delayTime.value = 0.028;
-    roomFeedback.gain.value = 0.16;
-    roomFilter.type = "lowpass";
-    roomFilter.frequency.value = 2800;
-    roomReturn.gain.value = 0.14;
-    signalAnalyser.fftSize = 256;
-    signalAnalyser.smoothingTimeConstant = 0.45;
-    masterGain.gain.value = 0.9;
-    inputBus.connect(lowShelf).connect(presence).connect(air).connect(compressor).connect(limiter).connect(signalAnalyser).connect(masterGain).connect(audioContext.destination);
-    inputBus.connect(roomSend).connect(roomDelay);
-    roomDelay.connect(roomFeedback).connect(roomDelay);
-    roomDelay.connect(roomFilter).connect(roomReturn).connect(compressor);
-    masterInput = inputBus;
-  }
-  await audioContext.resume();
-  if (audioContext.state !== "running") throw new Error("AudioContext not running");
+function makeNoise(context) {
+  const length = context.sampleRate * 2;
+  const buffer = context.createBuffer(1, length, context.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let index = 0; index < length; index += 1) data[index] = Math.random() * 2 - 1;
+  return buffer;
 }
 
-function startSignalMeter() {
-  stopSignalMeter();
-  const frame = () => {
-    updateSignalMeter();
-    if (timer) signalFrame = window.requestAnimationFrame(frame);
+function signalLoop() {
+  if (!audio || signalFrame) return;
+  const draw = () => {
+    signalFrame = 0;
+    if (!audio) return;
+    audio.analyser.getByteFrequencyData(audio.samples);
+    let peak = 0;
+    for (const value of audio.samples) peak = Math.max(peak, value);
+    const level = Math.max(peak / 255, signalPeak);
+    ui.reads.signal.textContent = level.toFixed(3);
+    ui.reads.signalFill.style.transform = `scaleX(${level})`;
+    signalPeak = signalPeak < 0.001 ? 0 : signalPeak * 0.985;
+    if (listening) signalFrame = requestAnimationFrame(draw);
   };
-  signalFrame = window.requestAnimationFrame(frame);
+  signalFrame = requestAnimationFrame(draw);
 }
 
-function stopSignalMeter() {
-  if (!signalFrame) return;
-  window.cancelAnimationFrame(signalFrame);
-  signalFrame = null;
+function showHit(hit) {
+  lastHitUid = hit.uid;
+  lastHitSlot = hit.slot;
+  ui.hitReads.instrument.textContent = hit.instrument.name;
+  ui.hitReads.lane.textContent = `L${hit.slot + 1}`;
+  ui.hitReads.meter.textContent = String(hit.meter);
+  ui.hitReads.kit.textContent = hit.kit;
+  ui.hitReads.role.textContent = hit.role;
+  ui.hitReads.pulse.textContent = String(hit.pulse);
+  ui.hit.classList.add("hot");
+  ui.hitLamp.classList.add("hot");
+  qa(".part.last").forEach((item) => item.classList.remove("last"));
+  const row = q(`[data-uid="${hit.uid}"], [data-slot="${hit.slot}"]`);
+  row?.classList.add("hit", "last");
+  if (hitBlink) window.clearTimeout(hitBlink);
+  hitBlink = window.setTimeout(() => {
+    ui.hit.classList.remove("hot");
+    ui.hitLamp.classList.remove("hot");
+    qa(".part.hit").forEach((item) => item.classList.remove("hit"));
+  }, 360);
 }
 
-function updateSignalMeter() {
-  if (!signalAnalyser) {
-    setSignalLevel(0);
-    return;
-  }
-  if (!signalSamples || signalSamples.length !== signalAnalyser.fftSize) {
-    signalSamples = new Float32Array(signalAnalyser.fftSize);
-  }
-  signalAnalyser.getFloatTimeDomainData(signalSamples);
-  let sum = 0;
-  for (let index = 0; index < signalSamples.length; index += 1) {
-    const sample = signalSamples[index];
-    sum += sample * sample;
-  }
-  const rms = Math.sqrt(sum / signalSamples.length);
-  signalPeak = Math.max(rms, signalPeak * 0.975);
-  setSignalLevel(signalPeak);
+function showTime(now) {
+  if (!listening) return;
+  const total = sectionSeconds(listening.station);
+  const spent = Math.max(0, now - listening.started);
+  const ratio = total > 0 ? Math.min(1, spent / total) : 0;
+  ui.cycleMeter.value = ratio;
+  ui.reads.cycle.textContent = `${listening.station.cycle}; bar ${Math.min(sectionBars(listening.station), Math.floor(spent / baseBarSeconds(listening.station)))} / ${sectionBars(listening.station)}`;
+  ui.reads.change.textContent = changePhrase(listening.station);
+  ui.needle.style.setProperty("--needle-x", `${Math.round(ratio * 100)}%`);
+  drawMap(listening.station, ratio);
 }
 
-function setSignalLevel(value) {
-  const level = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
-  readoutFields.signal.textContent = level.toFixed(3);
-  readoutFields.signalFill.style.transform = `scaleX(${Math.min(1, level * 5)})`;
+function paint() {
+  const view = listening?.station ?? station;
+  ui.reads.basis.textContent = basisPhrase(view);
+  ui.reads.cycle.textContent = `${view.cycle}; ${sectionBars(view)} bars`;
+  ui.reads.change.textContent = changePhrase(view);
+  ui.reads.basisChoice.textContent = view.config.basisMode === "farthest" ? "farmost" : view.config.basisMode;
+  ui.reads.patterns.textContent = String(view.voices.length);
+  ui.reads.roles.textContent = rolesPhrase(view);
+  ui.reads.meters.textContent = metersPhrase(view);
+  ui.reads.kits.textContent = kitSummary(view);
+  ui.reads.timing.textContent = "same pulse";
+  ui.reads.access.textContent = unlocked() ? "subscribed" : "locked";
+  drawMap(view, 0);
+  drawParts(view);
+  paintAccess();
 }
 
-async function connectMidi() {
-  if (!navigator.requestMIDIAccess) {
-    statusEl.textContent = "midi unavailable";
-    return;
-  }
-  midiAccess = await navigator.requestMIDIAccess();
-  midiOutputSelect.innerHTML = '<option value="">none</option>';
-  let firstOutputId = "";
-  for (const [id, output] of midiAccess.outputs.entries()) {
-    const option = document.createElement("option");
-    option.value = id;
-    option.textContent = output.name;
-    midiOutputSelect.append(option);
-    firstOutputId ||= id;
-  }
-  midiOutputSelect.value = firstOutputId;
-  midiOutput = firstOutputId ? midiAccess.outputs.get(firstOutputId) : null;
-  statusEl.textContent = "midi ready";
-}
-
-function makeStateFromControls(previousState = null) {
-  const previousConfig = previousState?.config;
-  return createInitialState({
-    seed: readOptionalText("seed", previousState?.seed) || sessionSeed,
-    baseBpm: readOptionalNumber("baseBpm", previousConfig?.baseBpm),
-    baseMeter: readOptionalNumber("baseMeter", previousState?.baseMeter),
-    patternCount: readOptionalNumber("patternCount", previousConfig?.patternCount),
-    startOnlyCount: readOptionalNumber("startOnlyCount"),
-    pulseCount: readOptionalNumber("pulseCount"),
-    kitPool: readOptionalText("kitPool", previousConfig?.kitPool?.join(",")),
-    meterStart: readOptionalNumber("meterStart", previousConfig?.meterStart),
-    meterCount: readOptionalNumber("patternCount", previousConfig?.patternCount),
-    meterTiming: "same-pulse-polymeter",
-    cycleLength: readOptionalNumber("cycleLength", previousConfig?.cycleLength),
-    cycleLengthKind: readOptionalText("cycleLengthKind", previousConfig?.cycleLengthKind),
-    basisPolicy: readOptionalText("basisPolicy", previousConfig?.basisPolicy),
-    replacementCadence: "one-by-one"
-  });
-}
-
-function draw() {
-  drawReadout();
-  drawTimeline();
-  drawVoices();
-}
-
-function drawReadout() {
-  const baseVoice = state.voices.find((voice) => voice.id === state.baseVoiceId) ?? state.voices[0];
-  const kits = [...new Set(state.voices.map((voice) => voice.kit))].join(", ");
-  const rethought = baseVoice?.rethoughtFromMeter ? `; from meter ${baseVoice.rethoughtFromMeter}` : "";
-  readoutFields.tempoBasis.textContent = `${baseVoice?.id ?? "-"}; meter ${state.baseMeter}${rethought}; ${state.baseBpm.toFixed(3)} bpm`;
-  readoutFields.cycle.textContent = cycleProgressText(state);
-  readoutFields.change.textContent = changeText(state);
-  readoutFields.basisPolicy.textContent = state.config.basisPolicy === "farthest" ? "farmost" : state.config.basisPolicy;
-  readoutFields.voices.textContent = String(state.voices.length);
-  readoutFields.roles.textContent = roleCountText(state);
-  readoutFields.meters.textContent = meterSetText(state);
-  readoutFields.kits.textContent = kits || "-";
-  readoutFields.timing.textContent = "same pulse";
-  readoutFields.access.textContent = entitlementValidationPending
-    ? "checking license"
-    : (entitlementUnlocks(entitlement) ? "subscribed" : "license required");
-  updateChangeRail(state);
-}
-
-function updateCycleProgress(now) {
-  readoutFields.cycle.textContent = cycleProgressText(live.state, now, live.sectionStart);
-  readoutFields.change.textContent = changeText(live.state, live);
-  updateChangeRail(live.state, now, live.sectionStart, live);
-  updateTimelinePlayhead(live.state, now, live.sectionStart);
-}
-
-function cycleProgressText(currentState, now = null, sectionStart = null) {
-  const totalBars = sectionBaseBars(currentState);
-  if (now === null || sectionStart === null) return `${currentState.cycleIndex}; ${totalBars} bars`;
-  const elapsed = Math.max(0, now - sectionStart);
-  const barIndex = Math.min(totalBars, Math.floor(elapsed / baseBarSeconds(currentState)));
-  return `${currentState.cycleIndex}; bar ${barIndex} / ${totalBars}`;
-}
-
-function cycleUnitText(value) {
-  return value === "resolving-sequences" ? "resolving sequences" : "bars";
-}
-
-function changeText(currentState, liveState = null) {
-  const applied = Math.max(0, (liveState?.lastReplacementBar ?? -1) + 1);
-  const total = applied + currentState.pendingReplacements.length;
-  const replacements = total ? `${applied}/${total} replacements` : "basis";
-  return `${currentState.config.cycleLength} ${cycleUnitText(currentState.config.cycleLengthKind)}; ${resolvingBaseBars(currentState)} resolving bars; ${replacements}; ${replacementCadenceText()}`;
-}
-
-function updateChangeRail(currentState, now = null, sectionStart = null, liveState = null) {
-  const duration = sectionSeconds(currentState);
-  const elapsed = now === null || sectionStart === null
-    ? 0
-    : Math.max(0, Math.min(duration, now - sectionStart));
-  const cycleProgress = duration > 0 ? elapsed / duration : 0;
-  const applied = Math.max(0, (liveState?.lastReplacementBar ?? -1) + 1);
-  const total = applied + currentState.pendingReplacements.length;
-  const replacementProgress = total ? applied / total : 1;
-  readoutFields.changeFill.style.transform = `scaleX(${Math.min(1, cycleProgress)})`;
-  readoutFields.changeCue.style.left = `${Math.round(Math.min(1, replacementProgress) * 100)}%`;
-  readoutFields.changeCue.textContent = total ? `${applied}/${total}` : "basis";
-}
-
-function updateTimelinePlayhead(currentState, now, sectionStart) {
-  const duration = Math.min(sectionSeconds(currentState), 24);
-  const elapsed = Math.max(0, now - sectionStart);
-  const progress = duration > 0 ? (elapsed % duration) / duration : 0;
-  timelineShell.style.setProperty("--playhead-x", `${Math.min(100, Math.max(0, progress * 100))}%`);
-}
-
-function replacementCadenceText() {
-  return "one by one";
-}
-
-function roleCountText(currentState) {
-  const counts = currentState.voices.reduce((acc, voice) => {
-    acc[voice.role] = (acc[voice.role] ?? 0) + 1;
-    return acc;
-  }, { "start-only": 0, pulse: 0, binary: 0 });
-  return `start-only ${counts["start-only"]}; pulse ${counts.pulse}; binary ${counts.binary}`;
-}
-
-function meterSetText(currentState) {
-  const meters = currentState.voices.map((voice) => voice.meter).sort((a, b) => a - b);
-  if (!meters.length) return "-";
-  const counts = new Map();
-  for (const meter of meters) counts.set(meter, (counts.get(meter) ?? 0) + 1);
-  const uniqueMeters = [...counts.keys()].sort((a, b) => a - b);
-  const ranges = [];
-  let rangeStart = uniqueMeters[0];
-  let rangeEnd = uniqueMeters[0];
-  for (let index = 1; index < uniqueMeters.length; index += 1) {
-    const meter = uniqueMeters[index];
-    if (meter === rangeEnd + 1) {
-      rangeEnd = meter;
-      continue;
-    }
-    ranges.push(formatMeterRange(rangeStart, rangeEnd));
-    rangeStart = meter;
-    rangeEnd = meter;
-  }
-  ranges.push(formatMeterRange(rangeStart, rangeEnd));
-  const repeated = uniqueMeters
-    .filter((meter) => counts.get(meter) > 1)
-    .map((meter) => `${meter} x${counts.get(meter)}`);
-  return repeated.length ? `${ranges.join(", ")}; ${repeated.join(", ")}` : ranges.join(", ");
-}
-
-function formatMeterRange(start, end) {
-  return start === end ? String(start) : `${start}-${end}`;
-}
-
-function drawTimeline() {
-  const width = canvas.width;
-  const height = canvas.height;
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = cssToken("--stage");
-  ctx.fillRect(0, 0, width, height);
-
-  const previewState = state;
-  const previewSeconds = Math.min(sectionSeconds(previewState), 24);
-  const result = generateEventsInWindow(previewState, {
-    fromSeconds: 0,
-    toSeconds: previewSeconds,
-    sectionStartSeconds: 0,
-    maxEvents: 3000
-  });
-  const rows = previewState.voices.length;
-  const rowHeight = height / Math.max(1, rows);
-
-  ctx.strokeStyle = cssToken("--timeline-row");
-  ctx.lineWidth = 1;
-  for (let row = 0; row <= rows; row += 1) {
-    const y = Math.round(row * rowHeight) + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
+function drawMap(view, progress) {
+  const width = ui.canvas.width;
+  const height = ui.canvas.height;
+  const centerX = width * 0.5;
+  const centerY = height * 0.52;
+  const outer = Math.min(width, height) * 0.44;
+  const inner = Math.max(42, outer * 0.16);
+  paper.clearRect(0, 0, width, height);
+  paper.fillStyle = css("--map-paper");
+  paper.fillRect(0, 0, width, height);
+  paper.strokeStyle = css("--map-line");
+  paper.lineWidth = 1;
+  for (let ring = 0; ring < view.voices.length; ring += 1) {
+    const radius = ringRadius(inner, outer, view.voices.length, ring);
+    paper.beginPath();
+    paper.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    paper.stroke();
   }
 
-  const baseBar = (60 / previewState.baseBpm) * previewState.baseMeter;
-  ctx.strokeStyle = cssToken("--timeline-base");
-  for (let time = 0; time <= previewSeconds; time += baseBar) {
-    const x = (time / previewSeconds) * width;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
+  const preview = Math.min(sectionSeconds(view), 24);
+  for (const hit of eventsBetween(view, {
+    fromSecond: 0,
+    toSecond: preview,
+    originSecond: 0,
+    maxEvents: 5000
+  })) {
+    const angle = -Math.PI / 2 + (hit.localSecond / preview) * Math.PI * 2;
+    const radius = ringRadius(inner, outer, view.voices.length, hit.slot);
+    const size = hit.uid === view.baseUid ? 12 : 8;
+    radialStroke(centerX, centerY, angle, radius - size, radius + size, hit.instrument.color, hit.uid === view.baseUid ? 4 : 2);
   }
 
-  for (const event of result.events) {
-    const row = previewState.voices.findIndex((voice) => voice.id === event.voiceId);
-    if (row < 0) continue;
-    const x = (event.localSeconds / previewSeconds) * width;
-    const y = row * rowHeight + rowHeight * 0.2;
-    ctx.fillStyle = event.instrument.color;
-    ctx.strokeStyle = cssToken("--timeline-hit-outline");
-    ctx.lineWidth = 2;
-    ctx.fillRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
-    ctx.strokeRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
+  const baseIndex = view.voices.findIndex((part) => part.uid === view.baseUid);
+  if (baseIndex >= 0) {
+    const radius = ringRadius(inner, outer, view.voices.length, baseIndex);
+    paper.strokeStyle = css("--map-base");
+    paper.lineWidth = 3;
+    paper.beginPath();
+    paper.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    paper.stroke();
   }
+
+  if (listening) {
+    const angle = -Math.PI / 2 + progress * Math.PI * 2;
+    radialStroke(centerX, centerY, angle, inner * 0.45, outer + 18, css("--hit"), 2);
+  }
+
+  paper.fillStyle = css("--ink");
+  paper.font = "28px Georgia, serif";
+  paper.textAlign = "center";
+  paper.fillText(`cycle ${view.cycle}`, centerX, centerY - 6);
+  paper.font = "16px Aptos, Helvetica Neue, Helvetica, sans-serif";
+  paper.fillText(`m ${view.baseMeter} / ${view.baseBpm.toFixed(3)} bpm`, centerX, centerY + 23);
 }
 
-function cssToken(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function radialStroke(cx, cy, angle, start, end, color, width) {
+  paper.strokeStyle = color;
+  paper.lineWidth = width;
+  paper.beginPath();
+  paper.moveTo(cx + Math.cos(angle) * start, cy + Math.sin(angle) * start);
+  paper.lineTo(cx + Math.cos(angle) * end, cy + Math.sin(angle) * end);
+  paper.stroke();
 }
 
-function drawVoices() {
-  voicesEl.innerHTML = "";
-  for (const [slotIndex, voice] of state.voices.entries()) {
-    const card = document.createElement("article");
-    const held = voice.protectedThroughCycle !== null && voice.protectedThroughCycle >= state.cycleIndex;
-    const lastHit = voice.id === lastHitVoiceId || slotIndex === lastHitSlotIndex;
-    card.className = `voice${voice.id === state.baseVoiceId ? " base" : ""}${held ? " held" : ""}${lastHit ? " last-hit" : ""}`;
-    card.dataset.voiceId = voice.id;
-    card.dataset.voiceSlot = String(slotIndex);
-    card.style.setProperty("--voice-color", voice.instrument.color);
-    const bpm = voiceBpm(state, voice);
-    card.innerHTML = `
-      <span class="lane-lamp" aria-hidden="true"></span>
-      <span class="voice-id">${escapeHtml(laneLabel(slotIndex, voice.id))}</span>
-      <strong class="instrument-name">${escapeHtml(voice.instrument.name)}</strong>
-      <span class="kit-name">${escapeHtml(voice.kit)}</span>
-      <span class="meter-chip">m ${voice.meter}</span>
-      <span class="role-chip">${escapeHtml(voice.role)}</span>
-      <span class="hold-chip">${held ? "held" : "-"}</span>
-      <span class="bpm-chip">${bpm.toFixed(3)} bpm</span>
-      <span class="note-chip">n ${voice.instrument.note}</span>
-      ${patternMapHtml(voice.pattern)}
+function ringRadius(inner, outer, count, index) {
+  if (count <= 1) return (inner + outer) / 2;
+  return inner + (outer - inner) * index / (count - 1);
+}
+
+function drawParts(view) {
+  ui.parts.innerHTML = "";
+  for (const [slot, part] of view.voices.entries()) {
+    const row = document.createElement("li");
+    row.className = `part${part.uid === view.baseUid ? " base" : ""}${part.uid === lastHitUid || slot === lastHitSlot ? " last" : ""}`;
+    row.dataset.uid = part.uid;
+    row.dataset.slot = String(slot);
+    row.style.setProperty("--tone", part.instrument.color);
+    row.innerHTML = `
+      <b>${escapeHtml(`L${slot + 1} ${part.instrument.name}`)}</b>
+      <small>${escapeHtml(`m ${part.meter} / ${voiceBpm(view, part).toFixed(3)} bpm`)}</small>
+      <em>${escapeHtml(`${part.instrument.kitName} / ${part.role} / n ${part.instrument.note}`)}</em>
+      ${spark(part.pattern)}
+      <code>${escapeHtml(part.pattern.join(""))}</code>
     `;
-    voicesEl.append(card);
+    ui.parts.append(row);
   }
 }
 
-function patternMapHtml(pattern) {
-  const binary = pattern.join("");
-  const cells = pattern
-    .map((hit, index) => `<span class="pattern-cell${hit ? " on" : ""}" data-step="${index + 1}"></span>`)
-    .join("");
-  return `<span class="pattern-chip" aria-label="pattern ${binary}" title="${binary}" data-pattern="${binary}">${cells}</span>`;
+function spark(pattern) {
+  return `<span class="spark" aria-label="pattern ${pattern.join("")}">${pattern.map((value) => `<i class="${value ? "on" : ""}"></i>`).join("")}</span>`;
 }
 
-function randomizeControls() {
-  const now = Date.now().toString(36);
-  document.querySelector("#seed").value = `radio-${now}`;
-  document.querySelector("#baseBpm").value = String(80 + Math.floor(Math.random() * 80));
-  document.querySelector("#baseMeter").value = "";
-  document.querySelector("#patternCount").value = String(2 + Math.floor(Math.random() * 19));
-  const patterns = readNumber("patternCount");
-  document.querySelector("#startOnlyCount").value = String(patterns);
-  document.querySelector("#pulseCount").value = "0";
-  setKitPoolValues([]);
-  document.querySelector("#meterStart").value = "";
-  document.querySelector("#cycleLength").value = String(1 + Math.floor(Math.random() * 5));
-  const units = ["bars", "resolving-sequences"];
-  document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
-  const policies = ["next", "random", "closest", "farmost"];
-  document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];
+function basisPhrase(view) {
+  const part = view.voices.find((item) => item.uid === view.baseUid) ?? view.voices[0];
+  const from = part?.rethoughtFrom ? ` from meter ${part.rethoughtFrom}` : "";
+  return `${part?.uid ?? "-"}; meter ${view.baseMeter}${from}; ${view.baseBpm.toFixed(3)} bpm`;
 }
 
-function laneLabel(slotIndex, fallback) {
-  return Number.isInteger(slotIndex) ? `L${slotIndex + 1}` : fallback;
+function changePhrase(view) {
+  const total = view.replacementsDone + view.pending.length;
+  const progress = total ? `${view.replacementsDone}/${total} replacements` : "basis";
+  return `${view.config.cycleLength} ${view.config.cycleUnit}; ${resolveBars(view)} resolving bars; ${progress}; one by one`;
 }
 
-function applySharedConfigFromUrl() {
-  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  for (const id of [...tunedControlIds, "exportSections"]) {
-    if (!params.has(id)) continue;
-    if (id === "kitPool") {
-      setKitPoolValues((params.get(id) ?? "").split(",").map((entry) => entry.trim()).filter(Boolean));
-      touchedControls.add(id);
-      continue;
-    }
-    const control = document.querySelector(`#${id}`);
-    if (!control) continue;
-    control.value = params.get(id) ?? "";
-    if (tunedControlIds.includes(id)) touchedControls.add(id);
-  }
+function rolesPhrase(view) {
+  const map = { "start-only": 0, pulse: 0, binary: 0 };
+  for (const part of view.voices) map[part.role] += 1;
+  return `start-only ${map["start-only"]}; pulse ${map.pulse}; binary ${map.binary}`;
 }
 
-function stationHashParams() {
-  const params = new URLSearchParams();
-  const config = state.config;
-  const values = {
-    seed: state.seed,
-    baseBpm: config.baseBpm,
-    baseMeter: state.baseMeter,
-    patternCount: config.patternCount,
-    startOnlyCount: config.startOnlyCount,
-    pulseCount: config.pulseCount,
-    kitPool: config.kitPool.join(","),
-    meterStart: config.meterStart,
-    cycleLength: config.cycleLength,
-    cycleLengthKind: config.cycleLengthKind,
-    basisPolicy: config.basisPolicy === "farthest" ? "farmost" : config.basisPolicy,
-    exportSections: value("exportSections") || "6"
+function metersPhrase(view) {
+  const meters = view.voices.map((part) => part.meter).sort((a, b) => a - b);
+  return meters.join(", ");
+}
+
+function valuesFromForm() {
+  return {
+    seed: value("seed") || sessionSeed,
+    voiceCount: value("voiceCount"),
+    startCount: value("startCount"),
+    pulseCount: value("pulseCount"),
+    baseBpm: value("baseBpm"),
+    baseMeter: value("baseMeter"),
+    meterStart: value("meterStart"),
+    cycleLength: value("cycleLength"),
+    cycleUnit: value("cycleUnit"),
+    basisMode: value("basisMode"),
+    kits: qa('input[name="kits"]:checked').map((node) => node.value)
   };
-  for (const [key, value] of Object.entries(values)) {
-    params.set(key, String(value));
-  }
-  return params;
 }
 
 function value(id) {
-  if (id === "kitPool") return kitPoolValue();
-  return document.querySelector(`#${id}`).value;
+  return q(`#${id}`)?.value?.trim() ?? "";
 }
 
-function kitPoolValue() {
-  const selected = [...document.querySelectorAll('input[name="kitPool"]:checked')]
-    .map((input) => input.value);
-  return selected.join(",");
+function randomize() {
+  const count = 2 + Math.floor(Math.random() * 19);
+  q("#seed").value = `r-${Date.now().toString(36)}`;
+  q("#voiceCount").value = String(count);
+  q("#startCount").value = String(count);
+  q("#pulseCount").value = "0";
+  q("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
+  q("#baseMeter").value = "";
+  q("#meterStart").value = "";
+  q("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
+  q("#cycleUnit").value = Math.random() < 0.5 ? "bars" : "resolving-sequences";
+  const modes = ["next", "random", "closest", "farmost"];
+  q("#basisMode").value = modes[Math.floor(Math.random() * modes.length)];
+  for (const box of qa('input[name="kits"]')) box.checked = true;
+  rebuild();
 }
 
-function setKitPoolValues(values) {
-  const requested = new Set(values);
-  for (const input of document.querySelectorAll('input[name="kitPool"]')) {
-    input.checked = !requested.size || requested.has(input.value);
+function copyLink() {
+  const hash = new URLSearchParams();
+  const data = valuesFromForm();
+  for (const [key, val] of Object.entries(data)) {
+    if (Array.isArray(val)) hash.set(key, val.join(","));
+    else if (val) hash.set(key, val);
+  }
+  const url = `${location.origin}${location.pathname}#${hash.toString()}`;
+  navigator.clipboard.writeText(url).then(() => phrase("link copied"), () => phrase("copy unavailable"));
+}
+
+function applyHash() {
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  for (const id of ["seed", "voiceCount", "startCount", "pulseCount", "baseBpm", "baseMeter", "meterStart", "cycleLength", "cycleUnit", "basisMode", "sections"]) {
+    if (hash.has(id) && q(`#${id}`)) q(`#${id}`).value = hash.get(id);
+  }
+  if (hash.has("kits")) {
+    const chosen = new Set(hash.get("kits").split(",").map((part) => part.trim()));
+    for (const box of qa('input[name="kits"]')) box.checked = chosen.has(box.value);
   }
 }
 
-function readOptionalText(id, fallback) {
-  const current = value(id);
-  if (current === "" && fallback !== undefined && !touchedControls.has(id)) return fallback;
-  return current || undefined;
-}
-
-function readOptionalNumber(id, fallback) {
-  const current = value(id);
-  if (current === "" && fallback !== undefined && !touchedControls.has(id)) return fallback;
-  return current === "" ? undefined : Number(current);
-}
-
-function readNumber(id) {
-  return Number(value(id));
-}
-
-function markTouchedControl(target) {
-  const id = target?.name === "kitPool" ? "kitPool" : target?.id;
-  if (id && tunedControlIds.includes(id)) {
-    touchedControls.add(id);
+async function loadPaymentLinks() {
+  try {
+    const res = await fetch("/api/config", { headers: { Accept: "application/json" } });
+    const body = await res.json();
+    if (httpsUrl(body.checkoutUrl)) ui.buy.href = body.checkoutUrl;
+    if (httpsUrl(body.donationUrl)) ui.give.href = body.donationUrl;
+  } catch {
+    ui.accessText.textContent = "payment links unavailable";
   }
 }
 
-function markTunedControlsTouched() {
-  for (const id of tunedControlIds) touchedControls.add(id);
-}
-
-function releaseBlankTouchedControls() {
-  for (const id of tunedControlIds) {
-    if (id === "kitPool" && value(id) === "") {
-      setKitPoolValues([]);
-      continue;
+async function unlock() {
+  const licenseKey = ui.license.value.trim();
+  const email = ui.email.value.trim();
+  if (!licenseKey) {
+    ui.accessText.textContent = "enter license key";
+    return;
+  }
+  ui.unlock.disabled = true;
+  ui.accessText.textContent = "checking";
+  try {
+    const verdict = await licensePost("activate", {
+      licenseKey,
+      email,
+      instanceName: instanceName()
+    });
+    if (!verdict.unlocked) {
+      ui.accessText.textContent = errorText(verdict.error);
+      return;
     }
-    if (value(id) === "") touchedControls.delete(id);
+    savedAccess = {
+      unlocked: true,
+      licenseKey,
+      email,
+      instanceId: verdict.instanceId || instanceName(),
+      provider: verdict.provider,
+      status: verdict.licenseStatus || "active"
+    };
+    localStorage.setItem(accessStore, JSON.stringify(savedAccess));
+    ui.license.value = "";
+    accessCheckPending = false;
+    paintAccess();
+  } catch {
+    ui.accessText.textContent = "license check failed";
+  } finally {
+    ui.unlock.disabled = false;
   }
 }
 
-function makeSessionSeed() {
-  return `radio-${crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)}`;
+async function refreshAccessFromStorage() {
+  if (!savedAccess?.unlocked) {
+    accessCheckPending = false;
+    paintAccess();
+    return;
+  }
+  try {
+    const verdict = await licensePost("validate", {
+      licenseKey: savedAccess.licenseKey,
+      email: savedAccess.email,
+      instanceId: savedAccess.instanceId
+    });
+    if (!verdict.unlocked) {
+      localStorage.removeItem(accessStore);
+      savedAccess = null;
+      stop();
+    } else {
+      savedAccess = { ...savedAccess, status: verdict.licenseStatus || savedAccess.status, instanceId: verdict.instanceId || savedAccess.instanceId };
+      localStorage.setItem(accessStore, JSON.stringify(savedAccess));
+    }
+  } catch {
+    localStorage.removeItem(accessStore);
+    savedAccess = null;
+    stop();
+  } finally {
+    accessCheckPending = false;
+    paintAccess();
+  }
+}
+
+function clearAccess() {
+  localStorage.removeItem(accessStore);
+  savedAccess = null;
+  stop();
+  paintAccess();
+}
+
+function paintAccess() {
+  const ok = unlocked();
+  document.documentElement.dataset.access = ok ? "ok" : "locked";
+  ui.lock.textContent = accessCheckPending ? "checking license" : ok ? "subscribed" : "license required";
+  ui.accessText.textContent = accessCheckPending ? "checking license" : ok ? "subscribed" : "license required";
+  ui.forget.disabled = !ok;
+  ui.midi.disabled = !ok;
+  ui.save.disabled = !ok;
+  ui.reads.access.textContent = ok ? "subscribed" : "locked";
+}
+
+function unlocked() {
+  return savedAccess?.unlocked === true;
+}
+
+function readStoredAccess() {
+  try {
+    const raw = localStorage.getItem(accessStore);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function instanceName() {
+  const existing = localStorage.getItem(instanceStore);
+  if (existing) return existing;
+  const made = `radio-${crypto.randomUUID()}`;
+  localStorage.setItem(instanceStore, made);
+  return made;
+}
+
+async function licensePost(action, body) {
+  const res = await fetch(`/api/license/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok && !data.error) data.error = "license_check_failed";
+  return data;
+}
+
+function errorText(code) {
+  return ({
+    license_key_required: "enter license key",
+    checkout_email_required: "enter payment email",
+    checkout_email_mismatch: "email mismatch",
+    license_key_not_listed: "license not listed",
+    license_not_active: "license inactive",
+    license_not_valid: "license invalid",
+    product_mismatch: "wrong product",
+    variant_mismatch: "wrong variant"
+  })[code] || "license check failed";
+}
+
+async function connectMidi() {
+  if (!unlocked()) {
+    phrase("license required");
+    return;
+  }
+  if (!navigator.requestMIDIAccess) {
+    phrase("midi unavailable");
+    return;
+  }
+  try {
+    midiAccess = await navigator.requestMIDIAccess();
+    fillMidiOutputs();
+    phrase("midi ready");
+  } catch {
+    phrase("midi denied");
+  }
+}
+
+function fillMidiOutputs() {
+  ui.midiOut.innerHTML = '<option value="">none</option>';
+  for (const output of midiAccess.outputs.values()) {
+    const option = document.createElement("option");
+    option.value = output.id;
+    option.textContent = output.name || output.id;
+    ui.midiOut.append(option);
+  }
+}
+
+function chooseMidiOut() {
+  midiOut = midiAccess?.outputs.get(ui.midiOut.value) ?? null;
+}
+
+function saveMidi() {
+  if (!unlocked()) {
+    phrase("license required");
+    return;
+  }
+  const sectionCount = Math.min(64, Math.max(1, Math.floor(Number(value("sections")) || 6)));
+  const bytes = encodeMidiFile(renderArrangement(station, { sectionCount, ppq: 480 }));
+  const url = URL.createObjectURL(new Blob([bytes], { type: "audio/midi" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "radio.mid";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  phrase("midi saved");
+}
+
+function phrase(text) {
+  ui.run.textContent = text;
+}
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function httpsUrl(text) {
+  try {
+    return new URL(text).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function escapeHtml(text) {
-  return String(text)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+  return String(text).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
 }

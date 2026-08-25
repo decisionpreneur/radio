@@ -49,10 +49,10 @@ export function createInitialState(input = {}) {
 export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.seed) {
   const patternCountInput = hasValue(input.patternCount)
     ? input.patternCount
-    : randomInt(rng, 3, 20);
+    : randomInt(rng, 2, 20);
   const patternCount = clampNumber(
     patternCountInput,
-    3,
+    2,
     64
   );
   const baseMeter = hasValue(input.baseMeter) ? clampNumber(input.baseMeter, 1, 64) : undefined;

@@ -1198,7 +1198,7 @@ function randomizeControls() {
   document.querySelector("#seed").value = `radio-${now}`;
   document.querySelector("#baseBpm").value = String(80 + Math.floor(Math.random() * 80));
   document.querySelector("#baseMeter").value = "";
-  document.querySelector("#patternCount").value = String(3 + Math.floor(Math.random() * 18));
+  document.querySelector("#patternCount").value = String(2 + Math.floor(Math.random() * 19));
   const patterns = readNumber("patternCount");
   document.querySelector("#startOnlyCount").value = String(patterns);
   document.querySelector("#pulseCount").value = "0";

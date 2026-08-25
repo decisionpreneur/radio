@@ -571,7 +571,7 @@ function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacement
   if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
   const localFrom = Math.max(0, fromSeconds - startSeconds);
   const currentIndex = Math.floor((localFrom + EPSILON) / unitSeconds);
-  const nextIndex = Math.max(lastReplacementIndex + 2, currentIndex + 1);
+  const nextIndex = Math.max(lastReplacementIndex + 1, currentIndex);
   return startSeconds + (nextIndex * unitSeconds);
 }
 

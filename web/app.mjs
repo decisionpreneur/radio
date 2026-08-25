@@ -518,7 +518,7 @@ function nextCadenceSeconds(target) {
   const unitSeconds = baseBarSeconds(target.state);
   if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
   const lastIndex = target.lastReplacementBar;
-  const nextIndex = lastIndex < 0 ? 1 : lastIndex + 1;
+  const nextIndex = lastIndex < 0 ? 0 : lastIndex + 1;
   return target.sectionStart + (nextIndex * unitSeconds);
 }
 

@@ -154,6 +154,12 @@ html[data-access="unlocked"] #accessBadge {
   gap: 10px;
 }
 
+.donation-amount {
+  grid-template-columns: minmax(90px, 0.85fr) minmax(82px, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
 button,
 #donateLink,
 #checkoutLink {
@@ -207,6 +213,12 @@ button:hover,
   color: #aab4b7;
   background: #202529;
   border-style: dashed;
+}
+
+#donateLink[data-state="checkout"] {
+  border-color: var(--green);
+  color: #eaf7ef;
+  background: #1e3b30;
 }
 
 button:disabled {

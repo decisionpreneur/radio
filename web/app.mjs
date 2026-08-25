@@ -1112,9 +1112,31 @@ function roleCountText(currentState) {
 function meterSetText(currentState) {
   const meters = currentState.voices.map((voice) => voice.meter).sort((a, b) => a - b);
   if (!meters.length) return "-";
-  const contiguous = meters.every((meter, index) => index === 0 || meter === meters[index - 1] + 1);
-  if (contiguous && meters.length > 2) return `${meters[0]}-${meters[meters.length - 1]}`;
-  return meters.join(", ");
+  const counts = new Map();
+  for (const meter of meters) counts.set(meter, (counts.get(meter) ?? 0) + 1);
+  const uniqueMeters = [...counts.keys()].sort((a, b) => a - b);
+  const ranges = [];
+  let rangeStart = uniqueMeters[0];
+  let rangeEnd = uniqueMeters[0];
+  for (let index = 1; index < uniqueMeters.length; index += 1) {
+    const meter = uniqueMeters[index];
+    if (meter === rangeEnd + 1) {
+      rangeEnd = meter;
+      continue;
+    }
+    ranges.push(formatMeterRange(rangeStart, rangeEnd));
+    rangeStart = meter;
+    rangeEnd = meter;
+  }
+  ranges.push(formatMeterRange(rangeStart, rangeEnd));
+  const repeated = uniqueMeters
+    .filter((meter) => counts.get(meter) > 1)
+    .map((meter) => `${meter} x${counts.get(meter)}`);
+  return repeated.length ? `${ranges.join(", ")}; ${repeated.join(", ")}` : ranges.join(", ");
+}
+
+function formatMeterRange(start, end) {
+  return start === end ? String(start) : `${start}-${end}`;
 }
 
 function drawTimeline() {

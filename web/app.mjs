@@ -131,7 +131,7 @@ controls.addEventListener("input", syncControls);
 controls.addEventListener("change", syncControls);
 
 function syncControls(event) {
-  if (event?.target?.closest?.("#paywall")) return;
+  if (event?.target?.closest?.("#paywall, .output-group")) return;
   markTouchedControl(event?.target);
   state = makeStateFromControls(state);
   releaseBlankTouchedControls();

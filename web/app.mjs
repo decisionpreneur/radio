@@ -7,7 +7,6 @@ import {
   generateEventsInWindow,
   renderArrangement,
   resolvingBaseBars,
-  resolvingSeconds,
   sectionBaseBars,
   sectionSeconds,
   voiceBpm
@@ -92,8 +91,7 @@ const tunedControlIds = [
   "meterStart",
   "cycleLength",
   "cycleLengthKind",
-  "basisPolicy",
-  "replacementCadence"
+  "basisPolicy"
 ];
 const touchedControls = new Set();
 
@@ -517,32 +515,20 @@ function applyCadenceUntil(target, untilSeconds) {
 
 function nextCadenceSeconds(target) {
   if (!target.state.pendingReplacements.length) return null;
-  if (target.state.config.replacementCadence === "immediate") return null;
-  const unitSeconds = target.state.config.replacementCadence === "one-per-resolving-sequence"
-    ? resolvingSeconds(target.state)
-    : baseBarSeconds(target.state);
+  const unitSeconds = baseBarSeconds(target.state);
   if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
-  const lastIndex = target.state.config.replacementCadence === "one-per-resolving-sequence"
-    ? target.lastReplacementResolve
-    : target.lastReplacementBar;
+  const lastIndex = target.lastReplacementBar;
   const nextIndex = lastIndex < 0 ? 1 : lastIndex + 1;
   return target.sectionStart + (nextIndex * unitSeconds);
 }
 
 function applyOneReplacement(target) {
-  const cadence = target.state.config.replacementCadence;
   const atSeconds = nextCadenceSeconds(target);
   if (atSeconds === null) return false;
-  const unitSeconds = cadence === "one-per-resolving-sequence"
-    ? resolvingSeconds(target.state)
-    : baseBarSeconds(target.state);
+  const unitSeconds = baseBarSeconds(target.state);
   const nextIndex = Math.round((atSeconds - target.sectionStart) / unitSeconds);
   target.state = applyNextReplacement(target.state);
-  if (cadence === "one-per-resolving-sequence") {
-    target.lastReplacementResolve = nextIndex;
-  } else {
-    target.lastReplacementBar = nextIndex;
-  }
+  target.lastReplacementBar = nextIndex;
   return true;
 }
 
@@ -1066,7 +1052,7 @@ function makeStateFromControls(previousState = null) {
     cycleLength: readOptionalNumber("cycleLength", previousConfig?.cycleLength),
     cycleLengthKind: readOptionalText("cycleLengthKind", previousConfig?.cycleLengthKind),
     basisPolicy: readOptionalText("basisPolicy", previousConfig?.basisPolicy),
-    replacementCadence: readOptionalText("replacementCadence", previousConfig?.replacementCadence)
+    replacementCadence: "one-per-bar"
   });
 }
 
@@ -1111,10 +1097,8 @@ function cycleUnitText(value) {
   return value === "resolving-sequences" ? "resolving sequences" : "bars";
 }
 
-function replacementCadenceText(value) {
-  if (value === "one-per-resolving-sequence") return "one per resolving sequence";
-  if (value === "immediate") return "immediate";
-  return "one per bar";
+function replacementCadenceText() {
+  return "one by one";
 }
 
 function roleCountText(currentState) {
@@ -1225,7 +1209,6 @@ function randomizeControls() {
   document.querySelector("#cycleLengthKind").value = units[Math.floor(Math.random() * units.length)];
   const policies = ["next", "random", "closest", "farmost"];
   document.querySelector("#basisPolicy").value = policies[Math.floor(Math.random() * policies.length)];
-  document.querySelector("#replacementCadence").value = "one-per-bar";
 }
 
 function applySharedConfigFromUrl() {
@@ -1254,7 +1237,6 @@ function stationHashParams() {
     cycleLength: config.cycleLength,
     cycleLengthKind: config.cycleLengthKind,
     basisPolicy: config.basisPolicy === "farthest" ? "farmost" : config.basisPolicy,
-    replacementCadence: config.replacementCadence,
     exportSections: value("exportSections") || "6"
   };
   for (const [key, value] of Object.entries(values)) {

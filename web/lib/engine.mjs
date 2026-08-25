@@ -4,7 +4,7 @@ import { makeRng, pick, randomInt, shuffled } from "./prng.mjs";
 export const BASIS_POLICIES = Object.freeze(["next", "random", "closest", "farthest"]);
 export const METER_TIMING_MODES = Object.freeze(["same-pulse-polymeter"]);
 export const CYCLE_LENGTH_KINDS = Object.freeze(["bars", "resolving-sequences"]);
-export const REPLACEMENT_CADENCES = Object.freeze(["immediate", "one-per-bar", "one-per-resolving-sequence"]);
+export const REPLACEMENT_CADENCES = Object.freeze(["one-per-bar"]);
 export const STRONG_BEAT_MODES = Object.freeze(["every-beat", "downbeat-only"]);
 const BASIS_POLICY_TYPOS = Object.freeze({ farmost: "farthest" });
 const LEAN_METER_TIMING_MODE = "same-pulse-polymeter";
@@ -353,17 +353,6 @@ export function advanceCycle(state) {
     pendingReplacements: []
   };
 
-  if (state.config.replacementCadence === "immediate") {
-    nextState.voices = retainedOldBase
-      ? [
-          selectedClone,
-          retainedOldBase,
-          ...replacementPlan.finalVoices.filter((voice) => voice.id !== selectedClone.id)
-        ]
-      : replacementPlan.finalVoices;
-    return nextState;
-  }
-
   nextState.voices = [
     selectedClone,
     ...(retainedOldBase ? [retainedOldBase] : []),
@@ -578,10 +567,7 @@ function buildRoleStableReplacementPlan(startingVoices, replacementVoices, prese
 
 function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacementIndex }) {
   if (!state.pendingReplacements.length) return null;
-  if (state.config.replacementCadence === "immediate") return null;
-  const unitSeconds = state.config.replacementCadence === "one-per-resolving-sequence"
-    ? resolvingSeconds(state)
-    : baseBarSeconds(state);
+  const unitSeconds = baseBarSeconds(state);
   if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
   const localFrom = Math.max(0, fromSeconds - startSeconds);
   const currentIndex = Math.floor((localFrom + EPSILON) / unitSeconds);

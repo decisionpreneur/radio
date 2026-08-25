@@ -57,7 +57,9 @@ const readoutFields = {
   access: document.querySelector('[data-field="access"]'),
   accessBadge: document.querySelector("#accessBadge"),
   signal: document.querySelector('[data-field="signal"]'),
-  signalFill: document.querySelector('[data-field="signalFill"]')
+  signalFill: document.querySelector('[data-field="signalFill"]'),
+  changeFill: document.querySelector('[data-field="changeFill"]'),
+  changeCue: document.querySelector('[data-field="changeCue"]')
 };
 const hitFields = {
   strip: document.querySelector("#hitStrip"),
@@ -341,9 +343,10 @@ function configureDonationLink() {
 }
 
 function requireUnlocked() {
-  if (entitlementUnlocks(entitlement)) return true;
-  paywallStatus.textContent = licenseErrorMessage("license_required");
-  setStatus("license required", 1600);
+  if (!entitlementValidationPending && entitlementUnlocks(entitlement)) return true;
+  const message = entitlementValidationPending ? "checking license" : licenseErrorMessage("license_required");
+  paywallStatus.textContent = message;
+  setStatus(message, 1600);
   return false;
 }
 
@@ -1044,10 +1047,12 @@ function drawReadout() {
   readoutFields.access.textContent = entitlementValidationPending
     ? "checking license"
     : (entitlementUnlocks(entitlement) ? "subscribed" : "license required");
+  updateChangeRail(state);
 }
 
 function updateCycleProgress(now) {
   readoutFields.cycle.textContent = cycleProgressText(live.state, now, live.sectionStart);
+  updateChangeRail(live.state, now, live.sectionStart, live);
 }
 
 function cycleProgressText(currentState, now = null, sectionStart = null) {
@@ -1060,6 +1065,20 @@ function cycleProgressText(currentState, now = null, sectionStart = null) {
 
 function cycleUnitText(value) {
   return value === "resolving-sequences" ? "resolving sequences" : "bars";
+}
+
+function updateChangeRail(currentState, now = null, sectionStart = null, liveState = null) {
+  const duration = sectionSeconds(currentState);
+  const elapsed = now === null || sectionStart === null
+    ? 0
+    : Math.max(0, Math.min(duration, now - sectionStart));
+  const cycleProgress = duration > 0 ? elapsed / duration : 0;
+  const applied = Math.max(0, (liveState?.lastReplacementBar ?? -1) + 1);
+  const total = applied + currentState.pendingReplacements.length;
+  const replacementProgress = total ? applied / total : 1;
+  readoutFields.changeFill.style.transform = `scaleX(${Math.min(1, cycleProgress)})`;
+  readoutFields.changeCue.style.left = `${Math.round(Math.min(1, replacementProgress) * 100)}%`;
+  readoutFields.changeCue.textContent = total ? `${applied}/${total}` : "basis";
 }
 
 function replacementCadenceText() {

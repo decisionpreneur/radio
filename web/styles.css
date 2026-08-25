@@ -307,6 +307,48 @@ select:focus-visible {
   background: var(--panel);
 }
 
+.change-rail {
+  position: relative;
+  height: 18px;
+  border-top: 2px solid var(--line);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.2) 0,
+      rgba(255, 255, 255, 0.2) 1px,
+      transparent 1px,
+      transparent 8.333%
+    ),
+    var(--stage-2);
+  overflow: hidden;
+}
+
+.change-rail span {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(216, 166, 41, 0.78), rgba(0, 139, 146, 0.78));
+  transition: transform 120ms linear;
+}
+
+.change-rail b {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  transform: translate(-100%, -50%);
+  min-width: 42px;
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: #101214;
+  background: #f7f8f4;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .readout-strip dt,
 .hit-panel dt {
   color: var(--muted-2);

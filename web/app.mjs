@@ -515,18 +515,17 @@ function applyCadenceUntil(target, untilSeconds) {
 
 function nextCadenceSeconds(target) {
   if (!target.state.pendingReplacements.length) return null;
-  const unitSeconds = baseBarSeconds(target.state);
-  if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
-  const lastIndex = target.lastReplacementBar;
-  const nextIndex = lastIndex < 0 ? 0 : lastIndex + 1;
-  return target.sectionStart + (nextIndex * unitSeconds);
+  const duration = sectionSeconds(target.state);
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  const completed = Math.max(0, target.lastReplacementBar + 1);
+  const total = completed + target.state.pendingReplacements.length;
+  return target.sectionStart + (duration * completed / total);
 }
 
 function applyOneReplacement(target) {
   const atSeconds = nextCadenceSeconds(target);
   if (atSeconds === null) return false;
-  const unitSeconds = baseBarSeconds(target.state);
-  const nextIndex = Math.round((atSeconds - target.sectionStart) / unitSeconds);
+  const nextIndex = Math.max(0, target.lastReplacementBar + 1);
   target.state = applyNextReplacement(target.state);
   target.lastReplacementBar = nextIndex;
   return true;
@@ -1052,7 +1051,7 @@ function makeStateFromControls(previousState = null) {
     cycleLength: readOptionalNumber("cycleLength", previousConfig?.cycleLength),
     cycleLengthKind: readOptionalText("cycleLengthKind", previousConfig?.cycleLengthKind),
     basisPolicy: readOptionalText("basisPolicy", previousConfig?.basisPolicy),
-    replacementCadence: "one-per-bar"
+    replacementCadence: "one-by-one"
   });
 }
 

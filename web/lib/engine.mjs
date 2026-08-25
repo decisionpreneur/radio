@@ -4,7 +4,7 @@ import { makeRng, pick, randomInt, shuffled } from "./prng.mjs";
 export const BASIS_POLICIES = Object.freeze(["next", "random", "closest", "farthest"]);
 export const METER_TIMING_MODES = Object.freeze(["same-pulse-polymeter"]);
 export const CYCLE_LENGTH_KINDS = Object.freeze(["bars", "resolving-sequences"]);
-export const REPLACEMENT_CADENCES = Object.freeze(["one-per-bar"]);
+export const REPLACEMENT_CADENCES = Object.freeze(["one-by-one"]);
 export const STRONG_BEAT_MODES = Object.freeze(["every-beat", "downbeat-only"]);
 const BASIS_POLICY_TYPOS = Object.freeze({ farmost: "farthest" });
 const LEAN_METER_TIMING_MODE = "same-pulse-polymeter";
@@ -97,7 +97,7 @@ export function normalizeConfig(input, rng = makeRng(input.seed), seed = input.s
       : pick(rng, CYCLE_LENGTH_KINDS),
     cycleLength: clampNumber(hasValue(input.cycleLength) ? input.cycleLength : randomInt(rng, 1, 4), 1, 4096),
     basisPolicy: normalizeBasisPolicy(input.basisPolicy, rng),
-    replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "one-per-bar"),
+    replacementCadence: ensureMember(input.replacementCadence, REPLACEMENT_CADENCES, "one-by-one"),
     strongBeatMode: ensureMember(input.strongBeatMode, STRONG_BEAT_MODES, "every-beat"),
     noteDurationSeconds: clampFloat(hasValue(input.noteDurationSeconds) ? input.noteDurationSeconds : 0.08, 0.01, 2),
     kitPool: normalizeKitPool(input.kitPool)
@@ -327,12 +327,10 @@ export function advanceCycle(state) {
   const rng = makeRng(`${currentState.seed}:cycle:${nextCycleIndex}`);
   const selectedClone = rethinkAsBaseVoice(currentState, selected);
   selectedClone.rethoughtFromMeter = selected.meter;
+  selectedClone.protectedThroughCycle = nextCycleIndex;
   const retainedOldBase = oldBase && oldBase.id !== selected.id
     ? cloneVoiceWithPulseOverride(currentState, oldBase)
     : null;
-  if (retainedOldBase) {
-    retainedOldBase.protectedThroughCycle = nextCycleIndex;
-  }
   const preserved = [selectedClone];
 
   const replacementPlan = buildReplacementVoices({
@@ -361,7 +359,6 @@ export function advanceCycle(state) {
       .map((voice) => cloneVoiceWithPulseOverride(currentState, voice))
   ];
   const protectedIds = new Set(preserved.map((voice) => voice.id));
-  if (retainedOldBase) protectedIds.add(retainedOldBase.id);
 
   nextState.pendingReplacements = buildRoleStableReplacementPlan(
     nextState.voices,
@@ -567,12 +564,12 @@ function buildRoleStableReplacementPlan(startingVoices, replacementVoices, prese
 
 function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacementIndex }) {
   if (!state.pendingReplacements.length) return null;
-  const unitSeconds = baseBarSeconds(state);
-  if (!Number.isFinite(unitSeconds) || unitSeconds <= 0) return null;
-  const localFrom = Math.max(0, fromSeconds - startSeconds);
-  const currentIndex = Math.floor((localFrom + EPSILON) / unitSeconds);
-  const nextIndex = Math.max(lastReplacementIndex + 1, currentIndex);
-  return startSeconds + (nextIndex * unitSeconds);
+  const duration = sectionSeconds(state);
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  const completed = Math.max(0, lastReplacementIndex + 1);
+  const total = completed + state.pendingReplacements.length;
+  const scheduled = startSeconds + (duration * completed / total);
+  return Math.max(scheduled, fromSeconds);
 }
 
 function cloneVoice(voice) {

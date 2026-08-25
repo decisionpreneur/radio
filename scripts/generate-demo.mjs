@@ -26,7 +26,7 @@ const demos = [
       cycleLengthKind: "bars",
       cycleLength: 4,
       basisPolicy: "next",
-      replacementCadence: "one-per-bar",
+      replacementCadence: "one-by-one",
       meterTiming: "same-pulse-polymeter"
     }),
     sections: 6,
@@ -47,7 +47,7 @@ const demos = [
       cycleLengthKind: "resolving-sequences",
       cycleLength: 3,
       basisPolicy: "next",
-      replacementCadence: "one-per-bar",
+      replacementCadence: "one-by-one",
       meterTiming: "same-pulse-polymeter"
     }),
     sections: 1,

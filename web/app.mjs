@@ -104,6 +104,7 @@ let signalAnalyser = null;
 let signalSamples = null;
 let signalFrame = null;
 let signalPeak = 0;
+let currentHitPan = 0;
 let midiAccess = null;
 let midiOutput = null;
 let timer = null;
@@ -573,6 +574,7 @@ function setPlaybackStatus(text) {
 
 function playAudio(event, when) {
   const level = eventLevel(event);
+  currentHitPan = eventPan(event);
   switch (event.instrument.sound) {
     case "kick-tight":
       kickHit(when, level);
@@ -759,6 +761,14 @@ function eventLevel(event) {
   return (event.velocity / 127) * densityTrim;
 }
 
+function eventPan(event) {
+  const meter = Number.isFinite(event.meter) ? event.meter : 1;
+  const voiceNumber = Number.parseInt(String(event.voiceId ?? "").replace(/\D+/g, ""), 10);
+  const laneOffset = Number.isFinite(voiceNumber) ? ((voiceNumber % 7) - 3) / 6 : 0;
+  const meterOffset = ((meter % 5) - 2) / 10;
+  return Math.max(-0.62, Math.min(0.62, laneOffset + meterOffset));
+}
+
 function kickHit(when, level) {
   drumSine(when, 82, 0.14, 0.72 * level, "sine", 0.42);
   noiseHit(when, 0.018, 0.14 * level, 3600, "highpass", 0.8);
@@ -809,7 +819,8 @@ function talkingDrumHit(when, level) {
   osc.frequency.exponentialRampToValueAtTime(118, when + 0.16);
   gain.gain.setValueAtTime(0.42 * level, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + 0.18);
-  osc.connect(gain).connect(masterInput);
+  osc.connect(gain);
+  connectHitOutput(gain);
   osc.start(when);
   osc.stop(when + 0.2);
 }
@@ -822,7 +833,8 @@ function drumSine(when, frequency, duration, gainValue, type = "sine", endRatio 
   osc.frequency.exponentialRampToValueAtTime(Math.max(20, frequency * endRatio), when + duration);
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-  osc.connect(gain).connect(masterInput);
+  osc.connect(gain);
+  connectHitOutput(gain);
   osc.start(when);
   osc.stop(when + duration + 0.02);
 }
@@ -836,7 +848,8 @@ function metallicHit(when, frequencies, duration, gainValue, type) {
     osc.frequency.setValueAtTime(frequency, when);
     gain.gain.setValueAtTime(share * (index === 0 ? 1 : 0.72), when);
     gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
-    osc.connect(gain).connect(masterInput);
+    osc.connect(gain);
+    connectHitOutput(gain);
     osc.start(when);
     osc.stop(when + duration + 0.02);
   });
@@ -856,9 +869,20 @@ function noiseHit(when, duration, gainValue, frequency, filterType = "highpass",
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + duration);
   source.buffer = buffer;
-  source.connect(filter).connect(gain).connect(masterInput);
+  source.connect(filter).connect(gain);
+  connectHitOutput(gain);
   source.start(when);
   source.stop(when + duration + 0.02);
+}
+
+function connectHitOutput(node) {
+  if (!audioContext?.createStereoPanner) {
+    node.connect(masterInput);
+    return;
+  }
+  const pan = audioContext.createStereoPanner();
+  pan.pan.value = currentHitPan;
+  node.connect(pan).connect(masterInput);
 }
 
 async function ensureAudioContext() {
@@ -866,19 +890,54 @@ async function ensureAudioContext() {
   if (!AudioContextCtor) throw new Error("AudioContext unavailable");
   audioContext = audioContext ?? new AudioContextCtor();
   if (!masterInput) {
+    const inputBus = audioContext.createGain();
+    const lowShelf = audioContext.createBiquadFilter();
+    const presence = audioContext.createBiquadFilter();
+    const air = audioContext.createBiquadFilter();
     const compressor = audioContext.createDynamicsCompressor();
+    const limiter = audioContext.createDynamicsCompressor();
     const masterGain = audioContext.createGain();
+    const roomSend = audioContext.createGain();
+    const roomDelay = audioContext.createDelay(0.08);
+    const roomFeedback = audioContext.createGain();
+    const roomFilter = audioContext.createBiquadFilter();
+    const roomReturn = audioContext.createGain();
     signalAnalyser = audioContext.createAnalyser();
-    compressor.threshold.value = -18;
-    compressor.knee.value = 22;
-    compressor.ratio.value = 6;
-    compressor.attack.value = 0.003;
-    compressor.release.value = 0.18;
+    inputBus.gain.value = 0.92;
+    lowShelf.type = "lowshelf";
+    lowShelf.frequency.value = 90;
+    lowShelf.gain.value = 1.2;
+    presence.type = "peaking";
+    presence.frequency.value = 2350;
+    presence.Q.value = 0.75;
+    presence.gain.value = 1.4;
+    air.type = "highshelf";
+    air.frequency.value = 8200;
+    air.gain.value = -0.8;
+    compressor.threshold.value = -20;
+    compressor.knee.value = 24;
+    compressor.ratio.value = 4.8;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.22;
+    limiter.threshold.value = -2;
+    limiter.knee.value = 3;
+    limiter.ratio.value = 18;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.055;
+    roomSend.gain.value = 0.08;
+    roomDelay.delayTime.value = 0.028;
+    roomFeedback.gain.value = 0.16;
+    roomFilter.type = "lowpass";
+    roomFilter.frequency.value = 2800;
+    roomReturn.gain.value = 0.14;
     signalAnalyser.fftSize = 256;
     signalAnalyser.smoothingTimeConstant = 0.45;
-    masterGain.gain.value = 1;
-    compressor.connect(signalAnalyser).connect(masterGain).connect(audioContext.destination);
-    masterInput = compressor;
+    masterGain.gain.value = 0.9;
+    inputBus.connect(lowShelf).connect(presence).connect(air).connect(compressor).connect(limiter).connect(signalAnalyser).connect(masterGain).connect(audioContext.destination);
+    inputBus.connect(roomSend).connect(roomDelay);
+    roomDelay.connect(roomFeedback).connect(roomDelay);
+    roomDelay.connect(roomFilter).connect(roomReturn).connect(compressor);
+    masterInput = inputBus;
   }
   await audioContext.resume();
   if (audioContext.state !== "running") throw new Error("AudioContext not running");

@@ -627,10 +627,6 @@ function playAudio(event, when) {
     case "tom-low":
       drumSine(when, 95 + event.meter * 2, 0.17, 0.5 * level, "triangle", 0.45);
       break;
-    case "floor-tom-edge":
-      drumSine(when, 105 + event.meter * 2, 0.16, 0.43 * level, "triangle", 0.5);
-      woodHit(when, 760, 0.028, 0.07 * level);
-      break;
     case "snare":
       snareHit(when, level);
       break;
@@ -644,17 +640,11 @@ function playAudio(event, when) {
     case "hihat-closed":
       noiseHit(when, 0.035, 0.18 * level, 7800, "highpass", 0.9);
       break;
-    case "pedal-hihat":
-      noiseHit(when, 0.055, 0.13 * level, 5200, "highpass", 1.1);
-      break;
     case "semi-open-hihat":
       noiseHit(when, 0.115, 0.18 * level, 6800, "highpass", 0.8);
       break;
     case "swish-hihat":
       noiseHit(when, 0.23, 0.16 * level, 4500, "highpass", 0.55);
-      break;
-    case "hihat-open":
-      noiseHit(when, 0.16, 0.2 * level, 6200, "highpass", 0.7);
       break;
     case "ride-cup":
       metallicHit(when, [930, 1400, 2280], 0.16, 0.16 * level, "triangle");
@@ -662,21 +652,11 @@ function playAudio(event, when) {
     case "ride":
       cymbalHit(when, 0.2, 0.2 * level, 4700);
       break;
-    case "ride-bell":
-      metallicHit(when, [820, 1520, 2540], 0.18, 0.18 * level, "triangle");
-      break;
     case "crash":
       cymbalHit(when, 0.42, 0.26 * level, 3400);
       break;
-    case "bongo-high":
-      handDrum(when, 310, 0.08, 0.42 * level);
-      break;
-    case "bongo-low":
-      handDrum(when, 225, 0.1, 0.46 * level);
-      break;
-    case "conga-slap":
-      handDrum(when, 285, 0.065, 0.38 * level);
-      woodHit(when, 2100, 0.025, 0.18 * level);
+    case "stick-click":
+      woodHit(when, 3100, 0.018, 0.2 * level);
       break;
     case "conga-high":
       handDrum(when, 190, 0.14, 0.5 * level);
@@ -684,7 +664,7 @@ function playAudio(event, when) {
     case "conga-low":
       handDrum(when, 135, 0.18, 0.56 * level);
       break;
-    case "cajon-thump":
+    case "cajon-low":
       handDrum(when, 92, 0.13, 0.62 * level);
       break;
     case "finger-snap":
@@ -694,35 +674,18 @@ function playAudio(event, when) {
       noiseHit(when, 0.055, 0.24 * level, 1800, "bandpass", 2.2);
       woodHit(when, 980, 0.032, 0.12 * level);
       break;
-    case "conga-left":
-      handDrum(when, 168, 0.14, 0.5 * level);
+    case "hand-clap":
+      noiseHit(when, 0.07, 0.28 * level, 1400, "bandpass", 1.8);
+      woodHit(when, 2400, 0.018, 0.08 * level);
       break;
-    case "conga-right":
-      handDrum(when, 205, 0.12, 0.48 * level);
-      break;
-    case "small-conga-left":
+    case "hand-drum-small":
       handDrum(when, 238, 0.1, 0.42 * level);
       break;
-    case "small-conga-right":
+    case "hand-drum-small-high":
       handDrum(when, 282, 0.085, 0.4 * level);
       break;
-    case "timbales-high":
-      metallicHit(when, [410, 790], 0.09, 0.3 * level, "square");
-      break;
-    case "timbales-low":
-      metallicHit(when, [285, 570], 0.11, 0.33 * level, "square");
-      break;
-    case "agogo-high":
-      metallicHit(when, [880, 1760], 0.18, 0.26 * level, "sine");
-      break;
-    case "djembe-high":
-      handDrum(when, 165, 0.16, 0.58 * level);
-      break;
-    case "cabasa":
+    case "shaker-soft":
       shakerHit(when, 0.055, 0.16 * level, 7200);
-      break;
-    case "maracas":
-      shakerHit(when, 0.075, 0.18 * level, 6500);
       break;
     case "foot-stomp":
       drumSine(when, 66, 0.12, 0.42 * level, "sine", 0.5);
@@ -731,15 +694,14 @@ function playAudio(event, when) {
     case "claves":
       woodHit(when, 2400, 0.045, 0.32 * level);
       break;
-    case "perc-african":
-      handDrum(when, 115, 0.2, 0.6 * level);
-      woodHit(when, 980, 0.03, 0.14 * level);
-      break;
     case "tambourine":
       tambourineHit(when, level);
       break;
-    case "shaker":
-      shakerHit(when, 0.08, 0.15 * level, 5600);
+    case "cymbal-hand":
+      cymbalHit(when, 0.32, 0.22 * level, 3900);
+      break;
+    case "cymbal-bell":
+      metallicHit(when, [980, 1470, 2450], 0.18, 0.18 * level, "triangle");
       break;
     case "cowbell":
       metallicHit(when, [540, 810, 1620], 0.12, 0.25 * level, "square");
@@ -754,40 +716,6 @@ function playAudio(event, when) {
     case "bell-tree-up":
       bellTreeHit(when, level, true);
       break;
-    case "djembe-bass":
-      handDrum(when, 96, 0.19, 0.64 * level);
-      break;
-    case "djembe-tone":
-      handDrum(when, 178, 0.14, 0.54 * level);
-      break;
-    case "djembe-slap":
-      handDrum(when, 250, 0.08, 0.42 * level);
-      woodHit(when, 1980, 0.022, 0.14 * level);
-      break;
-    case "dunun-low":
-      handDrum(when, 72, 0.24, 0.7 * level);
-      break;
-    case "dunun-high":
-      handDrum(when, 128, 0.18, 0.58 * level);
-      break;
-    case "udu-low":
-      drumSine(when, 82, 0.2, 0.52 * level, "sine", 0.38);
-      break;
-    case "udu-high":
-      drumSine(when, 156, 0.13, 0.4 * level, "sine", 0.45);
-      break;
-    case "talking-drum":
-      talkingDrumHit(when, level);
-      break;
-    case "shekere":
-      shakerHit(when, 0.12, 0.2 * level, 4100);
-      break;
-    case "metal-shaker":
-      shakerHit(when, 0.09, 0.18 * level, 7600);
-      metallicHit(when, [3100], 0.05, 0.06 * level, "triangle");
-      break;
-    default:
-      drumSine(when, 220, 0.05, 0.18 * level, "sine", 0.5);
   }
 }
 
@@ -844,21 +772,6 @@ function bellTreeHit(when, level, ascending) {
   for (let index = 0; index < 5; index += 1) {
     metallicHit(when + index * 0.012, [base + step * index], 0.12, 0.065 * level, "triangle");
   }
-}
-
-function talkingDrumHit(when, level) {
-  const osc = audioContext.createOscillator();
-  const gain = audioContext.createGain();
-  osc.type = "triangle";
-  osc.frequency.setValueAtTime(145, when);
-  osc.frequency.exponentialRampToValueAtTime(245, when + 0.055);
-  osc.frequency.exponentialRampToValueAtTime(118, when + 0.16);
-  gain.gain.setValueAtTime(0.42 * level, when);
-  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.18);
-  osc.connect(gain);
-  connectHitOutput(gain);
-  osc.start(when);
-  osc.stop(when + 0.2);
 }
 
 function drumSine(when, frequency, duration, gainValue, type = "sine", endRatio = 0.45) {
@@ -1177,7 +1090,7 @@ function drawTimeline() {
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#101316";
+  ctx.fillStyle = cssToken("--stage");
   ctx.fillRect(0, 0, width, height);
 
   const previewState = state;
@@ -1191,7 +1104,7 @@ function drawTimeline() {
   const rows = previewState.voices.length;
   const rowHeight = height / Math.max(1, rows);
 
-  ctx.strokeStyle = "#30363d";
+  ctx.strokeStyle = cssToken("--timeline-row");
   ctx.lineWidth = 1;
   for (let row = 0; row <= rows; row += 1) {
     const y = Math.round(row * rowHeight) + 0.5;
@@ -1202,7 +1115,7 @@ function drawTimeline() {
   }
 
   const baseBar = (60 / previewState.baseBpm) * previewState.baseMeter;
-  ctx.strokeStyle = "#c7a22c";
+  ctx.strokeStyle = cssToken("--timeline-base");
   for (let time = 0; time <= previewSeconds; time += baseBar) {
     const x = (time / previewSeconds) * width;
     ctx.beginPath();
@@ -1217,11 +1130,15 @@ function drawTimeline() {
     const x = (event.localSeconds / previewSeconds) * width;
     const y = row * rowHeight + rowHeight * 0.2;
     ctx.fillStyle = event.instrument.color;
-    ctx.strokeStyle = "#f7f8f4";
+    ctx.strokeStyle = cssToken("--timeline-hit-outline");
     ctx.lineWidth = 2;
     ctx.fillRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
     ctx.strokeRect(x - 5, y, 10, Math.max(8, rowHeight * 0.6));
   }
+}
+
+function cssToken(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 function drawVoices() {

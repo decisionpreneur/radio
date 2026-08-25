@@ -8,13 +8,13 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <main class="radio-console">
-      <section class="command-deck" aria-label="Station">
-        <div class="station-mark">
-          <span class="station-kicker">live polymetric polymodulation</span>
+    <main class="radio-shell">
+      <section class="station-band" aria-label="Station">
+        <div class="brand-block">
+          <span class="mode-line">live polymetric polymodulation</span>
           <h1>Polyrhythmic Radio</h1>
         </div>
-        <div class="transport-cluster">
+        <div class="transport-block">
           <p class="runline"><span id="status">stopped</span><span id="accessBadge">license required</span></p>
           <div class="transport-actions" aria-label="Transport">
             <button id="startBtn" class="icon-button icon-play primary-play" type="button" title="Play live audio" aria-label="Play live audio"><span class="visually-hidden">Play</span></button>
@@ -31,67 +31,24 @@
         </div>
       </section>
 
-      <section class="signal-deck" aria-label="Polymeter state">
-        <dl id="readout" class="readout-strip">
-          <div><dt>tempo basis</dt><dd data-field="tempoBasis"></dd></div>
-          <div><dt>cycle</dt><dd data-field="cycle"></dd></div>
-          <div><dt>change</dt><dd data-field="change"></dd></div>
-          <div><dt>basis policy</dt><dd data-field="basisPolicy"></dd></div>
-          <div><dt>voices</dt><dd data-field="voices"></dd></div>
-          <div><dt>roles</dt><dd data-field="roles"></dd></div>
-          <div><dt>meters</dt><dd data-field="meters"></dd></div>
-          <div><dt>kits</dt><dd data-field="kits"></dd></div>
-          <div><dt>timing</dt><dd data-field="timing"></dd></div>
-          <div><dt>access</dt><dd data-field="access">locked</dd></div>
-          <div>
-            <dt>signal</dt>
-            <dd class="signal-readout">
-              <span class="signal-meter"><span data-field="signalFill"></span></span>
-              <span data-field="signal">0.000</span>
-            </dd>
+      <form id="controls" class="tuning-band">
+        <fieldset id="paywall" class="control-group paywall">
+          <legend>Access</legend>
+          <label>
+            License key
+            <input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false">
+          </label>
+          <label>
+            Payment email
+            <input id="licenseEmail" name="licenseEmail" type="email" autocomplete="email">
+          </label>
+          <div class="paywall-actions">
+            <button id="unlockBtn" type="button">Unlock</button>
+            <button id="clearLicenseBtn" type="button" disabled>Clear</button>
           </div>
-        </dl>
-        <div class="change-rail" aria-label="Change cycle">
-          <span data-field="changeFill"></span>
-          <b data-field="changeCue">basis</b>
-        </div>
-      </section>
+          <p id="paywallStatus">license required</p>
+        </fieldset>
 
-      <section id="hitStrip" class="hit-panel" aria-live="polite">
-        <span class="hit-lamp" data-field="hitLamp"></span>
-        <dl>
-          <div><dt>instrument</dt><dd data-field="hitInstrument">-</dd></div>
-          <div><dt>lane</dt><dd data-field="hitVoice">-</dd></div>
-          <div><dt>meter</dt><dd data-field="hitMeter">-</dd></div>
-          <div><dt>kit</dt><dd data-field="hitKit">-</dd></div>
-          <div><dt>role</dt><dd data-field="hitRole">-</dd></div>
-          <div><dt>pulse</dt><dd data-field="hitPulse">-</dd></div>
-        </dl>
-      </section>
-
-      <section class="sequence-surface" aria-label="Live pattern surface">
-        <div id="timelineShell" class="timeline-shell" data-state="stopped">
-          <canvas id="timeline" width="1280" height="420"></canvas>
-          <span class="timeline-playhead" aria-hidden="true"></span>
-        </div>
-        <div class="voice-table">
-          <div class="voice-header" aria-hidden="true">
-            <span></span>
-            <span>lane</span>
-            <span>instrument</span>
-            <span>kit</span>
-            <span>meter</span>
-            <span>role</span>
-            <span>hold</span>
-            <span>bpm</span>
-            <span>note</span>
-            <span>pattern</span>
-          </div>
-          <div id="voices" class="voices voice-board"></div>
-        </div>
-      </section>
-
-      <form id="controls" class="tuning-dock">
         <fieldset class="control-group">
           <legend>Structure</legend>
           <label>
@@ -114,15 +71,11 @@
             <span>Kit pool</span>
             <label class="check-option">
               <input id="kit-generic" name="kitPool" type="checkbox" value="avl-drumkits-generic" checked>
-              <span>AVL Drumkits generic drums</span>
+              <span>Generic drum set</span>
             </label>
             <label class="check-option">
               <input id="kit-buskmans" name="kitPool" type="checkbox" value="avl-buskmans-holiday-percussion" checked>
-              <span>AVL Buskman's Holiday percussion</span>
-            </label>
-            <label class="check-option">
-              <input id="kit-perc-african" name="kitPool" type="checkbox" value="perc-african-mpc" checked>
-              <span>Perc African MPC</span>
+              <span>Ethnic percussion kit</span>
             </label>
           </div>
         </fieldset>
@@ -178,24 +131,67 @@
             </select>
           </label>
         </fieldset>
-
-        <fieldset id="paywall" class="control-group paywall">
-          <legend>Access</legend>
-          <label>
-            License key
-            <input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false">
-          </label>
-          <label>
-            Payment email
-            <input id="licenseEmail" name="licenseEmail" type="email" autocomplete="email">
-          </label>
-          <div class="paywall-actions">
-            <button id="unlockBtn" type="button">Unlock</button>
-            <button id="clearLicenseBtn" type="button" disabled>Clear</button>
-          </div>
-          <p id="paywallStatus">license required</p>
-        </fieldset>
       </form>
+
+      <section class="readout-band" aria-label="Polymeter state">
+        <dl id="readout" class="readout-grid">
+          <div><dt>tempo basis</dt><dd data-field="tempoBasis"></dd></div>
+          <div><dt>cycle</dt><dd data-field="cycle"></dd></div>
+          <div><dt>change</dt><dd data-field="change"></dd></div>
+          <div><dt>basis policy</dt><dd data-field="basisPolicy"></dd></div>
+          <div><dt>voices</dt><dd data-field="voices"></dd></div>
+          <div><dt>roles</dt><dd data-field="roles"></dd></div>
+          <div><dt>meters</dt><dd data-field="meters"></dd></div>
+          <div><dt>kits</dt><dd data-field="kits"></dd></div>
+          <div><dt>timing</dt><dd data-field="timing"></dd></div>
+          <div><dt>access</dt><dd data-field="access">locked</dd></div>
+          <div>
+            <dt>signal</dt>
+            <dd class="signal-readout">
+              <span class="signal-meter"><span data-field="signalFill"></span></span>
+              <span data-field="signal">0.000</span>
+            </dd>
+          </div>
+        </dl>
+        <div class="change-rail" aria-label="Change cycle">
+          <span data-field="changeFill"></span>
+          <b data-field="changeCue">basis</b>
+        </div>
+      </section>
+
+      <section class="playfield" aria-label="Live pattern surface">
+        <div id="timelineShell" class="timeline-shell" data-state="stopped">
+          <canvas id="timeline" width="1280" height="420"></canvas>
+          <span class="timeline-playhead" aria-hidden="true"></span>
+        </div>
+        <div class="voice-surface">
+          <div class="voice-header" aria-hidden="true">
+            <span></span>
+            <span>lane</span>
+            <span>instrument</span>
+            <span>kit</span>
+            <span>meter</span>
+            <span>role</span>
+            <span>hold</span>
+            <span>bpm</span>
+            <span>note</span>
+            <span>pattern</span>
+          </div>
+          <div id="voices" class="voices voice-board"></div>
+        </div>
+      </section>
+
+      <section id="hitStrip" class="hit-band" aria-live="polite">
+        <span class="hit-lamp" data-field="hitLamp"></span>
+        <dl>
+          <div><dt>instrument</dt><dd data-field="hitInstrument">-</dd></div>
+          <div><dt>lane</dt><dd data-field="hitVoice">-</dd></div>
+          <div><dt>meter</dt><dd data-field="hitMeter">-</dd></div>
+          <div><dt>kit</dt><dd data-field="hitKit">-</dd></div>
+          <div><dt>role</dt><dd data-field="hitRole">-</dd></div>
+          <div><dt>pulse</dt><dd data-field="hitPulse">-</dd></div>
+        </dl>
+      </section>
     </main>
     <script type="module" src="./app.mjs"></script>
   </body>

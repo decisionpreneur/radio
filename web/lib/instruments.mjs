@@ -1,68 +1,53 @@
 export const FOSS_DRUMSET_ID = "avl-drumkits-generic";
 export const FOSS_ETHNIC_PERCUSSION_KIT_ID = "avl-buskmans-holiday-percussion";
-export const PERC_AFRICAN_MPC_KIT_ID = "perc-african-mpc";
 
-const FOSS_DRUMSET_NAME = "AVL Drumkits generic drums";
-const FOSS_ETHNIC_PERCUSSION_KIT_NAME = "AVL Buskman's Holiday percussion";
-const PERC_AFRICAN_MPC_KIT_NAME = "Perc African MPC";
+const FOSS_DRUMSET_NAME = "Generic drum set";
+const FOSS_ETHNIC_PERCUSSION_KIT_NAME = "Ethnic percussion kit";
 
-function lane(kitId, kitName, value) {
-  return Object.freeze({
-    kitId,
-    kitName,
-    ...value
-  });
-}
+const lane = (kitId, kitName, name, note, color, sound) =>
+  Object.freeze({ kitId, kitName, name, note, color, sound });
 
-export const DRUM_LANES = Object.freeze([
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Kick Tight Gen Purpose", note: 36, color: "#566a79", sound: "kick-tight" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Rim Sidestick Gen Purpose", note: 37, color: "#9f655f", sound: "rim" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Gen Purpose", note: 38, color: "#b66058", sound: "snare" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Gen Purpose 2", note: 39, color: "#c27a6d", sound: "snare-edge" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Snare Gen Purpose 3", note: 40, color: "#cf8b78", sound: "snare-edge" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom Low Gen Purpose", note: 41, color: "#7a6152", sound: "tom-low" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Hihat Closed Gen Purpose", note: 42, color: "#9da75f", sound: "hihat-closed" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom Low-Mid Gen Purpose", note: 43, color: "#8b6a55", sound: "tom-low-mid" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Hihat Open Gen Purpose", note: 44, color: "#b5b970", sound: "semi-open-hihat" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom High-Mid Gen Purpose", note: 45, color: "#93634f", sound: "tom-high-mid" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Hihat Open Gen Purpose 2", note: 46, color: "#c5c881", sound: "swish-hihat" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Tom High Gen Purpose", note: 47, color: "#a87559", sound: "tom-high" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Crash Gen Purpose", note: 48, color: "#c6a94f", sound: "crash" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Crash Gen Purpose 2", note: 49, color: "#d2b85e", sound: "crash" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Ride Gen Purpose", note: 50, color: "#8ca1ad", sound: "ride" }),
-  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, { name: "Ride Cup Gen Purpose", note: 51, color: "#9ab1bf", sound: "ride-bell" })
+export const GENERIC_DRUMSET_LANES = Object.freeze([
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Kick Tight Gen Purpose", 36, "#315f72", "kick-tight"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Rim Sidestick Gen Purpose", 37, "#8c4f45", "rim"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Snare Gen Purpose", 38, "#ba4a3d", "snare"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Snare Gen Purpose 2", 39, "#d06148", "snare-edge"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Snare Gen Purpose 3", 40, "#df7a57", "snare-edge"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom Low Gen Purpose", 41, "#6f5b46", "tom-low"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Hihat Closed Gen Purpose", 42, "#7d8d39", "hihat-closed"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom Low-Mid Gen Purpose", 43, "#8a6748", "tom-low-mid"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Hihat Open Gen Purpose", 44, "#a1a943", "semi-open-hihat"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom High-Mid Gen Purpose", 45, "#9b6d45", "tom-high-mid"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Hihat Open Gen Purpose 2", 46, "#bec55a", "swish-hihat"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Tom High Gen Purpose", 47, "#af7850", "tom-high"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Crash Gen Purpose", 48, "#d09b34", "crash"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Crash Gen Purpose 2", 49, "#e0b14b", "crash"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Ride Gen Purpose", 50, "#46909b", "ride"),
+  lane(FOSS_DRUMSET_ID, FOSS_DRUMSET_NAME, "Ride Cup Gen Purpose", 51, "#62aeb8", "ride-cup")
 ]);
 
 export const ETHNIC_PERCUSSION_LANES = Object.freeze([
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Cajon Thump", note: 35, color: "#9c5f47", sound: "cajon-thump" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Finger Snap", note: 36, color: "#a87858", sound: "finger-snap" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Cajon Slap", note: 38, color: "#b56d4f", sound: "cajon-slap" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Cajon Rim Click", note: 39, color: "#8f6a55", sound: "claves" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga Left", note: 40, color: "#c6784d", sound: "conga-left" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Conga Right", note: 41, color: "#cf8558", sound: "conga-right" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Small Conga Left", note: 42, color: "#d0925f", sound: "small-conga-left" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Small Conga Right", note: 43, color: "#d8a16d", sound: "small-conga-right" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Shakers", note: 44, color: "#8ea867", sound: "shaker" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Foot Stomp", note: 45, color: "#796b5a", sound: "foot-stomp" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Tambourine", note: 46, color: "#bcb65c", sound: "tambourine" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Claves", note: 47, color: "#b7835b", sound: "claves" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Cowbell", note: 48, color: "#a2a09a", sound: "cowbell" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Bucket", note: 49, color: "#66808a", sound: "bucket" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Bell Tree Down", note: 50, color: "#ad9cce", sound: "bell-tree-down" }),
-  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, { name: "Bell Tree Up", note: 51, color: "#8979b5", sound: "bell-tree-up" })
-]);
-
-export const PERC_AFRICAN_MPC_LANES = Object.freeze([
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Djembe Bass", note: 60, color: "#8b4f3d", sound: "djembe-bass" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Djembe Tone", note: 61, color: "#a76345", sound: "djembe-tone" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Djembe Slap", note: 62, color: "#bd764e", sound: "djembe-slap" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Dunun Low", note: 63, color: "#73533f", sound: "dunun-low" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Dunun High", note: 64, color: "#956546", sound: "dunun-high" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Udu Low", note: 65, color: "#6a6b56", sound: "udu-low" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Udu High", note: 66, color: "#858161", sound: "udu-high" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Talking Drum", note: 67, color: "#a58b4f", sound: "talking-drum" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Shekere", note: 68, color: "#7f9a5f", sound: "shekere" }),
-  lane(PERC_AFRICAN_MPC_KIT_ID, PERC_AFRICAN_MPC_KIT_NAME, { name: "MPC Metal Shaker", note: 69, color: "#86a69a", sound: "metal-shaker" })
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Stick Click", 35, "#a56a48", "stick-click"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cajon Thump", 36, "#be734b", "cajon-low"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Finger Snaps", 37, "#e7b48a", "finger-snap"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cajon Slap Left", 38, "#d19867", "cajon-slap"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Hand Clap", 39, "#c85e3f", "hand-clap"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cajon Slap Right", 40, "#d77a56", "cajon-slap"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Large Conga Left", 41, "#b65c45", "conga-low"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Shakers", 42, "#7cab52", "shaker-soft"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Large Conga Right", 43, "#9abf59", "conga-high"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Shake Tambourine", 44, "#c9ba44", "tambourine"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Small Conga Left", 45, "#8c6f48", "hand-drum-small"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bump Tambourine", 46, "#a88452", "tambourine"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Small Conga Right", 47, "#4d7d8a", "hand-drum-small-high"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Claves", 48, "#b9885a", "claves"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cymbal", 49, "#e0c45c", "cymbal-hand"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cymbal Bell", 50, "#6d8ba7", "cymbal-bell"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Cowbell", 51, "#9ca7ad", "cowbell"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Foot Stomp", 52, "#6f6251", "foot-stomp"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bucket", 53, "#4d7d8a", "bucket"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bell Tree Down", 54, "#9278bd", "bell-tree-down"),
+  lane(FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_NAME, "Bell Tree Up", 55, "#b692d6", "bell-tree-up")
 ]);
 
 export const KITS = Object.freeze([
@@ -70,41 +55,33 @@ export const KITS = Object.freeze([
     id: FOSS_DRUMSET_ID,
     name: FOSS_DRUMSET_NAME,
     aliases: Object.freeze(["generic drum set", "normal drumset"]),
-    source: Object.freeze({
-      name: "AVL Drumkits",
-      license: "GPL plus CC-BY-SA sample exception"
-    }),
-    lanes: DRUM_LANES
+    lanes: GENERIC_DRUMSET_LANES
   }),
   Object.freeze({
     id: FOSS_ETHNIC_PERCUSSION_KIT_ID,
     name: FOSS_ETHNIC_PERCUSSION_KIT_NAME,
     aliases: Object.freeze(["ethnic percussion kit"]),
-    source: Object.freeze({
-      name: "AVL Drumkits Buskman's Holiday",
-      license: "GPL plus CC-BY-SA sample exception"
-    }),
     lanes: ETHNIC_PERCUSSION_LANES
-  }),
-  Object.freeze({
-    id: PERC_AFRICAN_MPC_KIT_ID,
-    name: PERC_AFRICAN_MPC_KIT_NAME,
-    aliases: Object.freeze(["Perc African MPC", "perc african mpc"]),
-    lanes: PERC_AFRICAN_MPC_LANES
   })
 ]);
+
+export const KIT_BY_ID = Object.freeze(
+  Object.fromEntries(KITS.map((kit) => [kit.id, kit]))
+);
 
 export const ALL_LANES = Object.freeze(KITS.flatMap((kit) => kit.lanes));
 
 const KIT_ID_ALIASES = new Map([
-  ["normal-drumset", FOSS_DRUMSET_ID],
-  ["generic-drum-set", FOSS_DRUMSET_ID],
+  [FOSS_DRUMSET_ID, FOSS_DRUMSET_ID],
+  ["drums", FOSS_DRUMSET_ID],
+  ["generic", FOSS_DRUMSET_ID],
   ["generic drum set", FOSS_DRUMSET_ID],
   ["normal drumset", FOSS_DRUMSET_ID],
-  ["ethnic-percussion-kit", FOSS_ETHNIC_PERCUSSION_KIT_ID],
+  [FOSS_ETHNIC_PERCUSSION_KIT_ID, FOSS_ETHNIC_PERCUSSION_KIT_ID],
+  ["ethnic", FOSS_ETHNIC_PERCUSSION_KIT_ID],
+  ["percussion", FOSS_ETHNIC_PERCUSSION_KIT_ID],
   ["ethnic percussion kit", FOSS_ETHNIC_PERCUSSION_KIT_ID],
-  ["perc african mpc", PERC_AFRICAN_MPC_KIT_ID],
-  ["Perc African MPC", PERC_AFRICAN_MPC_KIT_ID]
+  ["buskmans", FOSS_ETHNIC_PERCUSSION_KIT_ID]
 ]);
 
 export function kitById(id) {

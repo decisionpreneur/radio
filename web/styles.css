@@ -762,6 +762,10 @@ select:focus-visible {
   overflow: auto;
 }
 
+#paywall {
+  order: -1;
+}
+
 .control-group {
   position: relative;
   margin: 0;
@@ -914,9 +918,9 @@ input::placeholder {
     grid-template-areas:
       "command"
       "signal"
-      "sequence"
       "hit"
-      "tuning";
+      "tuning"
+      "sequence";
     overflow: visible;
   }
 

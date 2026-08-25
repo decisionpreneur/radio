@@ -488,7 +488,7 @@ function nextCadenceSeconds(target) {
   if (!Number.isFinite(duration) || duration <= 0) return null;
   const completed = Math.max(0, target.lastReplacementBar + 1);
   const total = completed + target.state.pendingReplacements.length;
-  return target.sectionStart + (duration * completed / total);
+  return target.sectionStart + (duration * (completed + 1) / (total + 1));
 }
 
 function applyOneReplacement(target) {

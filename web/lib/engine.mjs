@@ -567,7 +567,7 @@ function nextReplacementTime(state, { startSeconds, fromSeconds, lastReplacement
   if (!Number.isFinite(duration) || duration <= 0) return null;
   const completed = Math.max(0, lastReplacementIndex + 1);
   const total = completed + state.pendingReplacements.length;
-  const scheduled = startSeconds + (duration * completed / total);
+  const scheduled = startSeconds + (duration * (completed + 1) / (total + 1));
   return Math.max(scheduled, fromSeconds);
 }
 

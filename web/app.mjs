@@ -1264,7 +1264,7 @@ function randomizeControls() {
   const patterns = readNumber("patternCount");
   document.querySelector("#startOnlyCount").value = String(patterns);
   document.querySelector("#pulseCount").value = "0";
-  document.querySelector("#kitPool").value = "";
+  setKitPoolValues([]);
   document.querySelector("#meterStart").value = "";
   document.querySelector("#cycleLength").value = String(1 + Math.floor(Math.random() * 5));
   const units = ["bars", "resolving-sequences"];
@@ -1281,6 +1281,11 @@ function applySharedConfigFromUrl() {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   for (const id of [...tunedControlIds, "exportSections"]) {
     if (!params.has(id)) continue;
+    if (id === "kitPool") {
+      setKitPoolValues((params.get(id) ?? "").split(",").map((entry) => entry.trim()).filter(Boolean));
+      touchedControls.add(id);
+      continue;
+    }
     const control = document.querySelector(`#${id}`);
     if (!control) continue;
     control.value = params.get(id) ?? "";
@@ -1312,7 +1317,21 @@ function stationHashParams() {
 }
 
 function value(id) {
+  if (id === "kitPool") return kitPoolValue();
   return document.querySelector(`#${id}`).value;
+}
+
+function kitPoolValue() {
+  const selected = [...document.querySelectorAll('input[name="kitPool"]:checked')]
+    .map((input) => input.value);
+  return selected.join(",");
+}
+
+function setKitPoolValues(values) {
+  const requested = new Set(values);
+  for (const input of document.querySelectorAll('input[name="kitPool"]')) {
+    input.checked = !requested.size || requested.has(input.value);
+  }
 }
 
 function readOptionalText(id, fallback) {
@@ -1332,8 +1351,9 @@ function readNumber(id) {
 }
 
 function markTouchedControl(target) {
-  if (target?.id && tunedControlIds.includes(target.id)) {
-    touchedControls.add(target.id);
+  const id = target?.name === "kitPool" ? "kitPool" : target?.id;
+  if (id && tunedControlIds.includes(id)) {
+    touchedControls.add(id);
   }
 }
 
@@ -1343,6 +1363,10 @@ function markTunedControlsTouched() {
 
 function releaseBlankTouchedControls() {
   for (const id of tunedControlIds) {
+    if (id === "kitPool" && value(id) === "") {
+      setKitPoolValues([]);
+      continue;
+    }
     if (value(id) === "") touchedControls.delete(id);
   }
 }

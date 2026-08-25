@@ -110,15 +110,21 @@
             Pulse patterns
             <input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="0">
           </label>
-          <label>
-            Kit pool
-            <select id="kitPool" name="kitPool">
-              <option value="">all kits</option>
-              <option value="avl-drumkits-generic">AVL Drumkits generic drums</option>
-              <option value="avl-buskmans-holiday-percussion">AVL Buskman's Holiday percussion</option>
-              <option value="perc-african-mpc">Perc African MPC</option>
-            </select>
-          </label>
+          <div id="kitPool" class="kit-picker" role="group" aria-label="Kit pool">
+            <span>Kit pool</span>
+            <label class="check-option">
+              <input id="kit-generic" name="kitPool" type="checkbox" value="avl-drumkits-generic" checked>
+              <span>AVL Drumkits generic drums</span>
+            </label>
+            <label class="check-option">
+              <input id="kit-buskmans" name="kitPool" type="checkbox" value="avl-buskmans-holiday-percussion" checked>
+              <span>AVL Buskman's Holiday percussion</span>
+            </label>
+            <label class="check-option">
+              <input id="kit-perc-african" name="kitPool" type="checkbox" value="perc-african-mpc" checked>
+              <span>Perc African MPC</span>
+            </label>
+          </div>
         </fieldset>
 
         <fieldset class="control-group">

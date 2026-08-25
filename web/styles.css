@@ -795,6 +795,44 @@ label {
   font-size: 12px;
 }
 
+.kit-picker {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.kit-picker > span {
+  line-height: 1.2;
+}
+
+.check-option {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 8px;
+  border: 2px solid var(--line-soft);
+  border-radius: 2px;
+  color: var(--ink);
+  background: var(--control);
+  font-weight: 800;
+}
+
+.check-option input {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+
+.check-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 input,
 select {
   width: 100%;

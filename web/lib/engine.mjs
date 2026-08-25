@@ -549,8 +549,7 @@ function buildRoleStableReplacementPlan(startingVoices, replacementVoices, prese
     const matchingSlot = matchingSlots.find((slot) => availableSlots.has(slot));
     const slot = matchingSlot ?? availableSlots.values().next().value ?? null;
     if (slot !== null) availableSlots.delete(slot);
-    const slotVoice = slot !== null ? startingVoices[slot] : null;
-    const instrument = slotVoice?.instrument ? { ...slotVoice.instrument } : { ...voice.instrument };
+    const instrument = { ...voice.instrument };
     return {
       slot,
       voice: {

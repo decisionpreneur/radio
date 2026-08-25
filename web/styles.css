@@ -107,7 +107,7 @@ a {
 h1 {
   margin: 0;
   font-size: 42px;
-  line-height: 0.98;
+  line-height: 1.05;
   letter-spacing: 0;
 }
 
@@ -429,6 +429,7 @@ select:focus-visible {
   min-width: 790px;
   display: grid;
   grid-template-columns: 14px 44px minmax(160px, 1.35fr) minmax(138px, 1fr) 58px 92px 58px 88px 56px minmax(92px, 1fr);
+  grid-template-areas: "lamp id instrument kit meter role hold bpm note pattern";
   gap: 10px;
   align-items: center;
   padding: 9px 12px;
@@ -452,6 +453,7 @@ select:focus-visible {
 }
 
 .lane-lamp {
+  grid-area: lamp;
   width: 13px;
   height: 13px;
   border: 1px solid var(--line-strong);
@@ -476,6 +478,34 @@ select:focus-visible {
   line-height: 1.2;
 }
 
+.voice-id {
+  grid-area: id;
+}
+
+.meter-chip {
+  grid-area: meter;
+}
+
+.role-chip {
+  grid-area: role;
+}
+
+.hold-chip {
+  grid-area: hold;
+}
+
+.bpm-chip {
+  grid-area: bpm;
+}
+
+.note-chip {
+  grid-area: note;
+}
+
+.pattern-chip {
+  grid-area: pattern;
+}
+
 .voice-id,
 .meter-chip,
 .role-chip,
@@ -497,10 +527,12 @@ select:focus-visible {
 }
 
 .instrument-name {
+  grid-area: instrument;
   font-size: 13px;
 }
 
 .kit-name {
+  grid-area: kit;
   color: var(--muted);
   font-size: 12px;
 }
@@ -571,8 +603,12 @@ input::placeholder {
 
 .paywall-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(80px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.paywall-actions > * {
+  min-width: 0;
 }
 
 #paywallStatus {
@@ -655,6 +691,22 @@ input::placeholder {
 
   .control-group {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .voice {
+    min-width: 0;
+    grid-template-columns: 16px minmax(34px, 0.45fr) minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "lamp id instrument instrument"
+      "lamp meter kit kit"
+      "lamp role hold bpm"
+      "lamp note pattern pattern";
+    gap: 6px 8px;
+    padding: 8px 10px;
+  }
+
+  .pattern-chip {
+    padding: 4px 5px;
   }
 }
 

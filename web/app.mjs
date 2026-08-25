@@ -1026,12 +1026,16 @@ async function connectMidi() {
   }
   midiAccess = await navigator.requestMIDIAccess();
   midiOutputSelect.innerHTML = '<option value="">none</option>';
-  for (const output of midiAccess.outputs.values()) {
+  let firstOutputId = "";
+  for (const [id, output] of midiAccess.outputs.entries()) {
     const option = document.createElement("option");
-    option.value = output.id;
+    option.value = id;
     option.textContent = output.name;
     midiOutputSelect.append(option);
+    firstOutputId ||= id;
   }
+  midiOutputSelect.value = firstOutputId;
+  midiOutput = firstOutputId ? midiAccess.outputs.get(firstOutputId) : null;
   statusEl.textContent = "midi ready";
 }
 

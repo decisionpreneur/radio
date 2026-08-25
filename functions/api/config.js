@@ -1,7 +1,7 @@
-import { handlePublicConfig } from "../../src/public-config-worker.mjs";
+import { answerRadioLinks } from "../../src/public-config-worker.mjs";
 
 export async function onRequestGet(context) {
-  return handlePublicConfig(context);
+  return answerRadioLinks(context);
 }
 
 export function onRequestPost() {

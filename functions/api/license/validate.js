@@ -1,9 +1,9 @@
-import { handleLicenseRequest, methodNotAllowed } from "../../../src/license-worker.mjs";
+import { answerLicenseGate, rejectNonPost } from "../../../src/license-worker.mjs";
 
 export function onRequestPost(context) {
-  return handleLicenseRequest(context, "validate");
+  return answerLicenseGate(context, "validate");
 }
 
 export function onRequest(context) {
-  return context.request.method === "POST" ? onRequestPost(context) : methodNotAllowed();
+  return context.request.method === "POST" ? onRequestPost(context) : rejectNonPost();
 }

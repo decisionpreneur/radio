@@ -1,36 +1,40 @@
-const FALLBACK_CHECKOUT_URL = "https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1";
-const FALLBACK_DONATION_URL = "https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9?embed=1";
+const liveCommerce = Object.freeze({
+  subscribe: "https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1",
+  give: "https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9?embed=1"
+});
 
-export function publicConfig(env = {}) {
+export function radioLinks(env = {}) {
   return {
-    checkoutUrl: normalizePublicUrl(env.RADIO_CHECKOUT_URL) || FALLBACK_CHECKOUT_URL,
-    donationUrl: normalizePublicUrl(env.RADIO_DONATION_URL) || FALLBACK_DONATION_URL
+    checkoutUrl: checkoutLink(env.RADIO_CHECKOUT_URL) || liveCommerce.subscribe,
+    donationUrl: checkoutLink(env.RADIO_DONATION_URL) || liveCommerce.give
   };
 }
 
-export async function handlePublicConfig(context) {
-  return Response.json(publicConfig(context.env), {
-    headers: {
-      "Cache-Control": "no-store"
-    }
-  });
+export function answerRadioLinks({ env }) {
+  return json(radioLinks(env));
 }
 
-function normalizePublicUrl(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
+function checkoutLink(candidate) {
+  const text = String(candidate ?? "").trim();
+  if (!text) return "";
   try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:") return "";
-    if (
-      url.hostname.endsWith(".lemonsqueezy.com") &&
-      url.pathname.startsWith("/checkout/buy/") &&
-      !url.searchParams.has("embed")
-    ) {
-      url.searchParams.set("embed", "1");
+    const link = new URL(text);
+    if (link.protocol !== "https:") return "";
+    if (link.hostname.endsWith(".lemonsqueezy.com") && link.pathname.startsWith("/checkout/buy/")) {
+      link.searchParams.set("embed", link.searchParams.get("embed") || "1");
     }
-    return url.href;
+    return link.href;
   } catch {
     return "";
   }
+}
+
+function json(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
+    }
+  });
 }

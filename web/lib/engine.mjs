@@ -617,6 +617,7 @@ function patternForRethoughtMeter(voice, targetMeter) {
   const length = Math.max(1, targetMeter);
   if (voice.role === "pulse") return Array.from({ length }, () => 1);
   if (voice.role === "start-only") return Array.from({ length }, (_, index) => (index === 0 ? 1 : 0));
+  if (voice.role === "binary") return voice.pattern.slice();
   const pattern = Array.from({ length }, () => 0);
   for (let index = 0; index < voice.pattern.length; index += 1) {
     if (!voice.pattern[index]) continue;

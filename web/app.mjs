@@ -1,245 +1,241 @@
 import {
   baseBarSeconds,
-  beginNextCycle,
+  candidateBpm,
   cloneStation,
   eventsBetween,
-  kitSummary,
   makeStation,
-  nextReplacementSecond,
-  replaceOne,
+  nextCycle,
+  nextReplacementAt,
+  replaceNext,
   renderArrangement,
-  resolveBars,
+  resolvingBars,
   sectionBars,
   sectionSeconds,
-  voiceBpm
+  stationKitText
 } from "./lib/engine.mjs";
 import { encodeMidiFile } from "./lib/midi-file.mjs";
 
-const accessStore = "radio-access-v4";
-const instanceStore = "radio-instance-v4";
+const accessStore = "radio-access-20260827";
+const instanceStore = "radio-instance-20260827";
 const sessionSeed = `r-${Date.now().toString(36)}`;
-const q = (selector) => document.querySelector(selector);
-const qa = (selector) => [...document.querySelectorAll(selector)];
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const ui = {
-  tune: q("#tune"),
-  run: q("#runState"),
-  lock: q("#lockState"),
-  play: q("#play"),
-  stop: q("#stop"),
-  fresh: q("#fresh"),
-  copy: q("#copyLink"),
-  midi: q("#midiConnect"),
-  save: q("#midiSave"),
-  buy: q("#buy"),
-  give: q("#give"),
-  license: q("#license"),
-  email: q("#email"),
-  unlock: q("#unlock"),
-  forget: q("#forget"),
-  accessText: q("#accessText"),
-  midiOut: q("#midiOut"),
-  canvas: q("#map"),
-  mapWrap: q("#mapWrap"),
-  needle: q("#mapWrap > span"),
-  parts: q("#partList"),
-  cycleMeter: q("#cycleMeter"),
-  reads: Object.fromEntries(qa("[data-read]").map((node) => [node.dataset.read, node])),
-  hit: q("#hit"),
-  hitLamp: q('[data-hit="lamp"]'),
-  hitReads: Object.fromEntries(qa("[data-hit]").map((node) => [node.dataset.hit, node]))
+  form: $("#controls"),
+  play: $("#playButton"),
+  stop: $("#stopButton"),
+  fresh: $("#newButton"),
+  copy: $("#copyButton"),
+  midi: $("#midiButton"),
+  save: $("#saveButton"),
+  run: $("#stateText"),
+  accessState: $("#accessState"),
+  subscribe: $("#subscribeLink"),
+  donate: $("#donateLink"),
+  license: $("#licenseKey"),
+  email: $("#email"),
+  unlock: $("#unlockButton"),
+  clear: $("#clearButton"),
+  accessLine: $("#accessLine"),
+  midiOutput: $("#midiOutput"),
+  canvas: $("#scope"),
+  scope: $(".scope"),
+  needle: $("#needle"),
+  reads: Object.fromEntries($$("[data-read]").map((node) => [node.dataset.read, node])),
+  hitPanel: $("#hitPanel"),
+  hitReads: Object.fromEntries($$("[data-hit]").map((node) => [node.dataset.hit, node])),
+  lanes: $("#laneList")
 };
-const paper = ui.canvas.getContext("2d");
+const ctx = ui.canvas.getContext("2d");
 
-let station = makeStation(valuesFromForm());
-let listening = null;
+let station = makeStation(formValues());
+let live = null;
 let audio = null;
 let midiAccess = null;
-let midiOut = null;
-let savedAccess = readStoredAccess();
-let accessCheckPending = savedAccess?.unlocked === true;
+let midiOutput = null;
+let storedAccess = readAccess();
+let checkingAccess = Boolean(storedAccess?.unlocked);
 let lastHitUid = "";
 let lastHitSlot = -1;
-let signalFrame = 0;
+let flashTimer = 0;
+let signalTimer = 0;
 let signalPeak = 0;
-let hitBlink = 0;
 
-applyHash();
-station = makeStation(valuesFromForm());
-loadPaymentLinks();
-refreshAccessFromStorage();
+readHash();
+station = makeStation(formValues());
+loadConfig();
+refreshAccess();
 paint();
 
-ui.tune.addEventListener("input", rebuild);
-ui.tune.addEventListener("change", rebuild);
-ui.play.addEventListener("click", start);
+ui.form.addEventListener("input", formChanged);
+ui.form.addEventListener("change", formChanged);
+ui.play.addEventListener("click", play);
 ui.stop.addEventListener("click", stop);
-ui.fresh.addEventListener("click", randomize);
-ui.copy.addEventListener("click", copyLink);
+ui.fresh.addEventListener("click", randomStation);
+ui.copy.addEventListener("click", copyStationLink);
 ui.unlock.addEventListener("click", unlock);
-ui.forget.addEventListener("click", clearAccess);
+ui.clear.addEventListener("click", clearAccess);
 ui.midi.addEventListener("click", connectMidi);
-ui.midiOut.addEventListener("change", chooseMidiOut);
+ui.midiOutput.addEventListener("change", chooseMidiOutput);
 ui.save.addEventListener("click", saveMidi);
+window.addEventListener("resize", () => paint());
 
-function rebuild(event) {
-  if (event?.target?.closest?.(".access") || event?.target?.id === "sections" || event?.target?.id === "midiOut") return;
-  station = makeStation(valuesFromForm());
-  if (listening) {
-    listening.station = cloneStation(station);
-    listening.started = audio.context.currentTime + 0.08;
-    listening.sent.clear();
+function formChanged(event) {
+  const id = event?.target?.id ?? "";
+  if (event?.target?.closest(".access") || id === "sections" || id === "midiOutput") return;
+  station = makeStation(formValues());
+  if (live && audio) {
+    live.station = cloneStation(station);
+    live.origin = audio.context.currentTime + 0.08;
+    live.sent.clear();
   }
   paint();
 }
 
-async function start() {
-  if (!unlocked()) {
-    phrase("license required");
+async function play() {
+  if (!hasAccess()) {
+    say("license required");
     return;
   }
-  if (!audio) audio = audioGraph();
+  if (!audio) audio = makeAudioGraph();
   await audio.context.resume();
-  const now = audio.context.currentTime;
-  listening = {
+  live = {
     station: cloneStation(station),
-    started: now + 0.08,
+    origin: audio.context.currentTime + 0.08,
     sent: new Map(),
-    timer: window.setInterval(tick, 25)
+    timer: window.setInterval(tick, 24)
   };
-  ui.mapWrap.dataset.live = "yes";
-  phrase("playing");
+  ui.scope.classList.add("live");
+  say("playing");
   tick();
   signalLoop();
 }
 
 function stop() {
-  if (listening?.timer) window.clearInterval(listening.timer);
-  listening = null;
-  ui.mapWrap.dataset.live = "no";
-  ui.cycleMeter.value = 0;
-  ui.needle.style.setProperty("--needle-x", "50%");
-  phrase("stopped");
+  if (live?.timer) window.clearInterval(live.timer);
+  live = null;
+  ui.scope.classList.remove("live");
+  ui.needle.style.setProperty("--x", "50%");
+  say("stopped");
+  paint();
 }
 
 function tick() {
-  if (!listening || !audio) return;
+  if (!live || !audio) return;
   const now = audio.context.currentTime;
-  carryTo(now);
-  schedule(now + 0.015, now + 0.35);
-  showTime(now);
+  advanceLive(now);
+  scheduleHits(now + 0.015, now + 0.34);
+  paintTime(now);
 }
 
-function carryTo(now) {
+function advanceLive(now) {
   let changed = false;
-  while (now >= listening.started + sectionSeconds(listening.station) - 1e-9) {
-    listening.started += sectionSeconds(listening.station);
-    listening.station = beginNextCycle(listening.station);
-    listening.sent.clear();
+  while (now >= live.origin + sectionSeconds(live.station) - 1e-9) {
+    live.origin += sectionSeconds(live.station);
+    live.station = nextCycle(live.station);
+    live.sent.clear();
     changed = true;
   }
   while (true) {
-    const cut = nextReplacementSecond(listening.station, listening.started);
+    const cut = nextReplacementAt(live.station, live.origin);
     if (cut === null || cut > now + 1e-9) break;
-    listening.station = replaceOne(listening.station);
+    live.station = replaceNext(live.station);
     changed = true;
   }
   if (changed) {
-    station = cloneStation(listening.station);
+    station = cloneStation(live.station);
     paint();
   }
 }
 
-function schedule(fromSecond, toSecond) {
-  for (const [key, at] of listening.sent) {
-    if (at < fromSecond - 1) listening.sent.delete(key);
+function scheduleHits(fromSecond, toSecond) {
+  for (const [key, sentAt] of live.sent) {
+    if (sentAt < fromSecond - 1) live.sent.delete(key);
   }
   let cursor = fromSecond;
-  let local = cloneStation(listening.station);
-  let origin = listening.started;
+  let segment = cloneStation(live.station);
+  let origin = live.origin;
   while (cursor < toSecond - 1e-9) {
-    const cycleEnd = origin + sectionSeconds(local);
-    const replacementAt = nextReplacementSecond(local, origin);
-    const edge = Math.min(toSecond, cycleEnd, replacementAt ?? Number.POSITIVE_INFINITY);
-    for (const hit of eventsBetween(local, {
+    const cycleEnd = origin + sectionSeconds(segment);
+    const replaceAt = nextReplacementAt(segment, origin);
+    const edge = Math.min(toSecond, cycleEnd, replaceAt ?? Number.POSITIVE_INFINITY);
+    for (const hit of eventsBetween(segment, {
       fromSecond: cursor,
       toSecond: edge,
       originSecond: origin,
-      maxEvents: 2200
+      maxEvents: 2400
     })) {
-      const key = `${local.cycle}:${local.replacementsDone}:${hit.uid}:${hit.pulse}`;
-      if (listening.sent.has(key)) continue;
-      listening.sent.set(key, hit.timeSecond);
-      sound(hit, hit.timeSecond);
+      const key = `${segment.cycle}:${segment.replacementsDone}:${hit.uid}:${hit.pulse}`;
+      if (live.sent.has(key)) continue;
+      live.sent.set(key, hit.timeSecond);
+      sound(hit);
     }
     cursor = edge;
-    if (replacementAt !== null && replacementAt <= edge + 1e-9) {
-      local = replaceOne(local);
+    if (replaceAt !== null && replaceAt <= edge + 1e-9) {
+      segment = replaceNext(segment);
       continue;
     }
     if (cycleEnd <= edge + 1e-9) {
       origin = cycleEnd;
-      local = beginNextCycle(local);
+      segment = nextCycle(segment);
     }
   }
 }
 
-function sound(hit, when) {
-  if (midiOut) {
-    const at = performance.now() + Math.max(0, (when - audio.context.currentTime) * 1000);
-    midiOut.send([0x99, hit.note, hit.velocity], at);
-    midiOut.send([0x89, hit.note, 0], at + hit.seconds * 1000);
+function sound(hit) {
+  if (midiOutput) {
+    const at = performance.now() + Math.max(0, (hit.timeSecond - audio.context.currentTime) * 1000);
+    midiOutput.send([0x99, hit.note, hit.velocity], at);
+    midiOutput.send([0x89, hit.note, 0], at + hit.seconds * 1000);
   }
-  renderHit(hit, when);
+  synth(hit);
   signalPeak = Math.max(signalPeak, hit.velocity / 127);
-  const delay = Math.max(0, (when - audio.context.currentTime) * 1000);
+  const delay = Math.max(0, (hit.timeSecond - audio.context.currentTime) * 1000);
   window.setTimeout(() => showHit(hit), delay);
 }
 
-function renderHit(hit, when) {
-  const loud = (hit.velocity / 127) * Math.max(0.38, Math.min(0.9, 2.8 / Math.sqrt(Math.max(1, station.voices.length))));
-  const family = hit.instrument.family;
+function synth(hit) {
+  const loud = (hit.velocity / 127) * Math.max(0.28, Math.min(0.82, 3.2 / Math.sqrt(Math.max(1, station.voices.length))));
+  const when = hit.timeSecond;
+  const family = hit.lane.family;
   if (family === "kick") {
-    tone(82, 0.16, loud * 0.76, "sine", when, 0.38);
-    noise(0.026, loud * 0.16, 2600, "highpass", when);
+    tone(76, 0.15, loud * 0.9, "sine", when, 0.32);
+    filteredNoise(0.028, loud * 0.12, 2600, "highpass", when);
   } else if (family === "snare") {
-    noise(0.11, loud * 0.34, 980, "bandpass", when);
-    tone(185, 0.06, loud * 0.13, "triangle", when, 0.55);
+    filteredNoise(0.105, loud * 0.35, 1150, "bandpass", when);
+    tone(190, 0.055, loud * 0.14, "triangle", when, 0.5);
   } else if (family === "tom") {
-    const freq = 112 + (hit.note - 41) * 22;
-    tone(freq, 0.18, loud * 0.42, "sine", when, 0.52);
+    tone(92 + (hit.note - 41) * 20, 0.18, loud * 0.48, "sine", when, 0.48);
   } else if (family === "hat") {
-    noise(hit.instrument.name.includes("Open") ? 0.18 : 0.055, loud * 0.18, 6200, "highpass", when);
-    metal([3800, 5700], 0.06, loud * 0.05, when);
-  } else if (family === "crash") {
-    noise(0.32, loud * 0.24, 3600, "highpass", when);
-    metal([730, 1190, 2110], 0.22, loud * 0.09, when);
-  } else if (family === "ride") {
-    noise(0.18, loud * 0.16, 4700, "highpass", when);
-    metal([610, 920], 0.12, loud * 0.08, when);
+    filteredNoise(hit.lane.name.includes("Open") ? 0.18 : 0.052, loud * 0.18, 6500, "highpass", when);
+    partials([4100, 5800], 0.055, loud * 0.045, when, "triangle");
+  } else if (family === "cymbal") {
+    filteredNoise(0.28, loud * 0.25, 3900, "highpass", when);
+    partials([730, 1130, 2030], 0.22, loud * 0.09, when, "triangle");
   } else if (family === "hand") {
-    const freq = 96 + (hit.note - 35) * 15;
-    tone(freq, 0.15, loud * 0.45, "triangle", when, 0.58);
-    noise(0.03, loud * 0.08, freq * 9, "bandpass", when);
+    const base = 88 + (hit.note - 35) * 15;
+    tone(base, 0.14, loud * 0.48, "triangle", when, 0.56);
+    filteredNoise(0.032, loud * 0.09, base * 9, "bandpass", when);
   } else if (family === "wood") {
-    metal([520 + hit.note * 5, 780 + hit.note * 6], 0.08, loud * 0.16, when, "square");
+    partials([510 + hit.note * 4, 790 + hit.note * 5], 0.07, loud * 0.18, when, "square");
   } else if (family === "metal") {
-    metal([820 + hit.note * 8, 1310 + hit.note * 6, 2190 + hit.note * 4], 0.13, loud * 0.15, when);
+    partials([830 + hit.note * 7, 1320 + hit.note * 5, 2200 + hit.note * 3], 0.14, loud * 0.16, when, "triangle");
   } else {
-    noise(0.095, loud * 0.15, 5200, "highpass", when);
+    filteredNoise(0.11, loud * 0.14, 5200, "highpass", when);
   }
 }
 
-function audioGraph() {
+function makeAudioGraph() {
   const context = new AudioContext();
   const master = context.createGain();
   const compressor = context.createDynamicsCompressor();
   const analyser = context.createAnalyser();
   master.gain.value = 0.52;
   compressor.threshold.value = -18;
-  compressor.knee.value = 22;
-  compressor.ratio.value = 6;
+  compressor.knee.value = 18;
+  compressor.ratio.value = 5;
   compressor.attack.value = 0.004;
-  compressor.release.value = 0.18;
+  compressor.release.value = 0.16;
   analyser.fftSize = 512;
   master.connect(compressor).connect(analyser).connect(context.destination);
   return {
@@ -247,53 +243,52 @@ function audioGraph() {
     master,
     analyser,
     samples: new Uint8Array(analyser.frequencyBinCount),
-    noiseBuffer: makeNoise(context)
+    noise: makeNoise(context)
   };
 }
 
-function tone(freq, seconds, gainValue, type, when, fall = 0.5) {
+function tone(freq, seconds, gainValue, type, when, fall) {
   const osc = audio.context.createOscillator();
   const gain = audio.context.createGain();
   osc.type = type;
-  osc.frequency.setValueAtTime(freq, when);
+  osc.frequency.setValueAtTime(Math.max(20, freq), when);
   osc.frequency.exponentialRampToValueAtTime(Math.max(18, freq * fall), when + seconds);
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + seconds);
   osc.connect(gain).connect(audio.master);
   osc.start(when);
-  osc.stop(when + seconds + 0.02);
+  osc.stop(when + seconds + 0.025);
 }
 
-function noise(seconds, gainValue, freq, type, when) {
+function filteredNoise(seconds, gainValue, freq, type, when) {
   const source = audio.context.createBufferSource();
   const filter = audio.context.createBiquadFilter();
   const gain = audio.context.createGain();
-  source.buffer = audio.noiseBuffer;
+  source.buffer = audio.noise;
   filter.type = type;
   filter.frequency.setValueAtTime(freq, when);
   gain.gain.setValueAtTime(gainValue, when);
   gain.gain.exponentialRampToValueAtTime(0.001, when + seconds);
   source.connect(filter).connect(gain).connect(audio.master);
   source.start(when);
-  source.stop(when + seconds + 0.02);
+  source.stop(when + seconds + 0.025);
 }
 
-function metal(freqs, seconds, gainValue, when, type = "triangle") {
-  for (const freq of freqs) tone(freq, seconds, gainValue / freqs.length, type, when, 0.92);
+function partials(freqs, seconds, gainValue, when, type) {
+  for (const freq of freqs) tone(freq, seconds, gainValue / freqs.length, type, when, 0.91);
 }
 
 function makeNoise(context) {
-  const length = context.sampleRate * 2;
-  const buffer = context.createBuffer(1, length, context.sampleRate);
+  const buffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
   const data = buffer.getChannelData(0);
-  for (let index = 0; index < length; index += 1) data[index] = Math.random() * 2 - 1;
+  for (let index = 0; index < data.length; index += 1) data[index] = Math.random() * 2 - 1;
   return buffer;
 }
 
 function signalLoop() {
-  if (!audio || signalFrame) return;
-  const draw = () => {
-    signalFrame = 0;
+  if (!audio || signalTimer) return;
+  const step = () => {
+    signalTimer = 0;
     if (!audio) return;
     audio.analyser.getByteFrequencyData(audio.samples);
     let peak = 0;
@@ -302,178 +297,167 @@ function signalLoop() {
     ui.reads.signal.textContent = level.toFixed(3);
     ui.reads.signalFill.style.transform = `scaleX(${level})`;
     signalPeak = signalPeak < 0.001 ? 0 : signalPeak * 0.985;
-    if (listening) signalFrame = requestAnimationFrame(draw);
+    if (live) signalTimer = requestAnimationFrame(step);
   };
-  signalFrame = requestAnimationFrame(draw);
+  signalTimer = requestAnimationFrame(step);
 }
 
 function showHit(hit) {
   lastHitUid = hit.uid;
   lastHitSlot = hit.slot;
-  ui.hitReads.instrument.textContent = hit.instrument.name;
+  ui.hitReads.instrument.textContent = hit.lane.name;
   ui.hitReads.lane.textContent = `L${hit.slot + 1}`;
   ui.hitReads.meter.textContent = String(hit.meter);
   ui.hitReads.kit.textContent = hit.kit;
   ui.hitReads.role.textContent = hit.role;
   ui.hitReads.pulse.textContent = String(hit.pulse);
-  ui.hit.classList.add("hot");
-  ui.hitLamp.classList.add("hot");
-  qa(".part.last").forEach((item) => item.classList.remove("last"));
-  const row = q(`[data-uid="${hit.uid}"], [data-slot="${hit.slot}"]`);
-  row?.classList.add("hit", "last");
-  if (hitBlink) window.clearTimeout(hitBlink);
-  hitBlink = window.setTimeout(() => {
-    ui.hit.classList.remove("hot");
-    ui.hitLamp.classList.remove("hot");
-    qa(".part.hit").forEach((item) => item.classList.remove("hit"));
-  }, 360);
+  ui.hitPanel.classList.add("hot");
+  $$(".lane.flash").forEach((node) => node.classList.remove("flash"));
+  $(`[data-uid="${hit.uid}"]`)?.classList.add("flash");
+  if (flashTimer) window.clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => {
+    ui.hitPanel.classList.remove("hot");
+    $$(".lane.flash").forEach((node) => node.classList.remove("flash"));
+  }, 330);
 }
 
-function showTime(now) {
-  if (!listening) return;
-  const total = sectionSeconds(listening.station);
-  const spent = Math.max(0, now - listening.started);
+function paintTime(now) {
+  if (!live) return;
+  const total = sectionSeconds(live.station);
+  const spent = Math.max(0, now - live.origin);
   const ratio = total > 0 ? Math.min(1, spent / total) : 0;
-  ui.cycleMeter.value = ratio;
-  ui.reads.cycle.textContent = `${listening.station.cycle}; bar ${Math.min(sectionBars(listening.station), Math.floor(spent / baseBarSeconds(listening.station)))} / ${sectionBars(listening.station)}`;
-  ui.reads.change.textContent = changePhrase(listening.station);
-  ui.needle.style.setProperty("--needle-x", `${Math.round(ratio * 100)}%`);
-  drawMap(listening.station, ratio);
+  const bar = Math.min(sectionBars(live.station), Math.floor(spent / baseBarSeconds(live.station)));
+  ui.reads.cycle.textContent = `${live.station.cycle}; bar ${bar} / ${sectionBars(live.station)}`;
+  ui.reads.change.textContent = changeText(live.station);
+  ui.needle.style.setProperty("--x", `${Math.round(ratio * 100)}%`);
+  draw(live.station, ratio);
 }
 
 function paint() {
-  const view = listening?.station ?? station;
-  ui.reads.basis.textContent = basisPhrase(view);
+  const view = live?.station ?? station;
+  ui.reads.basis.textContent = basisText(view);
   ui.reads.cycle.textContent = `${view.cycle}; ${sectionBars(view)} bars`;
-  ui.reads.change.textContent = changePhrase(view);
-  ui.reads.basisChoice.textContent = view.config.basisMode === "farthest" ? "farmost" : view.config.basisMode;
+  ui.reads.change.textContent = changeText(view);
+  ui.reads.basisMode.textContent = view.config.basisMode === "farthest" ? "farmost" : view.config.basisMode;
   ui.reads.patterns.textContent = String(view.voices.length);
-  ui.reads.roles.textContent = rolesPhrase(view);
-  ui.reads.meters.textContent = metersPhrase(view);
-  ui.reads.kits.textContent = kitSummary(view);
-  ui.reads.timing.textContent = "same pulse";
-  ui.reads.access.textContent = unlocked() ? "subscribed" : "locked";
-  drawMap(view, 0);
-  drawParts(view);
+  ui.reads.roles.textContent = rolesText(view);
+  ui.reads.meters.textContent = view.voices.map((voice) => voice.meter).sort((a, b) => a - b).join(", ");
+  ui.reads.kits.textContent = stationKitText(view);
   paintAccess();
+  draw(view, 0);
+  drawLanes(view);
 }
 
-function drawMap(view, progress) {
-  const width = ui.canvas.width;
-  const height = ui.canvas.height;
-  const centerX = width * 0.5;
-  const centerY = height * 0.52;
-  const outer = Math.min(width, height) * 0.44;
-  const inner = Math.max(42, outer * 0.16);
-  paper.clearRect(0, 0, width, height);
-  paper.fillStyle = css("--map-paper");
-  paper.fillRect(0, 0, width, height);
-  paper.strokeStyle = css("--map-line");
-  paper.lineWidth = 1;
-  for (let ring = 0; ring < view.voices.length; ring += 1) {
-    const radius = ringRadius(inner, outer, view.voices.length, ring);
-    paper.beginPath();
-    paper.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    paper.stroke();
+function draw(view, progress) {
+  const scale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const rect = ui.canvas.getBoundingClientRect();
+  const width = Math.max(320, Math.floor(rect.width * scale));
+  const height = Math.max(300, Math.floor(rect.height * scale));
+  if (ui.canvas.width !== width || ui.canvas.height !== height) {
+    ui.canvas.width = width;
+    ui.canvas.height = height;
   }
-
-  const preview = Math.min(sectionSeconds(view), 24);
+  const cx = width * 0.5;
+  const cy = height * 0.52;
+  const outer = Math.min(width, height) * 0.44;
+  const inner = Math.max(36, outer * 0.14);
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#fffffd";
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = css("--line");
+  ctx.lineWidth = 1 * scale;
+  for (let index = 0; index < view.voices.length; index += 1) {
+    const radius = ringRadius(inner, outer, view.voices.length, index);
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  const preview = Math.max(1, Math.min(sectionSeconds(view), 18));
   for (const hit of eventsBetween(view, {
     fromSecond: 0,
     toSecond: preview,
     originSecond: 0,
-    maxEvents: 5000
+    maxEvents: 6000
   })) {
-    const angle = -Math.PI / 2 + (hit.localSecond / preview) * Math.PI * 2;
+    const angle = -Math.PI / 2 + hit.localSecond / preview * Math.PI * 2;
     const radius = ringRadius(inner, outer, view.voices.length, hit.slot);
-    const size = hit.uid === view.baseUid ? 12 : 8;
-    radialStroke(centerX, centerY, angle, radius - size, radius + size, hit.instrument.color, hit.uid === view.baseUid ? 4 : 2);
+    radial(cx, cy, angle, radius - 11 * scale, radius + 11 * scale, hit.lane.color, hit.uid === view.baseUid ? 4 * scale : 2 * scale);
   }
-
-  const baseIndex = view.voices.findIndex((part) => part.uid === view.baseUid);
+  const baseIndex = view.voices.findIndex((voice) => voice.uid === view.baseUid);
   if (baseIndex >= 0) {
     const radius = ringRadius(inner, outer, view.voices.length, baseIndex);
-    paper.strokeStyle = css("--map-base");
-    paper.lineWidth = 3;
-    paper.beginPath();
-    paper.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    paper.stroke();
+    ctx.strokeStyle = css("--ink");
+    ctx.lineWidth = 3 * scale;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
   }
-
-  if (listening) {
+  if (live) {
     const angle = -Math.PI / 2 + progress * Math.PI * 2;
-    radialStroke(centerX, centerY, angle, inner * 0.45, outer + 18, css("--hit"), 2);
+    radial(cx, cy, angle, inner * 0.42, outer + 18 * scale, css("--warn"), 2 * scale);
   }
-
-  paper.fillStyle = css("--ink");
-  paper.font = "28px Georgia, serif";
-  paper.textAlign = "center";
-  paper.fillText(`cycle ${view.cycle}`, centerX, centerY - 6);
-  paper.font = "16px Aptos, Helvetica Neue, Helvetica, sans-serif";
-  paper.fillText(`m ${view.baseMeter} / ${view.baseBpm.toFixed(3)} bpm`, centerX, centerY + 23);
+  ctx.fillStyle = css("--ink");
+  ctx.textAlign = "center";
+  ctx.font = `${Math.round(26 * scale)}px Georgia, Cambria, serif`;
+  ctx.fillText(`cycle ${view.cycle}`, cx, cy - 4 * scale);
+  ctx.font = `${Math.round(14 * scale)}px Inter, Aptos, Arial, sans-serif`;
+  ctx.fillText(`meter ${view.baseMeter} / ${view.baseBpm.toFixed(3)} bpm`, cx, cy + 24 * scale);
 }
 
-function radialStroke(cx, cy, angle, start, end, color, width) {
-  paper.strokeStyle = color;
-  paper.lineWidth = width;
-  paper.beginPath();
-  paper.moveTo(cx + Math.cos(angle) * start, cy + Math.sin(angle) * start);
-  paper.lineTo(cx + Math.cos(angle) * end, cy + Math.sin(angle) * end);
-  paper.stroke();
+function radial(cx, cy, angle, from, to, color, lineWidth) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.moveTo(cx + Math.cos(angle) * from, cy + Math.sin(angle) * from);
+  ctx.lineTo(cx + Math.cos(angle) * to, cy + Math.sin(angle) * to);
+  ctx.stroke();
 }
 
 function ringRadius(inner, outer, count, index) {
-  if (count <= 1) return (inner + outer) / 2;
-  return inner + (outer - inner) * index / (count - 1);
+  return count <= 1 ? (inner + outer) / 2 : inner + (outer - inner) * index / (count - 1);
 }
 
-function drawParts(view) {
-  ui.parts.innerHTML = "";
-  for (const [slot, part] of view.voices.entries()) {
+function drawLanes(view) {
+  ui.lanes.textContent = "";
+  for (const [slot, voice] of view.voices.entries()) {
     const row = document.createElement("li");
-    row.className = `part${part.uid === view.baseUid ? " base" : ""}${part.uid === lastHitUid || slot === lastHitSlot ? " last" : ""}`;
-    row.dataset.uid = part.uid;
-    row.dataset.slot = String(slot);
-    row.style.setProperty("--tone", part.instrument.color);
+    row.className = `lane${voice.uid === view.baseUid ? " base" : ""}${voice.uid === lastHitUid || slot === lastHitSlot ? " flash" : ""}`;
+    row.dataset.uid = voice.uid;
+    row.style.setProperty("--tone", voice.lane.color);
     row.innerHTML = `
-      <b>${escapeHtml(`L${slot + 1} ${part.instrument.name}`)}</b>
-      <small>${escapeHtml(`m ${part.meter} / ${voiceBpm(view, part).toFixed(3)} bpm`)}</small>
-      <em>${escapeHtml(`${part.instrument.kitName} / ${part.role} / n ${part.instrument.note}`)}</em>
-      ${spark(part.pattern)}
-      <code>${escapeHtml(part.pattern.join(""))}</code>
+      <b>${html(`L${slot + 1} ${voice.lane.name}`)}</b>
+      <small>${html(`m ${voice.meter} / ${candidateBpm(view, voice).toFixed(3)} bpm`)}</small>
+      <em>${html(`${voice.lane.kitName} / ${voice.role} / n ${voice.lane.note}`)}</em>
+      ${ticks(voice.pattern)}
+      <code>${html(voice.pattern.join(""))}</code>
     `;
-    ui.parts.append(row);
+    ui.lanes.append(row);
   }
 }
 
-function spark(pattern) {
-  return `<span class="spark" aria-label="pattern ${pattern.join("")}">${pattern.map((value) => `<i class="${value ? "on" : ""}"></i>`).join("")}</span>`;
+function ticks(pattern) {
+  return `<span class="ticks" aria-label="pattern ${pattern.join("")}">${pattern.map((hit) => `<i class="${hit ? "on" : ""}"></i>`).join("")}</span>`;
 }
 
-function basisPhrase(view) {
-  const part = view.voices.find((item) => item.uid === view.baseUid) ?? view.voices[0];
-  const from = part?.rethoughtFrom ? ` from meter ${part.rethoughtFrom}` : "";
-  return `${part?.uid ?? "-"}; meter ${view.baseMeter}${from}; ${view.baseBpm.toFixed(3)} bpm`;
+function basisText(view) {
+  const voice = view.voices.find((item) => item.uid === view.baseUid) ?? view.voices[0];
+  const from = voice?.rethoughtFrom ? ` from meter ${voice.rethoughtFrom}` : "";
+  return `${voice?.uid ?? "-"}; meter ${view.baseMeter}${from}; ${view.baseBpm.toFixed(3)} bpm`;
 }
 
-function changePhrase(view) {
+function changeText(view) {
   const total = view.replacementsDone + view.pending.length;
-  const progress = total ? `${view.replacementsDone}/${total} replacements` : "basis";
-  return `${view.config.cycleLength} ${view.config.cycleUnit}; ${resolveBars(view)} resolving bars; ${progress}; one by one`;
+  const replacement = total ? `${view.replacementsDone}/${total} replacements` : "basis";
+  return `${view.config.cycleLength} ${view.config.cycleUnit}; ${resolvingBars(view)} resolving bars; ${replacement}; one by one`;
 }
 
-function rolesPhrase(view) {
-  const map = { "start-only": 0, pulse: 0, binary: 0 };
-  for (const part of view.voices) map[part.role] += 1;
-  return `start-only ${map["start-only"]}; pulse ${map.pulse}; binary ${map.binary}`;
+function rolesText(view) {
+  const count = { "start-only": 0, pulse: 0, binary: 0 };
+  for (const voice of view.voices) count[voice.role] += 1;
+  return `start-only ${count["start-only"]}; pulse ${count.pulse}; binary ${count.binary}`;
 }
 
-function metersPhrase(view) {
-  const meters = view.voices.map((part) => part.meter).sort((a, b) => a - b);
-  return meters.join(", ");
-}
-
-function valuesFromForm() {
+function formValues() {
   return {
     seed: value("seed") || sessionSeed,
     voiceCount: value("voiceCount"),
@@ -481,65 +465,69 @@ function valuesFromForm() {
     pulseCount: value("pulseCount"),
     baseBpm: value("baseBpm"),
     baseMeter: value("baseMeter"),
-    meterStart: value("meterStart"),
+    firstMeter: value("firstMeter"),
     cycleLength: value("cycleLength"),
     cycleUnit: value("cycleUnit"),
     basisMode: value("basisMode"),
-    kits: qa('input[name="kits"]:checked').map((node) => node.value)
+    kits: $$('input[name="kits"]:checked').map((node) => node.value)
   };
 }
 
 function value(id) {
-  return q(`#${id}`)?.value?.trim() ?? "";
+  return $(`#${id}`)?.value?.trim() ?? "";
 }
 
-function randomize() {
+function randomStation() {
   const count = 2 + Math.floor(Math.random() * 19);
-  q("#seed").value = `r-${Date.now().toString(36)}`;
-  q("#voiceCount").value = String(count);
-  q("#startCount").value = String(count);
-  q("#pulseCount").value = "0";
-  q("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
-  q("#baseMeter").value = "";
-  q("#meterStart").value = "";
-  q("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
-  q("#cycleUnit").value = Math.random() < 0.5 ? "bars" : "resolving-sequences";
-  const modes = ["next", "random", "closest", "farmost"];
-  q("#basisMode").value = modes[Math.floor(Math.random() * modes.length)];
-  for (const box of qa('input[name="kits"]')) box.checked = true;
-  rebuild();
+  $("#seed").value = `r-${Date.now().toString(36)}`;
+  $("#voiceCount").value = String(count);
+  $("#startCount").value = String(count);
+  $("#pulseCount").value = "0";
+  $("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
+  $("#baseMeter").value = "";
+  $("#firstMeter").value = "";
+  $("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
+  $("#cycleUnit").value = "bars";
+  $("#basisMode").value = ["next", "random", "closest", "farmost"][Math.floor(Math.random() * 4)];
+  for (const box of $$('input[name="kits"]')) box.checked = true;
+  station = makeStation(formValues());
+  if (live && audio) {
+    live.station = cloneStation(station);
+    live.origin = audio.context.currentTime + 0.08;
+    live.sent.clear();
+  }
+  paint();
 }
 
-function copyLink() {
-  const hash = new URLSearchParams();
-  const data = valuesFromForm();
-  for (const [key, val] of Object.entries(data)) {
-    if (Array.isArray(val)) hash.set(key, val.join(","));
-    else if (val) hash.set(key, val);
+function copyStationLink() {
+  const params = new URLSearchParams();
+  for (const [key, val] of Object.entries(formValues())) {
+    if (Array.isArray(val)) params.set(key, val.join(","));
+    else if (val) params.set(key, val);
   }
-  const url = `${location.origin}${location.pathname}#${hash.toString()}`;
-  navigator.clipboard.writeText(url).then(() => phrase("link copied"), () => phrase("copy unavailable"));
+  const link = `${location.origin}${location.pathname}#${params.toString()}`;
+  navigator.clipboard.writeText(link).then(() => say("link copied"), () => say("copy unavailable"));
 }
 
-function applyHash() {
-  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
-  for (const id of ["seed", "voiceCount", "startCount", "pulseCount", "baseBpm", "baseMeter", "meterStart", "cycleLength", "cycleUnit", "basisMode", "sections"]) {
-    if (hash.has(id) && q(`#${id}`)) q(`#${id}`).value = hash.get(id);
+function readHash() {
+  const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+  for (const id of ["seed", "voiceCount", "startCount", "pulseCount", "baseBpm", "baseMeter", "firstMeter", "cycleLength", "cycleUnit", "basisMode", "sections"]) {
+    if (params.has(id) && $(`#${id}`)) $(`#${id}`).value = params.get(id);
   }
-  if (hash.has("kits")) {
-    const chosen = new Set(hash.get("kits").split(",").map((part) => part.trim()));
-    for (const box of qa('input[name="kits"]')) box.checked = chosen.has(box.value);
+  if (params.has("kits")) {
+    const chosen = new Set(params.get("kits").split(",").map((item) => item.trim()));
+    for (const box of $$('input[name="kits"]')) box.checked = chosen.has(box.value);
   }
 }
 
-async function loadPaymentLinks() {
+async function loadConfig() {
   try {
     const res = await fetch("/api/config", { headers: { Accept: "application/json" } });
-    const body = await res.json();
-    if (httpsUrl(body.checkoutUrl)) ui.buy.href = body.checkoutUrl;
-    if (httpsUrl(body.donationUrl)) ui.give.href = body.donationUrl;
+    const data = await res.json();
+    if (isHttps(data.checkoutUrl)) ui.subscribe.href = data.checkoutUrl;
+    if (isHttps(data.donationUrl)) ui.donate.href = data.donationUrl;
   } catch {
-    ui.accessText.textContent = "payment links unavailable";
+    ui.accessLine.textContent = "payment links unavailable";
   }
 }
 
@@ -547,11 +535,11 @@ async function unlock() {
   const licenseKey = ui.license.value.trim();
   const email = ui.email.value.trim();
   if (!licenseKey) {
-    ui.accessText.textContent = "enter license key";
+    ui.accessLine.textContent = "enter license key";
     return;
   }
   ui.unlock.disabled = true;
-  ui.accessText.textContent = "checking";
+  ui.accessLine.textContent = "checking";
   try {
     const verdict = await licensePost("activate", {
       licenseKey,
@@ -559,81 +547,84 @@ async function unlock() {
       instanceName: instanceName()
     });
     if (!verdict.unlocked) {
-      ui.accessText.textContent = errorText(verdict.error);
+      ui.accessLine.textContent = readableError(verdict.error);
       return;
     }
-    savedAccess = {
+    storedAccess = {
       unlocked: true,
       licenseKey,
       email,
-      instanceId: verdict.instanceId || instanceName(),
       provider: verdict.provider,
-      status: verdict.licenseStatus || "active"
+      status: verdict.licenseStatus || "active",
+      instanceId: verdict.instanceId || instanceName()
     };
-    localStorage.setItem(accessStore, JSON.stringify(savedAccess));
+    localStorage.setItem(accessStore, JSON.stringify(storedAccess));
     ui.license.value = "";
-    accessCheckPending = false;
+    checkingAccess = false;
     paintAccess();
   } catch {
-    ui.accessText.textContent = "license check failed";
+    ui.accessLine.textContent = "license check failed";
   } finally {
     ui.unlock.disabled = false;
   }
 }
 
-async function refreshAccessFromStorage() {
-  if (!savedAccess?.unlocked) {
-    accessCheckPending = false;
+async function refreshAccess() {
+  if (!storedAccess?.unlocked) {
+    checkingAccess = false;
     paintAccess();
     return;
   }
   try {
     const verdict = await licensePost("validate", {
-      licenseKey: savedAccess.licenseKey,
-      email: savedAccess.email,
-      instanceId: savedAccess.instanceId
+      licenseKey: storedAccess.licenseKey,
+      email: storedAccess.email,
+      instanceId: storedAccess.instanceId
     });
     if (!verdict.unlocked) {
       localStorage.removeItem(accessStore);
-      savedAccess = null;
+      storedAccess = null;
       stop();
     } else {
-      savedAccess = { ...savedAccess, status: verdict.licenseStatus || savedAccess.status, instanceId: verdict.instanceId || savedAccess.instanceId };
-      localStorage.setItem(accessStore, JSON.stringify(savedAccess));
+      storedAccess = {
+        ...storedAccess,
+        status: verdict.licenseStatus || storedAccess.status,
+        instanceId: verdict.instanceId || storedAccess.instanceId
+      };
+      localStorage.setItem(accessStore, JSON.stringify(storedAccess));
     }
   } catch {
     localStorage.removeItem(accessStore);
-    savedAccess = null;
+    storedAccess = null;
     stop();
   } finally {
-    accessCheckPending = false;
+    checkingAccess = false;
     paintAccess();
   }
 }
 
 function clearAccess() {
   localStorage.removeItem(accessStore);
-  savedAccess = null;
+  storedAccess = null;
   stop();
   paintAccess();
 }
 
 function paintAccess() {
-  const ok = unlocked();
-  document.documentElement.dataset.access = ok ? "ok" : "locked";
-  ui.lock.textContent = accessCheckPending ? "checking license" : ok ? "subscribed" : "license required";
-  ui.accessText.textContent = accessCheckPending ? "checking license" : ok ? "subscribed" : "license required";
-  ui.forget.disabled = !ok;
-  ui.midi.disabled = !ok;
-  ui.save.disabled = !ok;
-  ui.reads.access.textContent = ok ? "subscribed" : "locked";
+  const open = hasAccess();
+  document.documentElement.dataset.access = open ? "subscribed" : "locked";
+  ui.accessState.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
+  ui.accessLine.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
+  ui.clear.disabled = !open;
+  ui.midi.disabled = !open;
+  ui.save.disabled = !open;
 }
 
-function unlocked() {
-  return savedAccess?.unlocked === true;
+function hasAccess() {
+  return storedAccess?.unlocked === true;
 }
 
-function readStoredAccess() {
+function readAccess() {
   try {
     const raw = localStorage.getItem(accessStore);
     return raw ? JSON.parse(raw) : null;
@@ -661,7 +652,7 @@ async function licensePost(action, body) {
   return data;
 }
 
-function errorText(code) {
+function readableError(code) {
   return ({
     license_key_required: "enter license key",
     checkout_email_required: "enter payment email",
@@ -675,40 +666,40 @@ function errorText(code) {
 }
 
 async function connectMidi() {
-  if (!unlocked()) {
-    phrase("license required");
+  if (!hasAccess()) {
+    say("license required");
     return;
   }
   if (!navigator.requestMIDIAccess) {
-    phrase("midi unavailable");
+    say("midi unavailable");
     return;
   }
   try {
     midiAccess = await navigator.requestMIDIAccess();
-    fillMidiOutputs();
-    phrase("midi ready");
+    ui.midiOutput.textContent = "";
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "none";
+    ui.midiOutput.append(empty);
+    for (const output of midiAccess.outputs.values()) {
+      const option = document.createElement("option");
+      option.value = output.id;
+      option.textContent = output.name || output.id;
+      ui.midiOutput.append(option);
+    }
+    say("midi ready");
   } catch {
-    phrase("midi denied");
+    say("midi denied");
   }
 }
 
-function fillMidiOutputs() {
-  ui.midiOut.innerHTML = '<option value="">none</option>';
-  for (const output of midiAccess.outputs.values()) {
-    const option = document.createElement("option");
-    option.value = output.id;
-    option.textContent = output.name || output.id;
-    ui.midiOut.append(option);
-  }
-}
-
-function chooseMidiOut() {
-  midiOut = midiAccess?.outputs.get(ui.midiOut.value) ?? null;
+function chooseMidiOutput() {
+  midiOutput = midiAccess?.outputs.get(ui.midiOutput.value) ?? null;
 }
 
 function saveMidi() {
-  if (!unlocked()) {
-    phrase("license required");
+  if (!hasAccess()) {
+    say("license required");
     return;
   }
   const sectionCount = Math.min(64, Math.max(1, Math.floor(Number(value("sections")) || 6)));
@@ -721,26 +712,26 @@ function saveMidi() {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  phrase("midi saved");
+  say("midi saved");
 }
 
-function phrase(text) {
+function say(text) {
   ui.run.textContent = text;
+}
+
+function isHttps(value) {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function css(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-function httpsUrl(text) {
-  try {
-    return new URL(text).protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function escapeHtml(text) {
+function html(text) {
   return String(text).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
     "<": "&lt;",

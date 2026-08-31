@@ -353,10 +353,7 @@ function durationFor(family) {
     tom: 0.16,
     hat: 0.07,
     cymbal: 0.24,
-    hand: 0.12,
-    wood: 0.07,
-    metal: 0.15,
-    shake: 0.12
+    wood: 0.07
   })[family] ?? 0.08;
 }
 

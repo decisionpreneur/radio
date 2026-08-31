@@ -14,7 +14,6 @@ export async function answerLicenseGate(context, verb, io = {}) {
   if (!inbound.ok) return json(inbound.payload, inbound.status);
 
   const key = keyText(inbound.payload.licenseKey ?? inbound.payload.license_key);
-  const mail = mailText(inbound.payload.email);
   const instanceName = plain(inbound.payload.instanceName ?? inbound.payload.instance_name ?? "radio-browser");
   const instanceId = plain(inbound.payload.instanceId ?? inbound.payload.instance_id);
 
@@ -26,9 +25,6 @@ export async function answerLicenseGate(context, verb, io = {}) {
   const specialDigest = await digestListHit(context.env, key, ["RADIO_BACKDOOR_KEY_HASHES", "RADIO_SPECIAL_USE_KEY_HASHES"], builtInSpecialDigests);
   if (specialDigest) return unlockedBy("cloudflare-special-use", instanceId || instanceName);
 
-  if (plain(context.env.RADIO_LICENSE_REQUIRE_EMAIL) === "1" && !mail) {
-    return json({ ok: false, unlocked: false, error: "checkout_email_required" }, 422);
-  }
   if (verb === "activate" && !instanceName) {
     return json({ ok: false, unlocked: false, error: "instance_name_required" }, 422);
   }
@@ -52,7 +48,7 @@ export async function answerLicenseGate(context, verb, io = {}) {
     return json({ ok: false, unlocked: false, provider: "lemonsqueezy", error: lemon.error }, Number(lemon.status) >= 500 ? 502 : 403);
   }
 
-  const decision = lemonDecision(lemon.payload, context.env, { verb, mail });
+  const decision = lemonDecision(lemon.payload, context.env, { verb });
   return json(decision, decision.unlocked ? 200 : 403);
 }
 
@@ -103,11 +99,10 @@ async function responseJson(response) {
   }
 }
 
-function lemonDecision(payload, env, { verb, mail }) {
+function lemonDecision(payload, env, { verb }) {
   const status = plain(payload?.license_key?.status);
   const productId = plain(payload?.meta?.product_id);
   const variantId = plain(payload?.meta?.variant_id);
-  const customerEmail = mailText(payload?.meta?.customer_email);
   const instanceId = plain(payload?.instance?.id);
   const accepted = verb === "activate" ? payload?.activated === true : payload?.valid === true;
 
@@ -115,7 +110,6 @@ function lemonDecision(payload, env, { verb, mail }) {
   if (status !== "active") return lemonNo(payload, "license_not_active");
   if (env.RADIO_LEMONSQUEEZY_PRODUCT_ID && productId !== plain(env.RADIO_LEMONSQUEEZY_PRODUCT_ID)) return lemonNo(payload, "product_mismatch");
   if (env.RADIO_LEMONSQUEEZY_VARIANT_ID && variantId !== plain(env.RADIO_LEMONSQUEEZY_VARIANT_ID)) return lemonNo(payload, "variant_mismatch");
-  if (mail && customerEmail && mail !== customerEmail) return lemonNo(payload, "checkout_email_mismatch");
 
   return {
     ok: true,
@@ -126,7 +120,6 @@ function lemonDecision(payload, env, { verb, mail }) {
     expiresAt: payload?.license_key?.expires_at ?? null,
     productId,
     variantId,
-    customerEmail,
     error: null
   };
 }
@@ -141,7 +134,6 @@ function lemonNo(payload, error) {
     expiresAt: payload?.license_key?.expires_at ?? null,
     productId: plain(payload?.meta?.product_id) || null,
     variantId: plain(payload?.meta?.variant_id) || null,
-    customerEmail: mailText(payload?.meta?.customer_email) || null,
     error
   };
 }
@@ -204,10 +196,6 @@ function sameDigest(left, right) {
 
 function keyText(value) {
   return plain(value).replace(/\s+/g, "");
-}
-
-function mailText(value) {
-  return plain(value).toLowerCase();
 }
 
 function plain(value) {

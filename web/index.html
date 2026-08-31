@@ -73,7 +73,6 @@
           <summary>Access</summary>
           <div class="fieldGrid accessFields">
             <label><span>License key</span><input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false"></label>
-            <label><span>Email</span><input id="email" name="email" type="email" autocomplete="email"></label>
             <button id="unlockButton" type="button">Unlock</button>
             <button id="clearButton" type="button" disabled>Clear</button>
             <p id="accessLine">license required</p>
@@ -103,12 +102,8 @@
         </details>
 
         <details open>
-          <summary>Kits and output</summary>
+          <summary>Output</summary>
           <div class="fieldGrid outputFields">
-            <fieldset class="kitPool" aria-label="Kit pool">
-              <label><input name="kits" type="checkbox" value="generic-drums" checked><span>Generic drum set</span></label>
-              <label><input name="kits" type="checkbox" value="ethnic-percussion" checked><span>Ethnic percussion kit</span></label>
-            </fieldset>
             <label><span>Export sections</span><input id="sections" name="sections" type="number" min="1" max="64" value="6"></label>
             <label><span>MIDI output</span><select id="midiOutput" name="midiOutput"><option value="">none</option></select></label>
           </div>

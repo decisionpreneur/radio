@@ -33,7 +33,6 @@ const ui = {
   subscribe: $("#subscribeLink"),
   donate: $("#donateLink"),
   license: $("#licenseKey"),
-  email: $("#email"),
   unlock: $("#unlockButton"),
   clear: $("#clearButton"),
   accessLine: $("#accessLine"),
@@ -212,14 +211,8 @@ function synth(hit) {
   } else if (family === "cymbal") {
     filteredNoise(0.28, loud * 0.25, 3900, "highpass", when);
     partials([730, 1130, 2030], 0.22, loud * 0.09, when, "triangle");
-  } else if (family === "hand") {
-    const base = 88 + (hit.note - 35) * 15;
-    tone(base, 0.14, loud * 0.48, "triangle", when, 0.56);
-    filteredNoise(0.032, loud * 0.09, base * 9, "bandpass", when);
   } else if (family === "wood") {
     partials([510 + hit.note * 4, 790 + hit.note * 5], 0.07, loud * 0.18, when, "square");
-  } else if (family === "metal") {
-    partials([830 + hit.note * 7, 1320 + hit.note * 5, 2200 + hit.note * 3], 0.14, loud * 0.16, when, "triangle");
   } else {
     filteredNoise(0.11, loud * 0.14, 5200, "highpass", when);
   }
@@ -477,7 +470,7 @@ function formValues() {
     cycleLength: value("cycleLength"),
     cycleUnit: value("cycleUnit"),
     basisMode: value("basisMode"),
-    kits: $$('input[name="kits"]:checked').map((node) => node.value)
+    kits: []
   };
 }
 
@@ -522,10 +515,6 @@ function readHash() {
   for (const id of ["seed", "voiceCount", "startCount", "pulseCount", "baseBpm", "baseMeter", "firstMeter", "cycleLength", "cycleUnit", "basisMode", "sections"]) {
     if (params.has(id) && $(`#${id}`)) $(`#${id}`).value = params.get(id);
   }
-  if (params.has("kits")) {
-    const chosen = new Set(params.get("kits").split(",").map((item) => item.trim()));
-    for (const box of $$('input[name="kits"]')) box.checked = chosen.has(box.value);
-  }
 }
 
 async function loadConfig() {
@@ -541,7 +530,6 @@ async function loadConfig() {
 
 async function unlock() {
   const licenseKey = ui.license.value.trim();
-  const email = ui.email.value.trim();
   if (!licenseKey) {
     ui.accessLine.textContent = "enter license key";
     return;
@@ -551,7 +539,6 @@ async function unlock() {
   try {
     const verdict = await licensePost("activate", {
       licenseKey,
-      email,
       instanceName: instanceName()
     });
     if (!verdict.unlocked) {
@@ -561,7 +548,6 @@ async function unlock() {
     storedAccess = {
       unlocked: true,
       licenseKey,
-      email,
       provider: verdict.provider,
       status: verdict.licenseStatus || "active",
       instanceId: verdict.instanceId || instanceName()
@@ -586,7 +572,6 @@ async function refreshAccess() {
   try {
     const verdict = await licensePost("validate", {
       licenseKey: storedAccess.licenseKey,
-      email: storedAccess.email,
       instanceId: storedAccess.instanceId
     });
     if (!verdict.unlocked) {
@@ -663,8 +648,6 @@ async function licensePost(action, body) {
 function readableError(code) {
   return ({
     license_key_required: "enter license key",
-    checkout_email_required: "enter payment email",
-    checkout_email_mismatch: "email mismatch",
     license_key_not_listed: "license not listed",
     license_not_active: "license inactive",
     license_not_valid: "license invalid",

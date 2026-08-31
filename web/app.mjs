@@ -310,7 +310,7 @@ function showHit(hit) {
   ui.hitReads.meter.textContent = String(hit.meter);
   ui.hitReads.kit.textContent = hit.kit;
   ui.hitReads.role.textContent = hit.role;
-  ui.hitReads.pulse.textContent = String(hit.pulse);
+  ui.hitReads.pulse.textContent = formatPulse(hit.pulse);
   ui.hitPanel.classList.add("hot");
   $$(".lane.flash").forEach((node) => node.classList.remove("flash"));
   $(`[data-uid="${hit.uid}"]`)?.classList.add("flash");
@@ -357,64 +357,65 @@ function draw(view, progress) {
     ui.canvas.width = width;
     ui.canvas.height = height;
   }
-  const cx = width * 0.5;
-  const cy = height * 0.52;
-  const outer = Math.min(width, height) * 0.44;
-  const inner = Math.max(36, outer * 0.14);
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#fffffd";
+  ctx.fillStyle = css("--paper");
   ctx.fillRect(0, 0, width, height);
-  ctx.strokeStyle = css("--line");
-  ctx.lineWidth = 1 * scale;
-  for (let index = 0; index < view.voices.length; index += 1) {
-    const radius = ringRadius(inner, outer, view.voices.length, index);
+  const left = Math.min(width * 0.28, 126 * scale);
+  const right = width - 28 * scale;
+  const top = 30 * scale;
+  const bottom = height - 28 * scale;
+  const rowHeight = (bottom - top) / Math.max(1, view.voices.length);
+  ctx.strokeStyle = css("--rule");
+  ctx.lineWidth = scale;
+  for (let guide = 0; guide <= 8; guide += 1) {
+    const x = left + (right - left) * guide / 8;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.moveTo(x, top - 10 * scale);
+    ctx.lineTo(x, bottom + 4 * scale);
     ctx.stroke();
   }
   const preview = Math.max(1, Math.min(sectionSeconds(view), 18));
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.font = `${Math.round(11 * scale)}px Segoe UI, Arial, sans-serif`;
+  for (const [slot, voice] of view.voices.entries()) {
+    const y = top + rowHeight * (slot + 0.5);
+    ctx.strokeStyle = voice.uid === view.baseUid ? css("--ink") : css("--rule");
+    ctx.lineWidth = (voice.uid === view.baseUid ? 2 : 1) * scale;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+    ctx.stroke();
+    ctx.fillStyle = voice.uid === view.baseUid ? css("--red") : css("--quiet");
+    ctx.fillText(`L${slot + 1}  ${voice.lane.name}`, 16 * scale, y);
+  }
   for (const hit of eventsBetween(view, {
     fromSecond: 0,
     toSecond: preview,
     originSecond: 0,
     maxEvents: 6000
   })) {
-    const angle = -Math.PI / 2 + hit.localSecond / preview * Math.PI * 2;
-    const radius = ringRadius(inner, outer, view.voices.length, hit.slot);
-    radial(cx, cy, angle, radius - 11 * scale, radius + 11 * scale, hit.lane.color, hit.uid === view.baseUid ? 4 * scale : 2 * scale);
-  }
-  const baseIndex = view.voices.findIndex((voice) => voice.uid === view.baseUid);
-  if (baseIndex >= 0) {
-    const radius = ringRadius(inner, outer, view.voices.length, baseIndex);
-    ctx.strokeStyle = css("--ink");
-    ctx.lineWidth = 3 * scale;
+    const x = left + (right - left) * hit.localSecond / preview;
+    const y = top + rowHeight * (hit.slot + 0.5);
+    ctx.fillStyle = hit.lane.color;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.arc(x, y, (hit.uid === view.baseUid ? 5 : 3.5) * scale, 0, Math.PI * 2);
+    ctx.fill();
   }
   if (live) {
-    const angle = -Math.PI / 2 + progress * Math.PI * 2;
-    radial(cx, cy, angle, inner * 0.42, outer + 18 * scale, css("--warn"), 2 * scale);
+    const x = left + (right - left) * progress;
+    ctx.strokeStyle = css("--red");
+    ctx.lineWidth = 2 * scale;
+    ctx.beginPath();
+    ctx.moveTo(x, top - 10 * scale);
+    ctx.lineTo(x, bottom + 4 * scale);
+    ctx.stroke();
   }
   ctx.fillStyle = css("--ink");
-  ctx.textAlign = "center";
-  ctx.font = `${Math.round(26 * scale)}px Georgia, Cambria, serif`;
-  ctx.fillText(`cycle ${view.cycle}`, cx, cy - 4 * scale);
-  ctx.font = `${Math.round(14 * scale)}px Inter, Aptos, Arial, sans-serif`;
-  ctx.fillText(`meter ${view.baseMeter} / ${view.baseBpm.toFixed(3)} bpm`, cx, cy + 24 * scale);
-}
-
-function radial(cx, cy, angle, from, to, color, lineWidth) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.beginPath();
-  ctx.moveTo(cx + Math.cos(angle) * from, cy + Math.sin(angle) * from);
-  ctx.lineTo(cx + Math.cos(angle) * to, cy + Math.sin(angle) * to);
-  ctx.stroke();
-}
-
-function ringRadius(inner, outer, count, index) {
-  return count <= 1 ? (inner + outer) / 2 : inner + (outer - inner) * index / (count - 1);
+  ctx.textAlign = "right";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = `${Math.round(11 * scale)}px ui-monospace, Cascadia Mono, monospace`;
+  ctx.fillText(`${preview.toFixed(1)} s`, right, height - 8 * scale);
 }
 
 function drawLanes(view) {
@@ -428,15 +429,22 @@ function drawLanes(view) {
       <b>${html(`L${slot + 1} ${voice.lane.name}`)}</b>
       <small>${html(`m ${voice.meter} / ${candidateBpm(view, voice).toFixed(3)} bpm`)}</small>
       <em>${html(`${voice.lane.kitName} / ${voice.role} / n ${voice.lane.note}`)}</em>
-      ${ticks(voice.pattern)}
-      <code>${html(voice.pattern.join(""))}</code>
+      ${ticks(voice)}
+      <code>${html(voice.hitPositions.map(formatPulse).join(" "))}</code>
     `;
     ui.lanes.append(row);
   }
 }
 
-function ticks(pattern) {
-  return `<span class="ticks" aria-label="pattern ${pattern.join("")}">${pattern.map((hit) => `<i class="${hit ? "on" : ""}"></i>`).join("")}</span>`;
+function ticks(voice) {
+  const positions = voice.hitPositions.map(formatPulse).join(" ");
+  const marks = voice.hitPositions.map((position) => `<i style="--position:${Math.min(100, Math.max(0, position / voice.meter * 100))}%"></i>`).join("");
+  return `<span class="ticks" aria-label="hit positions ${html(positions)}">${marks}</span>`;
+}
+
+function formatPulse(value) {
+  const rounded = Math.round(value * 1000) / 1000;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(3).replace(/0+$/, "");
 }
 
 function basisText(view) {

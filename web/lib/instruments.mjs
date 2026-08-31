@@ -1,13 +1,13 @@
 const familyColor = Object.freeze({
-  kick: "#0072b2",
-  snare: "#d55e00",
-  tom: "#009e73",
-  hat: "#56b4e9",
-  cymbal: "#e69f00",
-  hand: "#cc79a7",
-  wood: "#7f6d5f",
-  metal: "#4d7c43",
-  shake: "#8b6f00"
+  kick: "#224b7a",
+  snare: "#d94841",
+  tom: "#28785b",
+  hat: "#9b6b00",
+  cymbal: "#b07a0b",
+  hand: "#7e4aa8",
+  wood: "#7a5230",
+  metal: "#4e6672",
+  shake: "#a33f69"
 });
 
 const kitRows = Object.freeze([
@@ -47,10 +47,7 @@ const kitRows = Object.freeze([
     [49, "Cowbell", "metal"],
     [50, "Agogo Low", "metal"],
     [51, "Agogo High", "metal"],
-    [52, "Shaker", "shake"],
-    [53, "Shekere", "shake"],
-    [54, "Tambourine", "shake"],
-    [55, "Bell Tree", "metal"]
+    [52, "Shaker", "shake"]
   ])
 ]);
 

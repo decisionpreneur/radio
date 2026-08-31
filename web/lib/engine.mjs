@@ -60,6 +60,7 @@ export function cloneStation(station) {
     voices: station.voices.map((voice) => ({
       ...voice,
       pattern: [...voice.pattern],
+      hitPositions: [...voice.hitPositions],
       lane: { ...voice.lane }
     })),
     pending: station.pending.map((job) => ({ ...job }))
@@ -75,7 +76,7 @@ export function baseBarSeconds(station) {
 }
 
 export function resolvingBars(station) {
-  return lcmAll(station.voices.map((voice) => voice.pattern.length)) / station.baseMeter;
+  return lcmAll(station.voices.map((voice) => voice.meter)) / station.baseMeter;
 }
 
 export function sectionBars(station) {
@@ -88,8 +89,7 @@ export function sectionSeconds(station) {
 }
 
 export function candidateBpm(station, voice) {
-  if (voice.role === "pulse") return station.baseBpm;
-  return 60 * station.config.firstMeter / (voice.pattern.length * pulseSeconds(station));
+  return station.baseBpm * station.config.firstMeter / voice.meter;
 }
 
 export function nextCycle(station) {
@@ -100,7 +100,8 @@ export function nextCycle(station) {
   const base = {
     ...selected,
     meter: targetMeters[0],
-    pattern: rethoughtPattern(selected.pattern, targetMeters[0], selected.role),
+    pattern: displayPattern(targetMeters[0], selected.hitPositions.map((position) => position * targetMeters[0] / selected.meter)),
+    hitPositions: selected.hitPositions.map((position) => position * targetMeters[0] / selected.meter),
     rethoughtFrom: selected.meter,
     protectedCycle: station.cycle + 1
   };
@@ -166,29 +167,32 @@ export function eventsBetween(station, window) {
   const step = pulseSeconds(station);
   const rows = [];
   for (const [slot, voice] of station.voices.entries()) {
-    const first = Math.max(0, Math.floor((from - origin) / step) - 1);
-    const last = Math.ceil((to - origin) / step) + 1;
-    for (let pulse = first; pulse <= last; pulse += 1) {
-      if (rows.length >= maxEvents) break;
-      if (voice.pattern[pulse % voice.pattern.length] !== 1) continue;
-      const timeSecond = origin + pulse * step;
-      if (timeSecond < from - 1e-9 || timeSecond >= to - 1e-9) continue;
-      rows.push({
-        timeSecond,
-        localSecond: timeSecond - origin,
-        pulse,
-        slot,
-        uid: voice.uid,
-        meter: voice.meter,
-        role: voice.role,
-        pattern: [...voice.pattern],
-        lane: voice.lane,
-        kit: voice.lane.kitName,
-        note: voice.lane.note,
-        velocity: voice.velocity,
-        seconds: durationFor(voice.lane.family),
-        bpm: candidateBpm(station, voice)
-      });
+    for (const hitPosition of voice.hitPositions) {
+      const firstCycle = Math.max(0, Math.ceil(((from - origin) / step - hitPosition) / voice.meter - 1e-9));
+      const lastCycle = Math.floor(((to - origin) / step - hitPosition) / voice.meter + 1e-9);
+      for (let cycle = firstCycle; cycle <= lastCycle; cycle += 1) {
+        if (rows.length >= maxEvents) break;
+        const pulse = cycle * voice.meter + hitPosition;
+        const timeSecond = origin + pulse * step;
+        if (timeSecond < from - 1e-9 || timeSecond >= to - 1e-9) continue;
+        rows.push({
+          timeSecond,
+          localSecond: timeSecond - origin,
+          pulse,
+          slot,
+          uid: voice.uid,
+          meter: voice.meter,
+          role: voice.role,
+          pattern: [...voice.pattern],
+          hitPositions: [...voice.hitPositions],
+          lane: voice.lane,
+          kit: voice.lane.kitName,
+          note: voice.lane.note,
+          velocity: voice.velocity,
+          seconds: durationFor(voice.lane.family),
+          bpm: candidateBpm(station, voice)
+        });
+      }
     }
   }
   rows.sort((a, b) => a.timeSecond - b.timeSecond || a.slot - b.slot);
@@ -263,11 +267,13 @@ function selectBasis(station, rng) {
 
 function buildVoice({ uid, meter, role, rng, kitPool, cycle, serial }) {
   const lane = chooseLane(rng, kitPool);
+  const pattern = patternFor(meter, role, rng);
   return {
     uid,
     meter,
     role,
-    pattern: patternFor(meter, role, rng),
+    pattern,
+    hitPositions: pattern.flatMap((hit, index) => (hit === 1 ? [index] : [])),
     lane,
     velocity: randomInt(rng, 78, 118),
     cycle,
@@ -287,13 +293,11 @@ function patternFor(meter, role, rng) {
   return Array.from({ length: size }, (_, index) => (index === 0 ? 1 : 0));
 }
 
-function rethoughtPattern(pattern, meter, role) {
+function displayPattern(meter, hitPositions) {
   const size = Math.max(1, Math.floor(meter));
-  if (role === "pulse") return Array.from({ length: size }, () => 1);
   const out = Array.from({ length: size }, () => 0);
-  for (const [index, hit] of pattern.entries()) {
-    if (hit !== 1) continue;
-    const mapped = Math.min(size - 1, Math.round(index * size / pattern.length));
+  for (const position of hitPositions) {
+    const mapped = Math.min(size - 1, Math.floor(position + 1e-9));
     out[mapped] = 1;
   }
   if (!out.includes(1)) out[0] = 1;
@@ -314,8 +318,8 @@ function kitLine(count, kitPool, rng, differentFrom = "") {
   if (differentFrom && pool.length > 1 && count > 0) {
     out.push(shuffle(pool.filter((kitId) => kitId !== differentFrom), rng)[0]);
   }
-  for (let index = out.length; index < count; index += 1) out.push(pool[index % pool.length]);
-  return shuffle(out, rng);
+  for (let index = out.length; index < count; index += 1) out.push(pool[randomInt(rng, 0, pool.length - 1)]);
+  return out;
 }
 
 function meters(count, firstMeter, baseMeter) {
@@ -362,6 +366,7 @@ function freezeStation(station) {
     voices: station.voices.map((voice) => ({
       ...voice,
       pattern: Object.freeze([...voice.pattern]),
+      hitPositions: Object.freeze([...voice.hitPositions]),
       lane: Object.freeze({ ...voice.lane })
     })),
     pending: station.pending.map((job) => ({ ...job })),

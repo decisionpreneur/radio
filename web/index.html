@@ -5,124 +5,116 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Radio</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260827-vppa">
+    <link rel="stylesheet" href="./styles.css?v=20260831-score">
   </head>
   <body>
-    <main class="workbench">
-      <header class="rail">
-        <div>
-          <p class="kicker">polymetric live engine</p>
-          <h1>Radio</h1>
-        </div>
+    <main class="radio">
+      <header class="masthead">
+        <h1>Radio</h1>
+        <p>polymetric percussion</p>
+        <div class="accessMark"><output id="accessState">license required</output></div>
         <nav class="money" aria-label="Payment">
-          <a id="subscribeLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1">Subscribe, 5 USD monthly</a>
+          <a id="subscribeLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1">5 USD monthly</a>
           <a id="donateLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9?embed=1">Donate</a>
         </nav>
       </header>
 
-      <section class="transport" aria-label="Playback">
-        <button id="playButton" class="round playIcon" type="button" aria-label="Play" title="Play"></button>
-        <button id="stopButton" class="round stopIcon" type="button" aria-label="Stop" title="Stop"></button>
-        <button id="newButton" class="round newIcon" type="button" aria-label="New station" title="New station"></button>
-        <button id="copyButton" class="round linkIcon" type="button" aria-label="Copy link" title="Copy link"></button>
-        <button id="midiButton" class="wide" type="button" disabled>MIDI</button>
-        <button id="saveButton" class="round saveIcon" type="button" aria-label="Save MIDI" title="Save MIDI" disabled></button>
-        <output id="stateText">stopped</output>
-        <output id="accessState">license required</output>
-      </section>
+      <section class="air" aria-label="Live radio">
+        <div class="transport" aria-label="Playback">
+          <button id="playButton" class="transportKey playKey" type="button"><span aria-hidden="true"></span>Play</button>
+          <button id="stopButton" class="transportKey stopKey" type="button"><span aria-hidden="true"></span>Stop</button>
+          <button id="newButton" class="transportKey" type="button">New</button>
+          <button id="copyButton" class="transportKey" type="button">Link</button>
+          <button id="midiButton" class="transportKey" type="button" disabled>MIDI</button>
+          <button id="saveButton" class="transportKey" type="button" disabled>Save MIDI</button>
+          <output id="stateText">stopped</output>
+        </div>
 
-      <form id="controls" class="controls">
-        <fieldset class="access">
-          <legend>Access</legend>
-          <label>License key <input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false"></label>
-          <label>Email <input id="email" name="email" type="email" autocomplete="email"></label>
-          <button id="unlockButton" type="button">Unlock</button>
-          <button id="clearButton" type="button" disabled>Clear</button>
-          <p id="accessLine">license required</p>
-        </fieldset>
-
-        <fieldset>
-          <legend>Patterns</legend>
-          <label>Seed <input id="seed" name="seed" placeholder="random"></label>
-          <label>Simultaneous patterns <input id="voiceCount" name="voiceCount" type="number" min="2" max="64" placeholder="random"></label>
-          <label>Start-only patterns <input id="startCount" name="startCount" type="number" min="0" max="64" placeholder="all"></label>
-          <label>Pulse patterns <input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="0"></label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Cycle</legend>
-          <label>Base BPM <input id="baseBpm" name="baseBpm" type="number" min="20" max="300" placeholder="random"></label>
-          <label>Base meter <input id="baseMeter" name="baseMeter" type="number" min="1" max="64" placeholder="first"></label>
-          <label>First meter <input id="firstMeter" name="firstMeter" type="number" min="1" max="64" placeholder="random"></label>
-          <label>Cycle length <input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" value="1"></label>
-          <label>Cycle unit
-            <select id="cycleUnit" name="cycleUnit">
-              <option value="bars">bars</option>
-              <option value="resolving-sequences">resolving sequences</option>
-              <option value="random">random</option>
-            </select>
-          </label>
-          <label>Next tempo basis
-            <select id="basisMode" name="basisMode">
-              <option value="">random</option>
-              <option value="next">next</option>
-              <option value="random">random</option>
-              <option value="closest">closest</option>
-              <option value="farmost">farmost</option>
-            </select>
-          </label>
-        </fieldset>
-
-        <fieldset>
-          <legend>Kits and output</legend>
-          <div class="kitPool" aria-label="Kit pool">
-            <label><input name="kits" type="checkbox" value="generic-drums" checked> Generic drum set</label>
-            <label><input name="kits" type="checkbox" value="ethnic-percussion" checked> Ethnic percussion kit</label>
-          </div>
-          <label>Export sections <input id="sections" name="sections" type="number" min="1" max="64" value="6"></label>
-          <label>MIDI output
-            <select id="midiOutput" name="midiOutput">
-              <option value="">none</option>
-            </select>
-          </label>
-        </fieldset>
-      </form>
-
-      <section class="scope" aria-label="Live polymeter">
-        <canvas id="scope" width="1400" height="900"></canvas>
-        <i id="needle" aria-hidden="true"></i>
-      </section>
-
-      <aside class="readout" aria-label="State">
-        <dl>
-          <div><dt>tempo basis</dt><dd data-read="basis">-</dd></div>
-          <div><dt>cycle</dt><dd data-read="cycle">-</dd></div>
-          <div><dt>change</dt><dd data-read="change">-</dd></div>
-          <div><dt>basis choice</dt><dd data-read="basisMode">-</dd></div>
-          <div><dt>patterns</dt><dd data-read="patterns">-</dd></div>
-          <div><dt>roles</dt><dd data-read="roles">-</dd></div>
-          <div><dt>meters</dt><dd data-read="meters">-</dd></div>
-          <div><dt>kits</dt><dd data-read="kits">-</dd></div>
-          <div><dt>signal</dt><dd><span class="meter"><i data-read="signalFill"></i></span><b data-read="signal">0.000</b></dd></div>
+        <dl class="now">
+          <div><dt>Tempo basis</dt><dd data-read="basis">-</dd></div>
+          <div><dt>Cycle</dt><dd data-read="cycle">-</dd></div>
+          <div><dt>Change</dt><dd data-read="change">-</dd></div>
+          <div><dt>Signal</dt><dd><span class="meter"><i data-read="signalFill"></i></span><b data-read="signal">0.000</b></dd></div>
         </dl>
-      </aside>
 
-      <section id="hitPanel" class="hitPanel" aria-live="polite">
-        <i data-hit="lamp"></i>
-        <dl>
-          <div><dt>instrument</dt><dd data-hit="instrument">-</dd></div>
-          <div><dt>lane</dt><dd data-hit="lane">-</dd></div>
-          <div><dt>meter</dt><dd data-hit="meter">-</dd></div>
-          <div><dt>kit</dt><dd data-hit="kit">-</dd></div>
-          <div><dt>role</dt><dd data-hit="role">-</dd></div>
-          <div><dt>pulse</dt><dd data-hit="pulse">-</dd></div>
-        </dl>
+        <section class="scope" aria-label="Live polymeter score">
+          <canvas id="scope" width="1600" height="760"></canvas>
+          <i id="needle" aria-hidden="true"></i>
+        </section>
+
+        <section id="hitPanel" class="hitPanel" aria-live="polite">
+          <i data-hit="lamp"></i>
+          <p><b data-hit="instrument">-</b><span data-hit="kit">-</span></p>
+          <dl>
+            <div><dt>Lane</dt><dd data-hit="lane">-</dd></div>
+            <div><dt>Meter</dt><dd data-hit="meter">-</dd></div>
+            <div><dt>Role</dt><dd data-hit="role">-</dd></div>
+            <div><dt>Pulse</dt><dd data-hit="pulse">-</dd></div>
+          </dl>
+        </section>
       </section>
 
       <section class="lanes" aria-label="Pattern lanes">
         <ol id="laneList"></ol>
       </section>
+
+      <section class="facts" aria-label="Station state">
+        <dl>
+          <div><dt>Basis choice</dt><dd data-read="basisMode">-</dd></div>
+          <div><dt>Patterns</dt><dd data-read="patterns">-</dd></div>
+          <div><dt>Roles</dt><dd data-read="roles">-</dd></div>
+          <div><dt>Meters</dt><dd data-read="meters">-</dd></div>
+          <div><dt>Kits</dt><dd data-read="kits">-</dd></div>
+        </dl>
+      </section>
+
+      <form id="controls" class="controls">
+        <details class="access" open>
+          <summary>Access</summary>
+          <div class="fieldGrid accessFields">
+            <label><span>License key</span><input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false"></label>
+            <label><span>Email</span><input id="email" name="email" type="email" autocomplete="email"></label>
+            <button id="unlockButton" type="button">Unlock</button>
+            <button id="clearButton" type="button" disabled>Clear</button>
+            <p id="accessLine">license required</p>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Patterns</summary>
+          <div class="fieldGrid">
+            <label><span>Seed</span><input id="seed" name="seed" placeholder="random"></label>
+            <label><span>Simultaneous patterns</span><input id="voiceCount" name="voiceCount" type="number" min="2" max="64" placeholder="random"></label>
+            <label><span>Start-only patterns</span><input id="startCount" name="startCount" type="number" min="0" max="64" placeholder="all"></label>
+            <label><span>Pulse patterns</span><input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="0"></label>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Cycle</summary>
+          <div class="fieldGrid cycleFields">
+            <label><span>Base BPM</span><input id="baseBpm" name="baseBpm" type="number" min="20" max="300" placeholder="random"></label>
+            <label><span>Base meter</span><input id="baseMeter" name="baseMeter" type="number" min="1" max="64" placeholder="first"></label>
+            <label><span>First meter</span><input id="firstMeter" name="firstMeter" type="number" min="1" max="64" placeholder="random"></label>
+            <label><span>Cycle length</span><input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" value="1"></label>
+            <label><span>Cycle unit</span><select id="cycleUnit" name="cycleUnit"><option value="bars">bars</option><option value="resolving-sequences">resolving sequences</option><option value="random">random</option></select></label>
+            <label><span>Next tempo basis</span><select id="basisMode" name="basisMode"><option value="">random</option><option value="next">next</option><option value="random">random</option><option value="closest">closest</option><option value="farmost">farmost</option></select></label>
+          </div>
+        </details>
+
+        <details open>
+          <summary>Kits and output</summary>
+          <div class="fieldGrid outputFields">
+            <fieldset class="kitPool" aria-label="Kit pool">
+              <label><input name="kits" type="checkbox" value="generic-drums" checked><span>Generic drum set</span></label>
+              <label><input name="kits" type="checkbox" value="ethnic-percussion" checked><span>Ethnic percussion kit</span></label>
+            </fieldset>
+            <label><span>Export sections</span><input id="sections" name="sections" type="number" min="1" max="64" value="6"></label>
+            <label><span>MIDI output</span><select id="midiOutput" name="midiOutput"><option value="">none</option></select></label>
+          </div>
+        </details>
+      </form>
     </main>
-    <script type="module" src="./app.mjs?v=20260827-vppa"></script>
+    <script type="module" src="./app.mjs?v=20260831-score"></script>
   </body>
 </html>

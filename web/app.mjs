@@ -482,8 +482,8 @@ function randomStation() {
   const count = 2 + Math.floor(Math.random() * 19);
   $("#seed").value = `r-${Date.now().toString(36)}`;
   $("#voiceCount").value = String(count);
-  $("#startCount").value = String(count);
-  $("#pulseCount").value = "0";
+  $("#startCount").value = "";
+  $("#pulseCount").value = "";
   $("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
   $("#baseMeter").value = "";
   $("#firstMeter").value = "";

@@ -10,9 +10,9 @@ export function makeStation(input = {}) {
   const startCount = integerValue(hasValue(input.startCount) ? input.startCount : voiceCount, 0, voiceCount, voiceCount);
   const pulseCount = integerValue(input.pulseCount, 0, voiceCount - startCount, 0);
   const firstMeter = integerValue(input.firstMeter, 1, 64, randomInt(rng, 1, 20));
-  const requestedBase = integerValue(input.baseMeter, 1, firstMeter + voiceCount - 1, firstMeter);
+  const requestedBase = integerValue(input.baseMeter, 1, firstMeter + voiceCount - 1, randomInt(rng, firstMeter, firstMeter + voiceCount - 1));
   const baseBpm = numberValue(input.baseBpm, 20, 300, randomInt(rng, 72, 156));
-  const cycleLength = integerValue(input.cycleLength, 1, 4096, 1);
+  const cycleLength = integerValue(input.cycleLength, 1, 4096, randomInt(rng, 1, 4));
   const cycleUnit = cycleUnitFor(input.cycleUnit, rng);
   const basisMode = basisModeFor(input.basisMode, rng);
   const kitPool = cleanKitPool(input.kits);
@@ -336,7 +336,7 @@ function cycleUnitFor(value, rng) {
   const raw = stringValue(value);
   if (CYCLE_UNITS.includes(raw)) return raw;
   if (raw === "random") return CYCLE_UNITS[randomInt(rng, 0, CYCLE_UNITS.length - 1)];
-  return "bars";
+  return CYCLE_UNITS[randomInt(rng, 0, CYCLE_UNITS.length - 1)];
 }
 
 function basisModeFor(value, rng) {

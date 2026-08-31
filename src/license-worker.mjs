@@ -3,6 +3,7 @@ const utf8 = new TextEncoder();
 const builtInSpecialDigests = `
 40ce837e0e42bb4f8d6484167fd384602f6e81bf5a4b896fb11488c6f25c1bb8
 47559c012b70351d4dfb51124dd3225341327a46256a4d271c0b26de57fec37f
+4d201fa932070cd5518e8cce501b33f9f9288e7cf72971b42d2c7982adcaefe1
 `;
 
 export async function answerLicenseGate(context, verb, io = {}) {

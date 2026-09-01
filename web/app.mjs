@@ -608,6 +608,8 @@ function paintAccess() {
   document.documentElement.dataset.access = open ? "subscribed" : "locked";
   ui.accessState.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
   ui.accessLine.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
+  ui.play.disabled = checkingAccess || !open;
+  ui.stop.disabled = !live;
   ui.clear.disabled = !open;
   ui.midi.disabled = !open;
   ui.save.disabled = !open;

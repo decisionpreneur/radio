@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Radio</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260831-access3">
+    <link rel="stylesheet" href="./styles.css?v=20260831-tuneables">
   </head>
   <body>
     <main class="radio">
@@ -86,6 +86,9 @@
             <label><span>Simultaneous patterns</span><input id="voiceCount" name="voiceCount" type="number" min="2" max="64" placeholder="random"></label>
             <label><span>Start-only patterns</span><input id="startCount" name="startCount" type="number" min="0" max="64" placeholder="random"></label>
             <label><span>Pulse patterns</span><input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="random"></label>
+            <label><span>Strong beats</span><select id="strongBeatMode" name="strongBeatMode"><option value="random">random</option><option value="every-beat">every beat</option><option value="downbeat">downbeat</option><option value="binary">binary</option></select></label>
+            <label><span>Meter numbers</span><select id="meterSeries" name="meterSeries"><option value="random">random</option><option value="consecutive">consecutive</option><option value="primes">primes</option></select></label>
+            <label><span>Meter set</span><input id="meterSet" name="meterSet" placeholder="random"></label>
           </div>
         </details>
 
@@ -93,11 +96,13 @@
           <summary>Cycle</summary>
           <div class="fieldGrid cycleFields">
             <label><span>Base BPM</span><input id="baseBpm" name="baseBpm" type="number" min="20" max="300" placeholder="random"></label>
-            <label><span>Base meter</span><input id="baseMeter" name="baseMeter" type="number" min="1" max="64" placeholder="random"></label>
-            <label><span>First meter</span><input id="firstMeter" name="firstMeter" type="number" min="1" max="64" placeholder="random"></label>
+            <label><span>Base meter</span><input id="baseMeter" name="baseMeter" type="number" min="1" max="256" placeholder="random"></label>
+            <label><span>First meter</span><input id="firstMeter" name="firstMeter" type="number" min="1" max="256" placeholder="random"></label>
+            <label><span>Meter meaning</span><select id="meterMode" name="meterMode"><option value="random">random</option><option value="beats-per-bar">beats per bar</option><option value="pulses-per-resolving-cycle">pulses per resolving cycle</option><option value="subdivisions-against-base-bar">subdivisions against base bar</option></select></label>
             <label><span>Cycle length</span><input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" placeholder="random"></label>
             <label><span>Cycle unit</span><select id="cycleUnit" name="cycleUnit"><option value="random">random</option><option value="bars">bars</option><option value="resolving-sequences">resolving sequences</option></select></label>
             <label><span>Next tempo basis</span><select id="basisMode" name="basisMode"><option value="">random</option><option value="next">next</option><option value="random">random</option><option value="closest">closest</option><option value="farmost">farmost</option></select></label>
+            <label><span>Replacement cadence</span><select id="replacementMode" name="replacementMode"><option value="random">random</option><option value="spread">spread across cycle</option><option value="bar">one per bar</option><option value="resolving-sequence">one per resolving sequence</option><option value="immediate">immediate</option></select></label>
           </div>
         </details>
 
@@ -110,6 +115,6 @@
         </details>
       </form>
     </main>
-    <script type="module" src="./app.mjs?v=20260831-access3"></script>
+    <script type="module" src="./app.mjs?v=20260831-tuneables"></script>
   </body>
 </html>

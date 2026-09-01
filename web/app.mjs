@@ -104,6 +104,7 @@ async function play() {
     sent: new Map(),
     timer: window.setInterval(tick, 24)
   };
+  paintAccess();
   ui.scope.classList.add("live");
   say("playing");
   tick();
@@ -608,7 +609,7 @@ function paintAccess() {
   document.documentElement.dataset.access = open ? "subscribed" : "locked";
   ui.accessState.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
   ui.accessLine.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
-  ui.play.disabled = checkingAccess || !open;
+  ui.play.disabled = checkingAccess || !open || Boolean(live);
   ui.stop.disabled = !live;
   ui.clear.disabled = !open;
   ui.midi.disabled = !open;

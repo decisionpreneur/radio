@@ -472,7 +472,7 @@ input::placeholder {
 }
 
 .accessFields {
-  grid-template-columns: 1fr 1fr auto auto;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
   align-items: end;
 }
 
@@ -488,36 +488,17 @@ input::placeholder {
   padding: 0 14px;
 }
 
+html[data-access="subscribed"] .access {
+  display: none;
+}
+
 .cycleFields {
   grid-template-columns: repeat(3, 1fr);
 }
 
 .outputFields {
-  grid-template-columns: 1.35fr 0.65fr 1fr;
+  grid-template-columns: 1fr 1fr;
   align-items: end;
-}
-
-.kitPool {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.kitPool label {
-  min-height: 32px;
-  grid-template-columns: 24px minmax(0, 1fr);
-  align-items: center;
-  color: var(--ink);
-}
-
-.kitPool input {
-  width: 20px;
-  min-height: 20px;
-  padding: 0;
-  accent-color: var(--green);
 }
 
 @media (max-width: 980px) {

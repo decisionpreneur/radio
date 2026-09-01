@@ -445,13 +445,13 @@ function formatPulse(value) {
 function basisText(view) {
   const voice = view.voices.find((item) => item.uid === view.baseUid) ?? view.voices[0];
   const from = voice?.rethoughtFrom ? ` from meter ${voice.rethoughtFrom}` : "";
-  return `${voice?.uid ?? "-"}; meter ${view.baseMeter}${from}; ${view.baseBpm.toFixed(3)} bpm`;
+  return `${voice?.uid ?? "-"}; meter ${view.baseMeter}${from}; ${view.baseBpm.toFixed(3)} bpm; ${view.config.meterMode}`;
 }
 
 function changeText(view) {
   const total = view.replacementsDone + view.pending.length;
   const replacement = total ? `${view.replacementsDone}/${total} replacements` : "basis";
-  return `${view.config.cycleLength} ${view.config.cycleUnit}; ${resolvingBars(view)} resolving bars; ${replacement}; one by one`;
+  return `${view.config.cycleLength} ${view.config.cycleUnit}; ${resolvingBars(view)} resolving bars; ${replacement}; ${view.config.replacementMode}`;
 }
 
 function rolesText(view) {
@@ -466,12 +466,17 @@ function formValues() {
     voiceCount: value("voiceCount"),
     startCount: value("startCount"),
     pulseCount: value("pulseCount"),
+    strongBeatMode: value("strongBeatMode"),
+    meterSeries: value("meterSeries"),
+    meterSet: value("meterSet"),
     baseBpm: value("baseBpm"),
     baseMeter: value("baseMeter"),
     firstMeter: value("firstMeter"),
+    meterMode: value("meterMode"),
     cycleLength: value("cycleLength"),
     cycleUnit: value("cycleUnit"),
     basisMode: value("basisMode"),
+    replacementMode: value("replacementMode"),
     kits: []
   };
 }
@@ -486,13 +491,17 @@ function randomStation() {
   $("#voiceCount").value = String(count);
   $("#startCount").value = "";
   $("#pulseCount").value = "";
+  $("#strongBeatMode").value = "random";
+  $("#meterSeries").value = "random";
+  $("#meterSet").value = "";
   $("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
   $("#baseMeter").value = "";
   $("#firstMeter").value = "";
+  $("#meterMode").value = "random";
   $("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
   $("#cycleUnit").value = "random";
   $("#basisMode").value = ["next", "random", "closest", "farmost"][Math.floor(Math.random() * 4)];
-  for (const box of $$('input[name="kits"]')) box.checked = true;
+  $("#replacementMode").value = "random";
   station = makeStation(formValues());
   if (live && audio) {
     live.station = cloneStation(station);
@@ -514,7 +523,7 @@ function copyStationLink() {
 
 function readHash() {
   const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-  for (const id of ["seed", "voiceCount", "startCount", "pulseCount", "baseBpm", "baseMeter", "firstMeter", "cycleLength", "cycleUnit", "basisMode", "sections"]) {
+  for (const id of ["seed", "voiceCount", "startCount", "pulseCount", "strongBeatMode", "meterSeries", "meterSet", "baseBpm", "baseMeter", "firstMeter", "meterMode", "cycleLength", "cycleUnit", "basisMode", "replacementMode", "sections"]) {
     if (params.has(id) && $(`#${id}`)) $(`#${id}`).value = params.get(id);
   }
 }

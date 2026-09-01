@@ -66,7 +66,7 @@ window.addEventListener("resize", () => paint());
 
 function formChanged(event) {
   const id = event?.target?.id ?? "";
-  if (event?.target?.closest(".access") || id === "sections" || id === "midiOutput") return;
+  if (id === "sections" || id === "midiOutput") return;
   station = makeStation(formValues());
   if (live && audio) {
     live.station = cloneStation(station);
@@ -85,6 +85,7 @@ async function play() {
     sent: new Map(),
     timer: window.setInterval(tick, 24)
   };
+  paintAccess();
   ui.scope.classList.add("live");
   paint();
   say("playing");
@@ -478,6 +479,7 @@ function randomStation() {
   $("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
   $("#baseMeter").value = "";
   $("#firstMeter").value = "";
+  $("#meterMode").value = "random";
   $("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
   $("#cycleUnit").value = "random";
   $("#basisMode").value = ["next", "random", "closest", "farmost"][Math.floor(Math.random() * 4)];

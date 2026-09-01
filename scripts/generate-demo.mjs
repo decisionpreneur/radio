@@ -14,12 +14,16 @@ const rows = [
       voiceCount: 8,
       startCount: 8,
       pulseCount: 0,
+      strongBeatMode: "every-beat",
+      meterSeries: "consecutive",
       firstMeter: 1,
       baseMeter: 1,
+      meterMode: "beats-per-bar",
       baseBpm: 127,
       cycleUnit: "bars",
       cycleLength: 4,
-      basisMode: "next"
+      basisMode: "next",
+      replacementMode: "spread"
     }),
     6
   ],
@@ -30,12 +34,16 @@ const rows = [
       voiceCount: 20,
       startCount: 20,
       pulseCount: 0,
+      strongBeatMode: "every-beat",
+      meterSeries: "consecutive",
       firstMeter: 1,
       baseMeter: 1,
+      meterMode: "beats-per-bar",
       baseBpm: 120,
       cycleUnit: "resolving-sequences",
       cycleLength: 3,
-      basisMode: "next"
+      basisMode: "next",
+      replacementMode: "spread"
     }),
     1
   ]

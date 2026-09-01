@@ -488,10 +488,6 @@ input::placeholder {
   padding: 0 14px;
 }
 
-html[data-access="subscribed"] .access {
-  display: none;
-}
-
 .cycleFields {
   grid-template-columns: repeat(3, 1fr);
 }

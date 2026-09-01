@@ -29,6 +29,7 @@ const ui = {
   midi: $("#midiButton"),
   save: $("#saveButton"),
   run: $("#stateText"),
+  access: $(".access"),
   accessState: $("#accessState"),
   subscribe: $("#subscribeLink"),
   donate: $("#donateLink"),
@@ -607,6 +608,7 @@ function clearAccess() {
 function paintAccess() {
   const open = hasAccess();
   document.documentElement.dataset.access = open ? "subscribed" : "locked";
+  ui.access.open = !open;
   ui.accessState.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
   ui.accessLine.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
   ui.play.disabled = checkingAccess || !open || Boolean(live);

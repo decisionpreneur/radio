@@ -19,12 +19,22 @@
         </nav>
       </header>
 
+      <details class="access" open>
+        <summary>Access</summary>
+        <div class="fieldGrid accessFields">
+          <label><span>License key</span><input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false"></label>
+          <button id="unlockButton" type="button">Unlock</button>
+          <button id="clearButton" type="button" disabled>Clear</button>
+          <p id="accessLine">license required</p>
+        </div>
+      </details>
+
       <section class="air" aria-label="Live radio">
         <div class="transport" aria-label="Playback">
           <button id="playButton" class="transportKey playKey" type="button"><span aria-hidden="true"></span>Play</button>
           <button id="stopButton" class="transportKey stopKey" type="button"><span aria-hidden="true"></span>Stop</button>
           <button id="newButton" class="transportKey" type="button">New</button>
-          <button id="copyButton" class="transportKey" type="button">Link</button>
+          <button id="copyButton" class="transportKey" type="button">Copy link</button>
           <button id="midiButton" class="transportKey" type="button" disabled>MIDI</button>
           <button id="saveButton" class="transportKey" type="button" disabled>Save MIDI</button>
           <output id="stateText">stopped</output>
@@ -64,21 +74,11 @@
           <div><dt>Patterns</dt><dd data-read="patterns">-</dd></div>
           <div><dt>Roles</dt><dd data-read="roles">-</dd></div>
           <div><dt>Meters</dt><dd data-read="meters">-</dd></div>
-          <div><dt>Kits</dt><dd data-read="kits">-</dd></div>
+          <div><dt>Kit</dt><dd data-read="kits">-</dd></div>
         </dl>
       </section>
 
       <form id="controls" class="controls">
-        <details class="access" open>
-          <summary>Access</summary>
-          <div class="fieldGrid accessFields">
-            <label><span>License key</span><input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false"></label>
-            <button id="unlockButton" type="button">Unlock</button>
-            <button id="clearButton" type="button" disabled>Clear</button>
-            <p id="accessLine">license required</p>
-          </div>
-        </details>
-
         <details open>
           <summary>Patterns</summary>
           <div class="fieldGrid">

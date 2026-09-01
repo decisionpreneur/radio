@@ -1,14 +1,14 @@
 :root {
   color-scheme: light;
-  --paper: #f7f8f5;
+  --paper: #f3f4ef;
   --white: #ffffff;
   --ink: #171812;
   --quiet: #62675e;
   --rule: #cdd2ca;
-  --red: #cf3c2d;
-  --blue: #2356a8;
-  --green: #116466;
-  --yellow: #f0b429;
+  --red: #d43d2d;
+  --blue: #1f5fbf;
+  --green: #08746f;
+  --yellow: #f2bb32;
   --touch: 46px;
   font-family: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
   font-size: 16px;
@@ -77,37 +77,44 @@ summary:focus-visible {
 
 .radio {
   width: min(100%, 1560px);
+  min-height: 100vh;
   margin-inline: auto;
   background: var(--white);
 }
 
 .masthead {
-  min-height: 88px;
+  min-height: 122px;
   display: grid;
-  grid-template-columns: auto minmax(150px, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px 28px;
-  padding: 16px 28px;
+  gap: 24px;
+  padding: 20px 28px;
   border-bottom: 1px solid var(--ink);
+}
+
+.identity {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.release {
+  margin: 0;
+  color: var(--red);
+  font: 800 0.7rem/1.2 ui-monospace, "Cascadia Mono", monospace;
+  text-transform: uppercase;
 }
 
 h1 {
   margin: 0;
-  font-size: 2.25rem;
+  font-size: 2.55rem;
   line-height: 1;
   font-weight: 800;
 }
 
-.masthead > p {
+.identity > p:last-child {
   margin: 0;
   color: var(--quiet);
-}
-
-.accessMark {
-  min-width: 120px;
-  font: 700 0.8rem/1.2 ui-monospace, "Cascadia Mono", monospace;
-  color: var(--red);
-  text-align: right;
 }
 
 .money {
@@ -121,16 +128,12 @@ h1 {
   display: inline-flex;
   align-items: center;
   padding: 0 14px;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--green);
   border-radius: 4px;
-  color: var(--ink);
+  color: var(--white);
+  background: var(--green);
   text-decoration: none;
   font-weight: 700;
-}
-
-#subscribeLink {
-  color: var(--white);
-  background: var(--ink);
 }
 
 .air {
@@ -151,6 +154,7 @@ h1 {
   gap: 8px;
   padding: 12px 28px;
   border-bottom: 1px solid var(--rule);
+  background: var(--paper);
 }
 
 .transportKey {
@@ -246,6 +250,7 @@ dd {
   grid-area: scope;
   position: relative;
   min-height: 420px;
+  height: min(58vh, 720px);
   overflow: hidden;
   background: var(--paper);
 }
@@ -339,7 +344,7 @@ dd {
 }
 
 .lane.base b::after {
-  content: "BASE";
+  content: "TEMPO";
   margin-left: 8px;
   color: var(--red);
   font: 800 0.64rem/1 ui-monospace, "Cascadia Mono", monospace;
@@ -407,6 +412,7 @@ dd {
 .controls {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--ink);
 }
 
 details {
@@ -471,62 +477,18 @@ input::placeholder {
   color: #7c8278;
 }
 
-.accessFields {
-  grid-template-columns: 1fr 1fr auto auto;
-  align-items: end;
-}
-
-.accessFields p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--blue);
-  font-size: 0.78rem;
-}
-
-.accessFields button {
-  min-width: 82px;
-  padding: 0 14px;
-}
-
 .cycleFields {
   grid-template-columns: repeat(3, 1fr);
 }
 
 .outputFields {
-  grid-template-columns: 1.35fr 0.65fr 1fr;
+  grid-template-columns: 1fr 1fr;
   align-items: end;
-}
-
-.kitPool {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.kitPool label {
-  min-height: 32px;
-  grid-template-columns: 24px minmax(0, 1fr);
-  align-items: center;
-  color: var(--ink);
-}
-
-.kitPool input {
-  width: 20px;
-  min-height: 20px;
-  padding: 0;
-  accent-color: var(--green);
 }
 
 @media (max-width: 980px) {
   .masthead {
-    grid-template-columns: auto 1fr auto;
-  }
-
-  .accessMark {
-    display: none;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .air {
@@ -591,6 +553,7 @@ input::placeholder {
 
   .scope {
     min-height: 360px;
+    height: 54vh;
   }
 
   .hitPanel {
@@ -629,14 +592,9 @@ input::placeholder {
 
   .fieldGrid,
   .cycleFields,
-  .outputFields,
-  .accessFields {
+  .outputFields {
     grid-template-columns: 1fr;
     padding-inline: 16px;
-  }
-
-  .accessFields p {
-    grid-column: 1;
   }
 }
 

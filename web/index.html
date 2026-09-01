@@ -3,19 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Radio</title>
+    <title>Polymetric Radio - MVP 0</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./styles.css?v=20260831-score">
+    <link rel="stylesheet" href="./styles.css?v=20260901-mvp0">
   </head>
   <body>
     <main class="radio">
       <header class="masthead">
-        <h1>Radio</h1>
-        <p>polymetric percussion</p>
-        <div class="accessMark"><output id="accessState">license required</output></div>
-        <nav class="money" aria-label="Payment">
-          <a id="subscribeLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/2cb51cbc-4bec-4eee-bdf8-e720c5a92ff0?embed=1">5 USD monthly</a>
-          <a id="donateLink" href="https://polyradio.lemonsqueezy.com/checkout/buy/aca74223-784a-49d9-add5-d6e7f98358f9?embed=1">Donate</a>
+        <div class="identity">
+          <p class="release">POC / MVP 0 / alpha prerelease</p>
+          <h1>Polymetric Radio</h1>
+          <p>One hit. Every bar. Every meter.</p>
+        </div>
+        <nav class="money" aria-label="Support">
+          <a id="donateLink" href="https://ko-fi.com/decisionpreneur" target="_blank" rel="noopener">Donate</a>
         </nav>
       </header>
 
@@ -46,7 +47,7 @@
           <i data-hit="lamp"></i>
           <p><b data-hit="instrument">-</b><span data-hit="kit">-</span></p>
           <dl>
-            <div><dt>Lane</dt><dd data-hit="lane">-</dd></div>
+            <div><dt>Polystem</dt><dd data-hit="lane">-</dd></div>
             <div><dt>Meter</dt><dd data-hit="meter">-</dd></div>
             <div><dt>Role</dt><dd data-hit="role">-</dd></div>
             <div><dt>Pulse</dt><dd data-hit="pulse">-</dd></div>
@@ -61,31 +62,21 @@
       <section class="facts" aria-label="Station state">
         <dl>
           <div><dt>Basis choice</dt><dd data-read="basisMode">-</dd></div>
-          <div><dt>Patterns</dt><dd data-read="patterns">-</dd></div>
-          <div><dt>Roles</dt><dd data-read="roles">-</dd></div>
+          <div><dt>Polystems</dt><dd data-read="patterns">-</dd></div>
+          <div><dt>Pattern</dt><dd data-read="roles">-</dd></div>
           <div><dt>Meters</dt><dd data-read="meters">-</dd></div>
-          <div><dt>Kits</dt><dd data-read="kits">-</dd></div>
+          <div><dt>Instrument set</dt><dd data-read="kits">-</dd></div>
         </dl>
       </section>
 
       <form id="controls" class="controls">
-        <details class="access" open>
-          <summary>Access</summary>
-          <div class="fieldGrid accessFields">
-            <label><span>License key</span><input id="licenseKey" name="licenseKey" autocomplete="off" spellcheck="false"></label>
-            <button id="unlockButton" type="button">Unlock</button>
-            <button id="clearButton" type="button" disabled>Clear</button>
-            <p id="accessLine">license required</p>
-          </div>
-        </details>
-
         <details open>
-          <summary>Patterns</summary>
+          <summary>Polystems</summary>
           <div class="fieldGrid">
             <label><span>Seed</span><input id="seed" name="seed" placeholder="random"></label>
-            <label><span>Simultaneous patterns</span><input id="voiceCount" name="voiceCount" type="number" min="2" max="64" placeholder="random"></label>
-            <label><span>Start-only patterns</span><input id="startCount" name="startCount" type="number" min="0" max="64" placeholder="all"></label>
-            <label><span>Pulse patterns</span><input id="pulseCount" name="pulseCount" type="number" min="0" max="64" placeholder="0"></label>
+            <label><span>Simultaneous polystems</span><input id="voiceCount" name="voiceCount" type="number" min="2" max="20" placeholder="random"></label>
+            <label><span>Meter numbers</span><select id="meterSeries" name="meterSeries"><option value="random">random</option><option value="consecutive">consecutive</option><option value="primes">primes</option></select></label>
+            <label><span>Meter set</span><input id="meterSet" name="meterSet" placeholder="random"></label>
           </div>
         </details>
 
@@ -93,11 +84,12 @@
           <summary>Cycle</summary>
           <div class="fieldGrid cycleFields">
             <label><span>Base BPM</span><input id="baseBpm" name="baseBpm" type="number" min="20" max="300" placeholder="random"></label>
-            <label><span>Base meter</span><input id="baseMeter" name="baseMeter" type="number" min="1" max="64" placeholder="random"></label>
-            <label><span>First meter</span><input id="firstMeter" name="firstMeter" type="number" min="1" max="64" placeholder="random"></label>
+            <label><span>Base meter</span><input id="baseMeter" name="baseMeter" type="number" min="1" max="256" placeholder="random"></label>
+            <label><span>First meter</span><input id="firstMeter" name="firstMeter" type="number" min="1" max="256" placeholder="random"></label>
             <label><span>Cycle length</span><input id="cycleLength" name="cycleLength" type="number" min="1" max="4096" placeholder="random"></label>
             <label><span>Cycle unit</span><select id="cycleUnit" name="cycleUnit"><option value="random">random</option><option value="bars">bars</option><option value="resolving-sequences">resolving sequences</option></select></label>
             <label><span>Next tempo basis</span><select id="basisMode" name="basisMode"><option value="">random</option><option value="next">next</option><option value="random">random</option><option value="closest">closest</option><option value="farmost">farmost</option></select></label>
+            <label><span>Replacement cadence</span><select id="replacementMode" name="replacementMode"><option value="random">random</option><option value="spread">spread across cycle</option><option value="bar">one per bar</option><option value="resolving-sequence">one per resolving sequence</option><option value="immediate">immediate</option></select></label>
           </div>
         </details>
 
@@ -110,6 +102,6 @@
         </details>
       </form>
     </main>
-    <script type="module" src="./app.mjs?v=20260831-score"></script>
+    <script type="module" src="./app.mjs?v=20260901-mvp0"></script>
   </body>
 </html>

@@ -15,8 +15,6 @@ import {
 } from "./lib/engine.mjs";
 import { encodeMidiFile } from "./lib/midi-file.mjs";
 
-const accessStore = "radio-access-20260827";
-const instanceStore = "radio-instance-20260827";
 const sessionSeed = `r-${Date.now().toString(36)}`;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -29,13 +27,6 @@ const ui = {
   midi: $("#midiButton"),
   save: $("#saveButton"),
   run: $("#stateText"),
-  accessState: $("#accessState"),
-  subscribe: $("#subscribeLink"),
-  donate: $("#donateLink"),
-  license: $("#licenseKey"),
-  unlock: $("#unlockButton"),
-  clear: $("#clearButton"),
-  accessLine: $("#accessLine"),
   midiOutput: $("#midiOutput"),
   canvas: $("#scope"),
   scope: $(".scope"),
@@ -52,8 +43,6 @@ let live = null;
 let audio = null;
 let midiAccess = null;
 let midiOutput = null;
-let storedAccess = readAccess();
-let checkingAccess = Boolean(storedAccess?.unlocked);
 let lastHitUid = "";
 let lastHitSlot = -1;
 let flashTimer = 0;
@@ -62,8 +51,6 @@ let signalPeak = 0;
 
 readHash();
 station = makeStation(formValues());
-loadConfig();
-refreshAccess();
 paint();
 
 ui.form.addEventListener("input", formChanged);
@@ -72,8 +59,6 @@ ui.play.addEventListener("click", play);
 ui.stop.addEventListener("click", stop);
 ui.fresh.addEventListener("click", randomStation);
 ui.copy.addEventListener("click", copyStationLink);
-ui.unlock.addEventListener("click", unlock);
-ui.clear.addEventListener("click", clearAccess);
 ui.midi.addEventListener("click", connectMidi);
 ui.midiOutput.addEventListener("change", chooseMidiOutput);
 ui.save.addEventListener("click", saveMidi);
@@ -92,10 +77,6 @@ function formChanged(event) {
 }
 
 async function play() {
-  if (!hasAccess()) {
-    say("license required");
-    return;
-  }
   if (!audio) audio = makeAudioGraph();
   await audio.context.resume();
   live = {
@@ -105,6 +86,7 @@ async function play() {
     timer: window.setInterval(tick, 24)
   };
   ui.scope.classList.add("live");
+  paint();
   say("playing");
   tick();
   signalLoop();
@@ -113,8 +95,11 @@ async function play() {
 function stop() {
   if (live?.timer) window.clearInterval(live.timer);
   live = null;
+  if (audio?.context.state === "running") void audio.context.suspend();
   ui.scope.classList.remove("live");
   ui.needle.style.setProperty("--x", "50%");
+  ui.reads.signal.textContent = "0.000";
+  ui.reads.signalFill.style.transform = "scaleX(0)";
   say("stopped");
   paint();
 }
@@ -299,7 +284,7 @@ function showHit(hit) {
   lastHitUid = hit.uid;
   lastHitSlot = hit.slot;
   ui.hitReads.instrument.textContent = hit.lane.name;
-  ui.hitReads.lane.textContent = `L${hit.slot + 1}`;
+  ui.hitReads.lane.textContent = `P${hit.slot + 1}`;
   ui.hitReads.meter.textContent = String(hit.meter);
   ui.hitReads.kit.textContent = hit.kit;
   ui.hitReads.role.textContent = hit.role;
@@ -336,7 +321,10 @@ function paint() {
   ui.reads.roles.textContent = rolesText(view);
   ui.reads.meters.textContent = view.voices.map((voice) => voice.meter).sort((a, b) => a - b).join(", ");
   ui.reads.kits.textContent = stationKitText(view);
-  paintAccess();
+  ui.play.disabled = Boolean(live);
+  ui.stop.disabled = !live;
+  ui.midi.disabled = false;
+  ui.save.disabled = false;
   draw(view, 0);
   drawLanes(view);
 }
@@ -380,7 +368,7 @@ function draw(view, progress) {
     ctx.lineTo(right, y);
     ctx.stroke();
     ctx.fillStyle = voice.uid === view.baseUid ? css("--red") : css("--quiet");
-    ctx.fillText(`L${slot + 1}  ${voice.lane.name}`, 16 * scale, y);
+    ctx.fillText(`P${slot + 1}  ${voice.lane.name}`, 16 * scale, y);
   }
   for (const hit of eventsBetween(view, {
     fromSecond: 0,
@@ -419,7 +407,7 @@ function drawLanes(view) {
     row.dataset.uid = voice.uid;
     row.style.setProperty("--tone", voice.lane.color);
     row.innerHTML = `
-      <b>${html(`L${slot + 1} ${voice.lane.name}`)}</b>
+      <b>${html(`P${slot + 1} ${voice.lane.name}`)}</b>
       <small>${html(`m ${voice.meter} / ${candidateBpm(view, voice).toFixed(3)} bpm`)}</small>
       <em>${html(`${voice.lane.kitName} / ${voice.role} / n ${voice.lane.note}`)}</em>
       ${ticks(voice)}
@@ -443,33 +431,36 @@ function formatPulse(value) {
 function basisText(view) {
   const voice = view.voices.find((item) => item.uid === view.baseUid) ?? view.voices[0];
   const from = voice?.rethoughtFrom ? ` from meter ${voice.rethoughtFrom}` : "";
-  return `${voice?.uid ?? "-"}; meter ${view.baseMeter}${from}; ${view.baseBpm.toFixed(3)} bpm`;
+  return `${voice?.uid ?? "-"}; meter ${view.baseMeter}${from}; ${view.baseBpm.toFixed(3)} bpm; ${view.config.meterMode}`;
 }
 
 function changeText(view) {
   const total = view.replacementsDone + view.pending.length;
   const replacement = total ? `${view.replacementsDone}/${total} replacements` : "basis";
-  return `${view.config.cycleLength} ${view.config.cycleUnit}; ${resolvingBars(view)} resolving bars; ${replacement}; one by one`;
+  return `${view.config.cycleLength} ${view.config.cycleUnit}; ${resolvingBars(view)} resolving bars; ${replacement}; ${view.config.replacementMode}`;
 }
 
 function rolesText(view) {
-  const count = { "start-only": 0, pulse: 0, binary: 0 };
-  for (const voice of view.voices) count[voice.role] += 1;
-  return `start-only ${count["start-only"]}; pulse ${count.pulse}; binary ${count.binary}`;
+  return `one hit at bar start x ${view.voices.length}`;
 }
 
 function formValues() {
   return {
     seed: value("seed") || sessionSeed,
     voiceCount: value("voiceCount"),
-    startCount: value("startCount"),
-    pulseCount: value("pulseCount"),
+    startCount: value("voiceCount"),
+    pulseCount: 0,
+    strongBeatMode: "downbeat",
+    meterSeries: value("meterSeries"),
+    meterSet: value("meterSet"),
     baseBpm: value("baseBpm"),
     baseMeter: value("baseMeter"),
     firstMeter: value("firstMeter"),
+    meterMode: "beats-per-bar",
     cycleLength: value("cycleLength"),
     cycleUnit: value("cycleUnit"),
     basisMode: value("basisMode"),
+    replacementMode: value("replacementMode"),
     kits: []
   };
 }
@@ -482,15 +473,15 @@ function randomStation() {
   const count = 2 + Math.floor(Math.random() * 19);
   $("#seed").value = `r-${Date.now().toString(36)}`;
   $("#voiceCount").value = String(count);
-  $("#startCount").value = String(count);
-  $("#pulseCount").value = "0";
+  $("#meterSeries").value = "random";
+  $("#meterSet").value = "";
   $("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
   $("#baseMeter").value = "";
   $("#firstMeter").value = "";
   $("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
-  $("#cycleUnit").value = "bars";
+  $("#cycleUnit").value = "random";
   $("#basisMode").value = ["next", "random", "closest", "farmost"][Math.floor(Math.random() * 4)];
-  for (const box of $$('input[name="kits"]')) box.checked = true;
+  $("#replacementMode").value = "random";
   station = makeStation(formValues());
   if (live && audio) {
     live.station = cloneStation(station);
@@ -512,155 +503,12 @@ function copyStationLink() {
 
 function readHash() {
   const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-  for (const id of ["seed", "voiceCount", "startCount", "pulseCount", "baseBpm", "baseMeter", "firstMeter", "cycleLength", "cycleUnit", "basisMode", "sections"]) {
+  for (const id of ["seed", "voiceCount", "meterSeries", "meterSet", "baseBpm", "baseMeter", "firstMeter", "cycleLength", "cycleUnit", "basisMode", "replacementMode", "sections"]) {
     if (params.has(id) && $(`#${id}`)) $(`#${id}`).value = params.get(id);
   }
 }
 
-async function loadConfig() {
-  try {
-    const res = await fetch("/api/config", { headers: { Accept: "application/json" } });
-    const data = await res.json();
-    if (isHttps(data.checkoutUrl)) ui.subscribe.href = data.checkoutUrl;
-    if (isHttps(data.donationUrl)) ui.donate.href = data.donationUrl;
-  } catch {
-    ui.accessLine.textContent = "payment links unavailable";
-  }
-}
-
-async function unlock() {
-  const licenseKey = ui.license.value.trim();
-  if (!licenseKey) {
-    ui.accessLine.textContent = "enter license key";
-    return;
-  }
-  ui.unlock.disabled = true;
-  ui.accessLine.textContent = "checking";
-  try {
-    const verdict = await licensePost("activate", {
-      licenseKey,
-      instanceName: instanceName()
-    });
-    if (!verdict.unlocked) {
-      ui.accessLine.textContent = readableError(verdict.error);
-      return;
-    }
-    storedAccess = {
-      unlocked: true,
-      licenseKey,
-      provider: verdict.provider,
-      status: verdict.licenseStatus || "active",
-      instanceId: verdict.instanceId || instanceName()
-    };
-    localStorage.setItem(accessStore, JSON.stringify(storedAccess));
-    ui.license.value = "";
-    checkingAccess = false;
-    paintAccess();
-  } catch {
-    ui.accessLine.textContent = "license check failed";
-  } finally {
-    ui.unlock.disabled = false;
-  }
-}
-
-async function refreshAccess() {
-  if (!storedAccess?.unlocked) {
-    checkingAccess = false;
-    paintAccess();
-    return;
-  }
-  try {
-    const verdict = await licensePost("validate", {
-      licenseKey: storedAccess.licenseKey,
-      instanceId: storedAccess.instanceId
-    });
-    if (!verdict.unlocked) {
-      localStorage.removeItem(accessStore);
-      storedAccess = null;
-      stop();
-    } else {
-      storedAccess = {
-        ...storedAccess,
-        status: verdict.licenseStatus || storedAccess.status,
-        instanceId: verdict.instanceId || storedAccess.instanceId
-      };
-      localStorage.setItem(accessStore, JSON.stringify(storedAccess));
-    }
-  } catch {
-    localStorage.removeItem(accessStore);
-    storedAccess = null;
-    stop();
-  } finally {
-    checkingAccess = false;
-    paintAccess();
-  }
-}
-
-function clearAccess() {
-  localStorage.removeItem(accessStore);
-  storedAccess = null;
-  stop();
-  paintAccess();
-}
-
-function paintAccess() {
-  const open = hasAccess();
-  document.documentElement.dataset.access = open ? "subscribed" : "locked";
-  ui.accessState.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
-  ui.accessLine.textContent = checkingAccess ? "checking license" : open ? "subscribed" : "license required";
-  ui.clear.disabled = !open;
-  ui.midi.disabled = !open;
-  ui.save.disabled = !open;
-}
-
-function hasAccess() {
-  return storedAccess?.unlocked === true;
-}
-
-function readAccess() {
-  try {
-    const raw = localStorage.getItem(accessStore);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function instanceName() {
-  const existing = localStorage.getItem(instanceStore);
-  if (existing) return existing;
-  const made = `radio-${crypto.randomUUID()}`;
-  localStorage.setItem(instanceStore, made);
-  return made;
-}
-
-async function licensePost(action, body) {
-  const res = await fetch(`/api/license/${action}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json();
-  if (!res.ok && !data.error) data.error = "license_check_failed";
-  return data;
-}
-
-function readableError(code) {
-  return ({
-    license_key_required: "enter license key",
-    license_key_not_listed: "license not listed",
-    license_not_active: "license inactive",
-    license_not_valid: "license invalid",
-    product_mismatch: "wrong product",
-    variant_mismatch: "wrong variant"
-  })[code] || "license check failed";
-}
-
 async function connectMidi() {
-  if (!hasAccess()) {
-    say("license required");
-    return;
-  }
   if (!navigator.requestMIDIAccess) {
     say("midi unavailable");
     return;
@@ -689,10 +537,6 @@ function chooseMidiOutput() {
 }
 
 function saveMidi() {
-  if (!hasAccess()) {
-    say("license required");
-    return;
-  }
   const sectionCount = Math.min(64, Math.max(1, Math.floor(Number(value("sections")) || 6)));
   const bytes = encodeMidiFile(renderArrangement(station, { sectionCount, ppq: 480 }));
   const url = URL.createObjectURL(new Blob([bytes], { type: "audio/midi" }));
@@ -708,14 +552,6 @@ function saveMidi() {
 
 function say(text) {
   ui.run.textContent = text;
-}
-
-function isHttps(value) {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function css(name) {

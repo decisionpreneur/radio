@@ -490,7 +490,7 @@ function randomStation() {
   $("#baseMeter").value = "";
   $("#firstMeter").value = "";
   $("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
-  $("#cycleUnit").value = "bars";
+  $("#cycleUnit").value = "random";
   $("#basisMode").value = ["next", "random", "closest", "farmost"][Math.floor(Math.random() * 4)];
   for (const box of $$('input[name="kits"]')) box.checked = true;
   station = makeStation(formValues());

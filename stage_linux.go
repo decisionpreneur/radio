@@ -9,7 +9,7 @@ import (
 )
 
 func openAnonymousFile(directory string) (*os.File, error) {
-	const oTmpfile = 0x410000
+	const oTmpfile = 0x400000 | syscall.O_DIRECTORY
 	fd, err := syscall.Open(directory, oTmpfile|syscall.O_RDWR|syscall.O_CLOEXEC, 0o600)
 	if err != nil {
 		return nil, err

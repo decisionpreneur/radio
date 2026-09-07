@@ -1,0 +1,27 @@
+image:
+  repository: ghcr.io/decisionpreneur/radio
+  tag: master
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+publicURL: https://radio.vandrowka.com
+dropboxRoot: /audio
+
+secrets:
+  tuna: radio-tuna-dropbox
+  indexer: radio-indexer-dropbox
+
+storage:
+  size: 2Gi
+
+service:
+  port: 8080
+
+indexer:
+  schedule: "0 3 * * 0"
+  suspend: true
+
+cloudflareTunnel:
+  enabled: false
+  secretName: radio-cloudflare-tunnel

@@ -96,10 +96,11 @@ spec:
   schedule: {{ .Values.indexer.schedule | quote }}
   suspend: {{ .Values.indexer.suspend }}
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 1
-  failedJobsHistoryLimit: 1
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 0
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 0
       parallelism: 1
       completions: 1
       backoffLimit: 0

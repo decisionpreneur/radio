@@ -85,7 +85,6 @@ async function play() {
     sent: new Map(),
     timer: window.setInterval(tick, 24)
   };
-  paintAccess();
   ui.scope.classList.add("live");
   paint();
   say("playing");

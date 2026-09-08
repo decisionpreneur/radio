@@ -5,9 +5,7 @@ on:
     branches: [master]
     paths:
       - main.go
-      - stage_linux.go
       - catalog_linux.go
-      - stage_other.go
       - catalog_other.go
       - go.mod
       - player/**

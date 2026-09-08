@@ -18,10 +18,6 @@ storage:
 service:
   port: 8080
 
-indexer:
-  schedule: "0 3 * * 0"
-  suspend: true
-
 cloudflareTunnel:
   enabled: false
   secretName: radio-cloudflare-tunnel

@@ -558,7 +558,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		"token_access_type": {"offline"},
 		"redirect_uri":      {s.cfg.publicURL + "/auth/callback"},
 		"state":             {state},
-		"scope":             {"account_info.read files.metadata.read files.content.read"},
+		"scope":             {"account_info.read files.metadata.read files.content.read files.content.write"},
 	}
 	http.Redirect(w, r, "https://www.dropbox.com/oauth2/authorize?"+query.Encode(), http.StatusFound)
 }

@@ -134,6 +134,7 @@ type session struct {
 
 type server struct {
 	cfg           config
+	ctx           context.Context
 	mu            sync.RWMutex
 	importMu      sync.Mutex
 	sessions      map[string]*session
@@ -485,7 +486,7 @@ func runServer(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	s := &server{cfg: cfg, sessions: map[string]*session{}, states: map[string]time.Time{}, catalog: catalog, playlists: playlists}
+	s := &server{cfg: cfg, ctx: ctx, sessions: map[string]*session{}, states: map[string]time.Time{}, catalog: catalog, playlists: playlists}
 	if cfg.indexerAppKey != "" && cfg.indexerAppSecret != "" && cfg.indexerRefresh != "" {
 		s.indexerTokens = &dropboxTokenSource{appKey: cfg.indexerAppKey, appSecret: cfg.indexerAppSecret, refreshToken: cfg.indexerRefresh}
 	}
@@ -727,13 +728,13 @@ func (s *server) playlistImport(w http.ResponseWriter, r *http.Request) {
 		items[playlistKey(candidate)] = candidate
 	}
 
-	accessToken, err := s.indexerTokens.token(r.Context())
+	accessToken, err := s.indexerTokens.token(s.ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	if len(s.remoteAudio) == 0 {
-		s.remoteAudio, err = listRemoteAudio(r.Context(), accessToken, s.cfg.dropboxRoot)
+		s.remoteAudio, err = listRemoteAudio(s.ctx, accessToken, s.cfg.dropboxRoot)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -753,7 +754,7 @@ func (s *server) playlistImport(w http.ResponseWriter, r *http.Request) {
 		items[key] = current
 	}
 	missingYAML := encodeMissingYAML(missing)
-	if err := uploadDropboxFile(r.Context(), accessToken, s.cfg.missingPath, missingYAML); err != nil {
+	if err := uploadDropboxFile(s.ctx, accessToken, s.cfg.missingPath, missingYAML); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}

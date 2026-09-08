@@ -478,7 +478,6 @@ function randomStation() {
   $("#baseBpm").value = String(72 + Math.floor(Math.random() * 84));
   $("#baseMeter").value = "";
   $("#firstMeter").value = "";
-  $("#meterMode").value = "random";
   $("#cycleLength").value = String(1 + Math.floor(Math.random() * 4));
   $("#cycleUnit").value = "random";
   $("#basisMode").value = ["next", "random", "closest", "farmost"][Math.floor(Math.random() * 4)];

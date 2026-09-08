@@ -300,7 +300,7 @@ func runIndexer(ctx context.Context, cfg config) error {
 func audioExtension(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch ext {
-	case ".mp3", ".m4a", ".mp4", ".flac", ".ogg", ".opus", ".wav", ".aac", ".aif", ".aiff", ".wma":
+	case ".mp3", ".m4a", ".mp4", ".m4v", ".flac", ".ogg", ".opus", ".wav", ".au", ".aac", ".aif", ".aiff", ".ape", ".dsf", ".wma":
 		return true
 	default:
 		return false
@@ -327,9 +327,10 @@ func indexOne(ctx context.Context, dataPath, accessToken string, entry remoteEnt
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return track{}, err
 	}
-	metadata, err := probeAudio(ctx, file)
-	if err != nil {
-		return track{}, err
+	metadata, probeErr := probeAudio(ctx, file)
+	if probeErr != nil {
+		log.Printf("probe unavailable for %s; retaining path-derived catalog metadata: %v", entry.PathDisplay, probeErr)
+		metadata = track{}
 	}
 	metadata.ID = entry.ID
 	metadata.Rev = entry.Rev

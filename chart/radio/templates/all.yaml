@@ -38,6 +38,8 @@ spec:
           env:
             - {name: LISTEN_ADDR, value: ":8080"}
             - {name: DATA_PATH, value: "/data/radio.db"}
+            - {name: PLAYLIST_PATH, value: "/data/playlists.db"}
+            - {name: MISSING_DROPBOX_PATH, value: "/audio/missing.yml"}
             - {name: PUBLIC_URL, value: {{ .Values.publicURL | quote }}}
             - {name: DROPBOX_ROOT, value: {{ .Values.dropboxRoot | quote }}}
             - {name: GOMAXPROCS, value: "1"}
@@ -47,6 +49,12 @@ spec:
               valueFrom: {secretKeyRef: {name: {{ .Values.secrets.tuna }}, key: app-secret}}
             - name: DROPBOX_ALLOWED_ACCOUNT_ID
               valueFrom: {secretKeyRef: {name: {{ .Values.secrets.tuna }}, key: allowed-account-id}}
+            - name: INDEXER_DROPBOX_APP_KEY
+              valueFrom: {secretKeyRef: {name: {{ .Values.secrets.indexer }}, key: app-key}}
+            - name: INDEXER_DROPBOX_APP_SECRET
+              valueFrom: {secretKeyRef: {name: {{ .Values.secrets.indexer }}, key: app-secret}}
+            - name: INDEXER_DROPBOX_REFRESH_TOKEN
+              valueFrom: {secretKeyRef: {name: {{ .Values.secrets.indexer }}, key: refresh-token}}
           ports:
             - {name: http, containerPort: 8080}
           readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 2, periodSeconds: 10}

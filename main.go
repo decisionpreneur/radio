@@ -22,6 +22,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 )
 
 //go:embed player/index.html
@@ -42,6 +43,11 @@ type config struct {
 	appKey           string
 	appSecret        string
 	refreshToken     string
+	playlistPath     string
+	missingPath      string
+	indexerAppKey    string
+	indexerAppSecret string
+	indexerRefresh   string
 }
 
 type track struct {
@@ -80,6 +86,26 @@ type remoteEntry struct {
 	ServerModified string `json:"server_modified"`
 }
 
+type playlistItem struct {
+	URI      string `json:"uri"`
+	Artist   string `json:"artist"`
+	Album    string `json:"album"`
+	Track    string `json:"track"`
+	Position int    `json:"position"`
+	TrackID  string `json:"trackId,omitempty"`
+}
+
+type playlist struct {
+	Source string         `json:"source"`
+	URI    string         `json:"uri"`
+	Name   string         `json:"name"`
+	Items  []playlistItem `json:"items"`
+}
+
+type playlistImport struct {
+	Playlists []playlist `json:"playlists"`
+}
+
 type listFolderResponse struct {
 	Entries []remoteEntry `json:"entries"`
 	Cursor  string        `json:"cursor"`
@@ -107,11 +133,15 @@ type session struct {
 }
 
 type server struct {
-	cfg      config
-	mu       sync.RWMutex
-	sessions map[string]*session
-	states   map[string]time.Time
-	catalog  map[string]track
+	cfg           config
+	mu            sync.RWMutex
+	importMu      sync.Mutex
+	sessions      map[string]*session
+	states        map[string]time.Time
+	catalog       map[string]track
+	playlists     map[string]playlist
+	remoteAudio   []remoteEntry
+	indexerTokens *dropboxTokenSource
 }
 
 func main() {
@@ -139,15 +169,21 @@ func main() {
 }
 
 func loadConfig(prefix string) config {
+	dataPath := env("DATA_PATH", "/data/radio.db")
 	return config{
 		listenAddr:       env("LISTEN_ADDR", ":8080"),
-		dataPath:         env("DATA_PATH", "/data/radio.db"),
+		dataPath:         dataPath,
 		publicURL:        strings.TrimRight(env("PUBLIC_URL", "https://radio.vandrowka.com"), "/"),
 		dropboxRoot:      env("DROPBOX_ROOT", "/audio"),
 		allowedAccountID: os.Getenv("DROPBOX_ALLOWED_ACCOUNT_ID"),
 		appKey:           os.Getenv(prefix + "_DROPBOX_APP_KEY"),
 		appSecret:        os.Getenv(prefix + "_DROPBOX_APP_SECRET"),
 		refreshToken:     os.Getenv(prefix + "_DROPBOX_REFRESH_TOKEN"),
+		playlistPath:     env("PLAYLIST_PATH", filepath.Join(filepath.Dir(dataPath), "playlists.db")),
+		missingPath:      env("MISSING_DROPBOX_PATH", "/audio/missing.yml"),
+		indexerAppKey:    os.Getenv("INDEXER_DROPBOX_APP_KEY"),
+		indexerAppSecret: os.Getenv("INDEXER_DROPBOX_APP_SECRET"),
+		indexerRefresh:   os.Getenv("INDEXER_DROPBOX_REFRESH_TOKEN"),
 	}
 }
 
@@ -286,9 +322,7 @@ func indexOne(ctx context.Context, dataPath, accessToken string, entry remoteEnt
 	metadata.Name = entry.Name
 	metadata.Size = entry.Size
 	metadata.IndexedAt = time.Now().UTC().Format(time.RFC3339)
-	if metadata.Title == "" {
-		metadata.Title = strings.TrimSuffix(entry.Name, filepath.Ext(entry.Name))
-	}
+	metadata = applyPathIdentity(metadata)
 	if err := appendTrack(dataPath, metadata); err != nil {
 		return track{}, err
 	}
@@ -322,10 +356,9 @@ func downloadDropboxFile(ctx context.Context, token, id string, destination io.W
 
 type probeResult struct {
 	Format struct {
-		Duration   string            `json:"duration"`
-		Bitrate    string            `json:"bit_rate"`
-		FormatName string            `json:"format_name"`
-		Tags       map[string]string `json:"tags"`
+		Duration   string `json:"duration"`
+		Bitrate    string `json:"bit_rate"`
+		FormatName string `json:"format_name"`
 	} `json:"format"`
 	Streams []struct {
 		CodecType  string `json:"codec_type"`
@@ -337,7 +370,7 @@ type probeResult struct {
 }
 
 func probeAudio(ctx context.Context, file *os.File) (track, error) {
-	command := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=duration,bit_rate,format_name:format_tags:stream=codec_type,codec_name,sample_rate,channels,bit_rate", "-of", "json", "/proc/self/fd/3")
+	command := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=duration,bit_rate,format_name:stream=codec_type,codec_name,sample_rate,channels,bit_rate", "-of", "json", "/proc/self/fd/3")
 	command.ExtraFiles = []*os.File{file}
 	output, err := command.Output()
 	if err != nil {
@@ -347,20 +380,10 @@ func probeAudio(ctx context.Context, file *os.File) (track, error) {
 	if err := json.Unmarshal(output, &result); err != nil {
 		return track{}, err
 	}
-	tags := normalizedTags(result.Format.Tags)
 	item := track{
-		Title:       tag(tags, "title"),
-		Artist:      firstNonempty(tag(tags, "artist"), tag(tags, "albumartist")),
-		Album:       tag(tags, "album"),
-		AlbumArtist: firstNonempty(tag(tags, "albumartist"), tag(tags, "artist")),
-		Genre:       tag(tags, "genre"),
-		Year:        leadingInteger(firstNonempty(tag(tags, "date"), tag(tags, "year"))),
-		TrackNumber: leadingInteger(firstNonempty(tag(tags, "track"), tag(tags, "tracknumber"))),
-		DiscNumber:  leadingInteger(firstNonempty(tag(tags, "disc"), tag(tags, "discnumber"))),
-		Duration:    floating(result.Format.Duration),
-		Format:      result.Format.FormatName,
-		Bitrate:     integer64(result.Format.Bitrate),
-		Tags:        result.Format.Tags,
+		Duration: floating(result.Format.Duration),
+		Format:   result.Format.FormatName,
+		Bitrate:  integer64(result.Format.Bitrate),
 	}
 	for _, stream := range result.Streams {
 		if stream.CodecType == "audio" {
@@ -376,16 +399,44 @@ func probeAudio(ctx context.Context, file *os.File) (track, error) {
 	return item, nil
 }
 
-func normalizedTags(input map[string]string) map[string]string {
-	output := make(map[string]string, len(input))
-	for key, value := range input {
-		normalized := strings.NewReplacer("_", "", "-", "", " ", "").Replace(strings.ToLower(key))
-		output[normalized] = strings.TrimSpace(value)
+func applyPathIdentity(item track) track {
+	path := strings.Trim(firstNonempty(item.Path, item.Name), "/")
+	parts := strings.Split(path, "/")
+	filename := item.Name
+	if len(parts) != 0 {
+		filename = parts[len(parts)-1]
 	}
-	return output
+	stem := strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
+	item.TrackNumber = leadingInteger(stem)
+	item.Title = stripTrackPrefix(stem)
+	if item.Title == "" {
+		item.Title = stem
+	}
+	item.Artist = ""
+	item.Album = ""
+	if len(parts) >= 3 {
+		item.Album = parts[len(parts)-2]
+		item.Artist = parts[len(parts)-3]
+	}
+	item.AlbumArtist = item.Artist
+	item.Genre = ""
+	item.Year = 0
+	item.DiscNumber = 0
+	item.Tags = nil
+	return item
 }
 
-func tag(tags map[string]string, name string) string { return tags[name] }
+func stripTrackPrefix(value string) string {
+	value = strings.TrimSpace(value)
+	i := 0
+	for i < len(value) && ((value[i] >= '0' && value[i] <= '9') || value[i] == ' ' || value[i] == '.' || value[i] == '-' || value[i] == '_') {
+		i++
+	}
+	if i == 0 || i == len(value) {
+		return value
+	}
+	return strings.TrimSpace(value[i:])
+}
 
 func firstNonempty(values ...string) string {
 	for _, value := range values {
@@ -430,7 +481,14 @@ func runServer(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	s := &server{cfg: cfg, sessions: map[string]*session{}, states: map[string]time.Time{}, catalog: catalog}
+	playlists, err := loadPlaylists(cfg.playlistPath)
+	if err != nil {
+		return err
+	}
+	s := &server{cfg: cfg, sessions: map[string]*session{}, states: map[string]time.Time{}, catalog: catalog, playlists: playlists}
+	if cfg.indexerAppKey != "" && cfg.indexerAppSecret != "" && cfg.indexerRefresh != "" {
+		s.indexerTokens = &dropboxTokenSource{appKey: cfg.indexerAppKey, appSecret: cfg.indexerAppSecret, refreshToken: cfg.indexerRefresh}
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("/auth/dropbox", s.login)
@@ -438,6 +496,8 @@ func runServer(ctx context.Context, cfg config) error {
 	mux.HandleFunc("/auth/logout", s.logout)
 	mux.HandleFunc("/api/me", s.me)
 	mux.HandleFunc("/api/tracks", s.tracks)
+	mux.HandleFunc("/api/playlists", s.playlistList)
+	mux.HandleFunc("/api/playlists/import", s.playlistImport)
 	mux.HandleFunc("/api/stream/", s.stream)
 	mux.HandleFunc("/", s.index)
 	handler := securityHeaders(mux)
@@ -600,6 +660,228 @@ func (s *server) tracks(w http.ResponseWriter, r *http.Request) {
 	s.catalog = catalog
 	s.mu.Unlock()
 	writeJSON(w, items)
+}
+
+func playlistKey(item playlist) string {
+	return strings.ToLower(strings.TrimSpace(item.Source)) + "\x00" + strings.TrimSpace(item.URI)
+}
+
+func (s *server) playlistList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.authenticated(r); !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	items, err := loadPlaylists(s.cfg.playlistPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	result := make([]playlist, 0, len(items))
+	for _, item := range items {
+		result = append(result, item)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return strings.ToLower(result[i].Source+"\x00"+result[i].Name+"\x00"+result[i].URI) < strings.ToLower(result[j].Source+"\x00"+result[j].Name+"\x00"+result[j].URI)
+	})
+	s.mu.Lock()
+	s.playlists = items
+	s.mu.Unlock()
+	writeJSON(w, result)
+}
+
+func (s *server) playlistImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := s.authenticated(r); !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if s.indexerTokens == nil {
+		http.Error(w, "playlist writer unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var input playlistImport
+	reader := http.MaxBytesReader(w, r.Body, 64<<20)
+	if err := json.NewDecoder(reader).Decode(&input); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	items, err := loadPlaylists(s.cfg.playlistPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, candidate := range input.Playlists {
+		candidate.Source = strings.TrimSpace(candidate.Source)
+		candidate.URI = strings.TrimSpace(candidate.URI)
+		candidate.Name = strings.TrimSpace(candidate.Name)
+		for i := range candidate.Items {
+			candidate.Items[i].Position = i
+			candidate.Items[i].TrackID = ""
+		}
+		items[playlistKey(candidate)] = candidate
+	}
+
+	accessToken, err := s.indexerTokens.token(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if len(s.remoteAudio) == 0 {
+		s.remoteAudio, err = listRemoteAudio(r.Context(), accessToken, s.cfg.dropboxRoot)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+
+	missing := map[string]playlistItem{}
+	for key, current := range items {
+		for i := range current.Items {
+			if match := matchPathItem(current.Items[i], s.remoteAudio); match != "" {
+				current.Items[i].TrackID = match
+				continue
+			}
+			current.Items[i].TrackID = ""
+			missing[missingKey(current.Items[i])] = current.Items[i]
+		}
+		items[key] = current
+	}
+	missingYAML := encodeMissingYAML(missing)
+	if err := uploadDropboxFile(r.Context(), accessToken, s.cfg.missingPath, missingYAML); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if err := writePlaylists(s.cfg.playlistPath, items); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.mu.Lock()
+	s.playlists = items
+	s.mu.Unlock()
+	writeJSON(w, map[string]int{"playlists": len(items), "missing": len(missing)})
+}
+
+func listRemoteAudio(ctx context.Context, token, root string) ([]remoteEntry, error) {
+	requestBody := map[string]any{"path": root, "recursive": true, "include_deleted": false, "limit": 2000}
+	endpoint := dropboxAPI + "/files/list_folder"
+	items := make([]remoteEntry, 0, 1024)
+	for {
+		var page listFolderResponse
+		if err := dropboxJSON(ctx, token, endpoint, requestBody, &page); err != nil {
+			return nil, err
+		}
+		for _, entry := range page.Entries {
+			if entry.Tag == "file" && audioExtension(entry.Name) {
+				items = append(items, entry)
+			}
+		}
+		if !page.HasMore {
+			return items, nil
+		}
+		requestBody = map[string]any{"cursor": page.Cursor}
+		endpoint = dropboxAPI + "/files/list_folder/continue"
+	}
+}
+
+func missingKey(item playlistItem) string {
+	return normalizeName(item.Artist) + "\x00" + normalizeName(item.Album) + "\x00" + normalizeName(item.Track)
+}
+
+func normalizeName(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return unicode.ToLower(r)
+		}
+		return -1
+	}, value)
+}
+
+func matchPathItem(item playlistItem, entries []remoteEntry) string {
+	trackName := normalizeName(item.Track)
+	if trackName == "" {
+		return ""
+	}
+	artistName := normalizeName(item.Artist)
+	albumName := normalizeName(item.Album)
+	bestID := ""
+	bestScore := 0
+	tied := false
+	for _, entry := range entries {
+		stem := strings.TrimSuffix(entry.Name, filepath.Ext(entry.Name))
+		fileName := normalizeName(stripTrackPrefix(stem))
+		fullPath := normalizeName(firstNonempty(entry.PathDisplay, entry.PathLower))
+		score := 0
+		if fileName == trackName {
+			score = 100
+		} else if len(trackName) >= 4 && (strings.Contains(fileName, trackName) || strings.Contains(trackName, fileName)) {
+			score = 80
+		} else {
+			continue
+		}
+		if artistName != "" && strings.Contains(fullPath, artistName) {
+			score += 20
+		}
+		if albumName != "" && strings.Contains(fullPath, albumName) {
+			score += 10
+		}
+		if score > bestScore {
+			bestScore = score
+			bestID = entry.ID
+			tied = false
+		} else if score == bestScore && entry.ID != bestID {
+			tied = true
+		}
+	}
+	if tied {
+		return ""
+	}
+	return bestID
+}
+
+func encodeMissingYAML(items map[string]playlistItem) []byte {
+	keys := make([]string, 0, len(items))
+	for key := range items {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var output strings.Builder
+	for _, key := range keys {
+		item := items[key]
+		fmt.Fprintf(&output, "- artist: %s\n  album: %s\n  track: %s\n", yamlString(item.Artist), yamlString(item.Album), yamlString(item.Track))
+	}
+	return []byte(output.String())
+}
+
+func yamlString(value string) string {
+	encoded, _ := json.Marshal(value)
+	return string(encoded)
+}
+
+func uploadDropboxFile(ctx context.Context, token, path string, content []byte) error {
+	argument, _ := json.Marshal(map[string]any{"path": path, "mode": "overwrite", "autorename": false, "mute": true})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dropboxContent+"/files/upload", strings.NewReader(string(content)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Dropbox-API-Arg", string(argument))
+	req.Header.Set("Content-Type", "application/octet-stream")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode/100 != 2 {
+		failure, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+		return fmt.Errorf("Dropbox upload: %s: %s", response.Status, strings.TrimSpace(string(failure)))
+	}
+	return nil
 }
 
 func (s *server) stream(w http.ResponseWriter, r *http.Request) {

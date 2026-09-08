@@ -106,6 +106,12 @@ type playlistImport struct {
 	Playlists []playlist `json:"playlists"`
 }
 
+type pathCandidate struct {
+	ID       string
+	FileName string
+	FullPath string
+}
+
 type playlistImportStatus struct {
 	Running   bool   `json:"running"`
 	Error     string `json:"error,omitempty"`
@@ -148,7 +154,7 @@ type server struct {
 	states        map[string]time.Time
 	catalog       map[string]track
 	playlists     map[string]playlist
-	remoteAudio   []remoteEntry
+	remoteAudio   []pathCandidate
 	indexerTokens *dropboxTokenSource
 	importStatus  playlistImportStatus
 }
@@ -755,17 +761,6 @@ func (s *server) processPlaylistImport(input playlistImport) {
 		status.Error = err.Error()
 		return
 	}
-	for _, candidate := range input.Playlists {
-		candidate.Source = strings.TrimSpace(candidate.Source)
-		candidate.URI = strings.TrimSpace(candidate.URI)
-		candidate.Name = strings.TrimSpace(candidate.Name)
-		for i := range candidate.Items {
-			candidate.Items[i].Position = i
-			candidate.Items[i].TrackID = ""
-		}
-		items[playlistKey(candidate)] = candidate
-	}
-
 	accessToken, err := s.indexerTokens.token(s.ctx)
 	if err != nil {
 		status.Error = err.Error()
@@ -778,18 +773,25 @@ func (s *server) processPlaylistImport(input playlistImport) {
 			return
 		}
 	}
+	for _, candidate := range input.Playlists {
+		candidate.Source = strings.TrimSpace(candidate.Source)
+		candidate.URI = strings.TrimSpace(candidate.URI)
+		candidate.Name = strings.TrimSpace(candidate.Name)
+		for i := range candidate.Items {
+			candidate.Items[i].Position = i
+			candidate.Items[i].TrackID = matchPathItem(candidate.Items[i], s.remoteAudio)
+		}
+		items[playlistKey(candidate)] = candidate
+	}
 
 	missing := map[string]playlistItem{}
-	for key, current := range items {
-		for i := range current.Items {
-			if match := matchPathItem(current.Items[i], s.remoteAudio); match != "" {
-				current.Items[i].TrackID = match
+	for _, current := range items {
+		for _, currentItem := range current.Items {
+			if currentItem.TrackID != "" {
 				continue
 			}
-			current.Items[i].TrackID = ""
-			missing[missingKey(current.Items[i])] = current.Items[i]
+			missing[missingKey(currentItem)] = currentItem
 		}
-		items[key] = current
 	}
 	missingYAML := encodeMissingYAML(missing)
 	if err := uploadDropboxFile(s.ctx, accessToken, s.cfg.missingPath, missingYAML); err != nil {
@@ -807,10 +809,10 @@ func (s *server) processPlaylistImport(input playlistImport) {
 	status.Missing = len(missing)
 }
 
-func listRemoteAudio(ctx context.Context, token, root string) ([]remoteEntry, error) {
+func listRemoteAudio(ctx context.Context, token, root string) ([]pathCandidate, error) {
 	requestBody := map[string]any{"path": root, "recursive": true, "include_deleted": false, "limit": 2000}
 	endpoint := dropboxAPI + "/files/list_folder"
-	items := make([]remoteEntry, 0, 1024)
+	items := make([]pathCandidate, 0, 1024)
 	for {
 		var page listFolderResponse
 		if err := dropboxJSON(ctx, token, endpoint, requestBody, &page); err != nil {
@@ -818,7 +820,8 @@ func listRemoteAudio(ctx context.Context, token, root string) ([]remoteEntry, er
 		}
 		for _, entry := range page.Entries {
 			if entry.Tag == "file" && audioExtension(entry.Name) {
-				items = append(items, entry)
+				stem := strings.TrimSuffix(entry.Name, filepath.Ext(entry.Name))
+				items = append(items, pathCandidate{ID: entry.ID, FileName: normalizeName(stripTrackPrefix(stem)), FullPath: normalizeName(firstNonempty(entry.PathDisplay, entry.PathLower))})
 			}
 		}
 		if !page.HasMore {
@@ -842,7 +845,7 @@ func normalizeName(value string) string {
 	}, value)
 }
 
-func matchPathItem(item playlistItem, entries []remoteEntry) string {
+func matchPathItem(item playlistItem, entries []pathCandidate) string {
 	trackName := normalizeName(item.Track)
 	if trackName == "" {
 		return ""
@@ -853,21 +856,18 @@ func matchPathItem(item playlistItem, entries []remoteEntry) string {
 	bestScore := 0
 	tied := false
 	for _, entry := range entries {
-		stem := strings.TrimSuffix(entry.Name, filepath.Ext(entry.Name))
-		fileName := normalizeName(stripTrackPrefix(stem))
-		fullPath := normalizeName(firstNonempty(entry.PathDisplay, entry.PathLower))
 		score := 0
-		if fileName == trackName {
+		if entry.FileName == trackName {
 			score = 100
-		} else if len(trackName) >= 4 && (strings.Contains(fileName, trackName) || strings.Contains(trackName, fileName)) {
+		} else if len(trackName) >= 4 && (strings.Contains(entry.FileName, trackName) || strings.Contains(trackName, entry.FileName)) {
 			score = 80
 		} else {
 			continue
 		}
-		if artistName != "" && strings.Contains(fullPath, artistName) {
+		if artistName != "" && strings.Contains(entry.FullPath, artistName) {
 			score += 20
 		}
-		if albumName != "" && strings.Contains(fullPath, albumName) {
+		if albumName != "" && strings.Contains(entry.FullPath, albumName) {
 			score += 10
 		}
 		if score > bestScore {

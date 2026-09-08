@@ -106,6 +106,13 @@ type playlistImport struct {
 	Playlists []playlist `json:"playlists"`
 }
 
+type playlistImportStatus struct {
+	Running   bool   `json:"running"`
+	Error     string `json:"error,omitempty"`
+	Playlists int    `json:"playlists,omitempty"`
+	Missing   int    `json:"missing,omitempty"`
+}
+
 type listFolderResponse struct {
 	Entries []remoteEntry `json:"entries"`
 	Cursor  string        `json:"cursor"`
@@ -143,6 +150,7 @@ type server struct {
 	playlists     map[string]playlist
 	remoteAudio   []remoteEntry
 	indexerTokens *dropboxTokenSource
+	importStatus  playlistImportStatus
 }
 
 func main() {
@@ -499,6 +507,7 @@ func runServer(ctx context.Context, cfg config) error {
 	mux.HandleFunc("/api/tracks", s.tracks)
 	mux.HandleFunc("/api/playlists", s.playlistList)
 	mux.HandleFunc("/api/playlists/import", s.playlistImport)
+	mux.HandleFunc("/api/playlists/import/status", s.playlistImportState)
 	mux.HandleFunc("/api/stream/", s.stream)
 	mux.HandleFunc("/", s.index)
 	handler := securityHeaders(mux)
@@ -709,12 +718,41 @@ func (s *server) playlistImport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	s.mu.Lock()
+	if s.importStatus.Running {
+		s.mu.Unlock()
+		http.Error(w, "playlist import running", http.StatusConflict)
+		return
+	}
+	s.importStatus = playlistImportStatus{Running: true}
+	s.mu.Unlock()
+	go s.processPlaylistImport(input)
+	w.WriteHeader(http.StatusAccepted)
+}
 
+func (s *server) playlistImportState(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.authenticated(r); !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	s.mu.RLock()
+	status := s.importStatus
+	s.mu.RUnlock()
+	writeJSON(w, status)
+}
+
+func (s *server) processPlaylistImport(input playlistImport) {
 	s.importMu.Lock()
 	defer s.importMu.Unlock()
+	status := playlistImportStatus{}
+	defer func() {
+		s.mu.Lock()
+		s.importStatus = status
+		s.mu.Unlock()
+	}()
 	items, err := loadPlaylists(s.cfg.playlistPath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		status.Error = err.Error()
 		return
 	}
 	for _, candidate := range input.Playlists {
@@ -730,13 +768,13 @@ func (s *server) playlistImport(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, err := s.indexerTokens.token(s.ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		status.Error = err.Error()
 		return
 	}
 	if len(s.remoteAudio) == 0 {
 		s.remoteAudio, err = listRemoteAudio(s.ctx, accessToken, s.cfg.dropboxRoot)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			status.Error = err.Error()
 			return
 		}
 	}
@@ -755,17 +793,18 @@ func (s *server) playlistImport(w http.ResponseWriter, r *http.Request) {
 	}
 	missingYAML := encodeMissingYAML(missing)
 	if err := uploadDropboxFile(s.ctx, accessToken, s.cfg.missingPath, missingYAML); err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		status.Error = err.Error()
 		return
 	}
 	if err := writePlaylists(s.cfg.playlistPath, items); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		status.Error = err.Error()
 		return
 	}
 	s.mu.Lock()
 	s.playlists = items
 	s.mu.Unlock()
-	writeJSON(w, map[string]int{"playlists": len(items), "missing": len(missing)})
+	status.Playlists = len(items)
+	status.Missing = len(missing)
 }
 
 func listRemoteAudio(ctx context.Context, token, root string) ([]remoteEntry, error) {

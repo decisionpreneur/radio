@@ -12,7 +12,7 @@ The current target is `POC / MVP 0 / alpha prerelease`.
 - The instrument set is the sixteen audible `Gen Purpose` lanes on MIDI notes `36` through `51`.
 - Unset controls are random.
 - The browser plays the live result; MIDI generation and DAW output remain engineering surfaces for the live system.
-- Cloudflare Pages deploys the static `web/` directory from the connected repository.
+- The Cloudflare `poly` project deploys the static `web/` directory from the connected repository to `poly.vandrowka.com`.
 - Binaries and generated artifacts belong in Dropbox `/Musica/radio`.
 
 ## Core Invariant
@@ -23,7 +23,7 @@ Within a cycle, BPM is constant. At a cycle boundary, the selected next basis di
 
 | Release | Deliverable | Payment | Main risk closed before release |
 | --- | --- | --- | --- |
-| R0 - POC / MVP 0 / alpha prerelease | Live static radio; one hit at every polystem bar start; random two-to-twenty meter set; `Gen Purpose` notes 36-51 | Donation through Ko-fi to PayPal | A listener can start, hear, stop, restart, change the station, and reach a working donation payment |
+| R0 - POC / MVP 0 / alpha prerelease | Live static radio; one hit at every polystem bar start; random two-to-twenty meter set; `Gen Purpose` notes 36-51 | Lemon Squeezy pay-what-you-want donation | A listener can start, hear, stop, restart, change the station, and reach a working donation payment |
 | R1 - Audible cycle laboratory | Short cycle presets beside long resolving sequences; exact cycle and bar readout | Donation | Cycle changes can be heard and adjusted without waiting through impractical resolving periods |
 | R2 - Tempo-basis polymodulation | `next`, `random`, `closest`, and `farmost`; next basis cannot equal the current basis | Donation | The selected polystem keeps its audible pulse while BPM and meter meaning are recalculated |
 | R3 - Resolving replacement | Selected basis remains; old basis may remain temporarily; every other meter and pattern is replaced one by one | Donation | Replacement order, duplicate meters, skipped meters, and cycle-boundary races are closed |
@@ -40,10 +40,10 @@ Within a cycle, BPM is constant. At a cycle boundary, the selected next basis di
 | Order | Increment | Why this is next | Problem exposed before more scope is added |
 | --- | --- | --- | --- |
 | I0.1 | Force every generated lane to `start-only` and every pattern to hit position `0` | Smallest complete sound generator | Silent notes, wrong instrument range, and event scheduling at time zero |
-| I0.2 | Remove licence access and monthly checkout from the released surface; keep one Ko-fi donation route | Smallest public access path while Lemon KYC is pending | First-play blocking and donation-link failure |
+| I0.2 | Remove licence access and monthly checkout from the released surface; keep one Lemon Squeezy donation route | Smallest public access path | First-play blocking and donation-link failure |
 | I0.3 | Fit Play, Stop, New, score, current hit, meters, and Donation into the first usable screen | The listener needs the actual radio first | Hidden transport, overlapping text, mobile overflow, and unclear live state |
-| I0.4 | Connect Ko-fi directly to the existing Uruguay PayPal account | Completes the only MVP payment path | Account mismatch, country mismatch, supporter checkout, and withdrawal path |
-| I0.5 | Deploy R0 from the repository-connected Cloudflare Pages project | Publishes the smallest complete release without deployment tokens | Build-root mistakes, stale assets, missing modules, and cached old access UI |
+| I0.4 | Link Donate directly to the published Lemon Squeezy `Polyrhythmic Radio Donation` checkout | Completes the only MVP payment path | Product mismatch and donation-link failure |
+| I0.5 | Deploy R0 from the repository-connected Cloudflare `poly` project | Publishes the smallest complete release without local deployment tokens | Build-root mistakes, stale assets, missing modules, and cached old access UI |
 | I1.1 | Add an audible short-cycle preset without changing the long resolving-sequence mode | Makes cycle work manually adjustable | Cycle readout and transition timing can be judged in minutes |
 | I1.2 | Keep random, consecutive, prime, and explicit meter sets within an exact supported numeric domain | Prevents arithmetic scope from outrunning playback | LCM growth, unsafe integers, and impractical cycle duration |
 | I2.1 | Apply `next` basis selection to two meters | Least complex basis transition | Current-basis exclusion and audible continuity |
@@ -75,7 +75,7 @@ Within a cycle, BPM is constant. At a cycle boundary, the selected next basis di
 
 | Milestone | Evidence required before the next milestone |
 | --- | --- |
-| M0 - First sound | Every visible polystem has only hit position `0`; Chromium shows a running real-time audio context connected to the output; Stop suspends it; Ko-fi accepts a PayPal donation |
+| M0 - First sound | Every visible polystem has only hit position `0`; Chromium shows a running real-time audio context connected to the output; Stop suspends it; Lemon Squeezy accepts a pay-what-you-want donation |
 | M1 - First cycle | A short cycle changes basis on time while BPM stays constant inside the cycle |
 | M2 - Preserved pulse | Every basis mode selects a different basis and the selected polystem sounds at the same instants before and after reinterpretation |
 | M3 - Full resolution | One-by-one replacement finishes with the full target meter set and exactly one preserved selected polystem |
@@ -89,7 +89,7 @@ Within a cycle, BPM is constant. At a cycle boundary, the selected next basis di
 
 ## Deployment
 
-Cloudflare Pages uses repository integration. The build command is empty and the output directory is `web`. The prerelease needs no API token, CI workflow, backend, or database.
+The Cloudflare `poly` project uses repository integration and deploys the `web/` static assets to `poly.vandrowka.com`. The prerelease needs no local deployment token, backend, or database.
 
 ## Licence
 

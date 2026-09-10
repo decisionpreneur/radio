@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
 	"encoding/base64"
@@ -32,6 +35,7 @@ const (
 	dropboxAPI     = "https://api.dropboxapi.com/2"
 	dropboxContent = "https://content.dropboxapi.com/2"
 	dropboxToken   = "https://api.dropboxapi.com/oauth2/token"
+	sessionMaxAge  = 400 * 24 * 60 * 60
 )
 
 type config struct {
@@ -157,8 +161,15 @@ type dropboxTokenSource struct {
 }
 
 type session struct {
-	tokens    *dropboxTokenSource
-	accountID string
+	tokens       *dropboxTokenSource
+	accountID    string
+	refreshToken string
+}
+
+type sessionEnvelope struct {
+	AccountID    string `json:"a"`
+	RefreshToken string `json:"r"`
+	ExpiresAt    int64  `json:"e"`
 }
 
 type server struct {
@@ -166,8 +177,9 @@ type server struct {
 	ctx                context.Context
 	mu                 sync.RWMutex
 	importMu           sync.Mutex
-	sessions           map[string]*session
 	states             map[string]time.Time
+	sessionAEAD        cipher.AEAD
+	tokenCache         map[[sha256.Size]byte]*dropboxTokenSource
 	catalog            map[string]track
 	playlists          map[string]playlist
 	playlistsFinalized bool
@@ -310,7 +322,16 @@ func runServer(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	s := &server{cfg: cfg, ctx: ctx, sessions: map[string]*session{}, states: map[string]time.Time{}, catalog: catalog, playlists: playlistMap(playlistState.Playlists), playlistsFinalized: playlistState.Finalized}
+	sessionKey := sha256.Sum256([]byte("radio-session-v1\x00" + cfg.appSecret))
+	sessionBlock, err := aes.NewCipher(sessionKey[:])
+	if err != nil {
+		return err
+	}
+	sessionAEAD, err := cipher.NewGCM(sessionBlock)
+	if err != nil {
+		return err
+	}
+	s := &server{cfg: cfg, ctx: ctx, states: map[string]time.Time{}, sessionAEAD: sessionAEAD, tokenCache: map[[sha256.Size]byte]*dropboxTokenSource{}, catalog: catalog, playlists: playlistMap(playlistState.Playlists), playlistsFinalized: playlistState.Finalized}
 	if cfg.indexerAppKey != "" && cfg.indexerAppSecret != "" && cfg.indexerRefresh != "" {
 		s.indexerTokens = &dropboxTokenSource{appKey: cfg.indexerAppKey, appSecret: cfg.indexerAppSecret, refreshToken: cfg.indexerRefresh}
 	}
@@ -421,26 +442,24 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Dropbox account is outside the allowed account", http.StatusForbidden)
 		return
 	}
-	sessionID, err := randomToken()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if response.RefreshToken == "" {
+		http.Error(w, "Dropbox returned no refresh token", http.StatusBadGateway)
 		return
 	}
 	tokens := &dropboxTokenSource{appKey: s.cfg.appKey, appSecret: s.cfg.appSecret, accessToken: response.AccessToken, refreshToken: response.RefreshToken, expiresAt: time.Now().Add(time.Duration(response.ExpiresIn) * time.Second)}
+	tokenKey := sha256.Sum256([]byte(response.RefreshToken))
 	s.mu.Lock()
-	s.sessions[sessionID] = &session{tokens: tokens, accountID: accountID}
+	s.tokenCache[tokenKey] = tokens
 	s.mu.Unlock()
-	http.SetCookie(w, &http.Cookie{Name: "radio_session", Value: sessionID, Path: "/", MaxAge: 86400, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	if err := s.setSessionCookie(w, &session{tokens: tokens, accountID: accountID, refreshToken: response.RefreshToken}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
-	if cookie, err := r.Cookie("radio_session"); err == nil {
-		s.mu.Lock()
-		delete(s.sessions, cookie.Value)
-		s.mu.Unlock()
-	}
-	http.SetCookie(w, &http.Cookie{Name: "radio_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: "radio_session", Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -449,16 +468,59 @@ func (s *server) authenticated(r *http.Request) (*session, bool) {
 	if err != nil {
 		return nil, false
 	}
+	encoded, err := base64.RawURLEncoding.DecodeString(cookie.Value)
+	if err != nil || len(encoded) < s.sessionAEAD.NonceSize() {
+		return nil, false
+	}
+	nonce := encoded[:s.sessionAEAD.NonceSize()]
+	plaintext, err := s.sessionAEAD.Open(nil, nonce, encoded[s.sessionAEAD.NonceSize():], []byte("radio_session\x00"+s.cfg.publicURL))
+	if err != nil {
+		return nil, false
+	}
+	var envelope sessionEnvelope
+	if err := json.Unmarshal(plaintext, &envelope); err != nil || envelope.AccountID != s.cfg.allowedAccountID || envelope.RefreshToken == "" || time.Now().Unix() >= envelope.ExpiresAt {
+		return nil, false
+	}
+	tokenKey := sha256.Sum256([]byte(envelope.RefreshToken))
 	s.mu.RLock()
-	current := s.sessions[cookie.Value]
+	tokens := s.tokenCache[tokenKey]
 	s.mu.RUnlock()
-	return current, current != nil
+	if tokens == nil {
+		tokens = &dropboxTokenSource{appKey: s.cfg.appKey, appSecret: s.cfg.appSecret, refreshToken: envelope.RefreshToken}
+		s.mu.Lock()
+		if current := s.tokenCache[tokenKey]; current != nil {
+			tokens = current
+		} else {
+			s.tokenCache[tokenKey] = tokens
+		}
+		s.mu.Unlock()
+	}
+	return &session{tokens: tokens, accountID: envelope.AccountID, refreshToken: envelope.RefreshToken}, true
+}
+
+func (s *server) setSessionCookie(w http.ResponseWriter, current *session) error {
+	expires := time.Now().Add(time.Duration(sessionMaxAge) * time.Second)
+	plaintext, err := json.Marshal(sessionEnvelope{AccountID: current.accountID, RefreshToken: current.refreshToken, ExpiresAt: expires.Unix()})
+	if err != nil {
+		return err
+	}
+	nonce := make([]byte, s.sessionAEAD.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return err
+	}
+	sealed := s.sessionAEAD.Seal(nonce, nonce, plaintext, []byte("radio_session\x00"+s.cfg.publicURL))
+	http.SetCookie(w, &http.Cookie{Name: "radio_session", Value: base64.RawURLEncoding.EncodeToString(sealed), Path: "/", MaxAge: sessionMaxAge, Expires: expires, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
+	return nil
 }
 
 func (s *server) me(w http.ResponseWriter, r *http.Request) {
 	current, ok := s.authenticated(r)
 	if !ok {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if err := s.setSessionCookie(w, current); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, map[string]string{"accountId": current.accountID})

@@ -6,8 +6,8 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
-	"sort"
 	"syscall"
 )
 
@@ -49,14 +49,13 @@ func loadTracks(path string) (items map[string]track, returnErr error) {
 	return items, scanner.Err()
 }
 
-func loadPlaylists(path string) (items map[string]playlist, returnErr error) {
-	items = map[string]playlist{}
+func loadPlaylists(path string) (state playlistStore, returnErr error) {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return items, nil
+		return playlistStore{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return playlistStore{}, err
 	}
 	defer func() {
 		if err := file.Close(); returnErr == nil && err != nil {
@@ -64,26 +63,21 @@ func loadPlaylists(path string) (items map[string]playlist, returnErr error) {
 		}
 	}()
 	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH); err != nil {
-		return nil, err
+		return playlistStore{}, err
 	}
 	defer func() {
 		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_UN); returnErr == nil && err != nil {
 			returnErr = err
 		}
 	}()
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64<<10), 64<<20)
-	for scanner.Scan() {
-		var item playlist
-		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
-			return nil, err
-		}
-		items[playlistKey(item)] = item
+	err = json.NewDecoder(file).Decode(&state)
+	if errors.Is(err, io.EOF) {
+		return playlistStore{}, nil
 	}
-	return items, scanner.Err()
+	return state, err
 }
 
-func writePlaylists(path string, items map[string]playlist) (returnErr error) {
+func writePlaylists(path string, state playlistStore) (returnErr error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
@@ -101,18 +95,7 @@ func writePlaylists(path string, items map[string]playlist) (returnErr error) {
 			returnErr = err
 		}
 	}()
-	keys := make([]string, 0, len(items))
-	for key := range items {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	encoder := json.NewEncoder(file)
-	for _, key := range keys {
-		if err := encoder.Encode(items[key]); err != nil {
-			return err
-		}
-	}
-	return nil
+	return json.NewEncoder(file).Encode(state)
 }
 
 func appendTrack(path string, item track) (returnErr error) {

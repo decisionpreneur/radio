@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 )
 
@@ -42,4 +43,30 @@ func appendTrack(path string, item track) error {
 	}
 	defer file.Close()
 	return json.NewEncoder(file).Encode(item)
+}
+
+func loadPlaylists(path string) (playlistStore, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return playlistStore{}, nil
+	}
+	if err != nil {
+		return playlistStore{}, err
+	}
+	defer file.Close()
+	var state playlistStore
+	err = json.NewDecoder(file).Decode(&state)
+	if errors.Is(err, io.EOF) {
+		return playlistStore{}, nil
+	}
+	return state, err
+}
+
+func writePlaylists(path string, state playlistStore) error {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return json.NewEncoder(file).Encode(state)
 }

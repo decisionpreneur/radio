@@ -51,28 +51,29 @@ type config struct {
 }
 
 type track struct {
-	ID          string            `json:"id"`
-	Rev         string            `json:"rev,omitempty"`
-	Path        string            `json:"path"`
-	Name        string            `json:"name"`
-	Title       string            `json:"title"`
-	Artist      string            `json:"artist"`
-	Album       string            `json:"album"`
-	AlbumArtist string            `json:"albumArtist"`
-	Genre       string            `json:"genre"`
-	Year        int               `json:"year"`
-	TrackNumber int               `json:"trackNumber"`
-	DiscNumber  int               `json:"discNumber"`
-	Duration    float64           `json:"duration"`
-	Size        int64             `json:"size"`
-	Format      string            `json:"format"`
-	Codec       string            `json:"codec"`
-	SampleRate  int               `json:"sampleRate"`
-	Channels    int               `json:"channels"`
-	Bitrate     int64             `json:"bitrate"`
-	Tags        map[string]string `json:"tags,omitempty"`
-	IndexedAt   string            `json:"indexedAt"`
-	Deleted     bool              `json:"deleted,omitempty"`
+	ID          string               `json:"id"`
+	Rev         string               `json:"rev,omitempty"`
+	Path        string               `json:"path"`
+	Name        string               `json:"name"`
+	Title       string               `json:"title"`
+	Artist      string               `json:"artist"`
+	Album       string               `json:"album"`
+	AlbumArtist string               `json:"albumArtist"`
+	Genre       string               `json:"genre"`
+	Year        int                  `json:"year"`
+	TrackNumber int                  `json:"trackNumber"`
+	DiscNumber  int                  `json:"discNumber"`
+	Duration    float64              `json:"duration"`
+	Size        int64                `json:"size"`
+	Format      string               `json:"format"`
+	Codec       string               `json:"codec"`
+	SampleRate  int                  `json:"sampleRate"`
+	Channels    int                  `json:"channels"`
+	Bitrate     int64                `json:"bitrate"`
+	Tags        map[string]string    `json:"tags,omitempty"`
+	Playlists   []playlistMembership `json:"playlists,omitempty"`
+	IndexedAt   string               `json:"indexedAt"`
+	Deleted     bool                 `json:"deleted,omitempty"`
 }
 
 type remoteEntry struct {
@@ -100,6 +101,27 @@ type playlist struct {
 	URI    string         `json:"uri"`
 	Name   string         `json:"name"`
 	Items  []playlistItem `json:"items"`
+}
+
+type playlistMembership struct {
+	Source       string `json:"source"`
+	PlaylistURI  string `json:"playlistUri"`
+	PlaylistName string `json:"playlistName"`
+	ItemURI      string `json:"itemUri"`
+	Artist       string `json:"artist"`
+	Album        string `json:"album"`
+	Track        string `json:"track"`
+	Position     int    `json:"position"`
+}
+
+type playlistStore struct {
+	Finalized bool       `json:"finalized"`
+	Playlists []playlist `json:"playlists"`
+}
+
+type playlistFolder struct {
+	Source    string     `json:"source"`
+	Playlists []playlist `json:"playlists"`
 }
 
 type playlistImport struct {
@@ -140,16 +162,17 @@ type session struct {
 }
 
 type server struct {
-	cfg           config
-	ctx           context.Context
-	mu            sync.RWMutex
-	importMu      sync.Mutex
-	sessions      map[string]*session
-	states        map[string]time.Time
-	catalog       map[string]track
-	playlists     map[string]playlist
-	indexerTokens *dropboxTokenSource
-	importStatus  playlistImportStatus
+	cfg                config
+	ctx                context.Context
+	mu                 sync.RWMutex
+	importMu           sync.Mutex
+	sessions           map[string]*session
+	states             map[string]time.Time
+	catalog            map[string]track
+	playlists          map[string]playlist
+	playlistsFinalized bool
+	indexerTokens      *dropboxTokenSource
+	importStatus       playlistImportStatus
 }
 
 func main() {
@@ -225,17 +248,15 @@ func applyPathIdentity(item track) track {
 		filename = parts[len(parts)-1]
 	}
 	stem := strings.TrimSpace(strings.TrimSuffix(filename, filepath.Ext(filename)))
-	item.TrackNumber = leadingInteger(stem)
-	item.Title = stripTrackPrefix(stem)
-	if item.Title == "" {
-		item.Title = stem
+	if item.TrackNumber == 0 {
+		item.TrackNumber = leadingInteger(stem)
 	}
-	item.Artist = ""
-	item.Album = ""
-	item.AlbumArtist = ""
-	item.Genre = ""
-	item.Year = 0
-	item.DiscNumber = 0
+	if item.Title == "" {
+		item.Title = stripTrackPrefix(stem)
+		if item.Title == "" {
+			item.Title = stem
+		}
+	}
 	item.Tags = nil
 	return item
 }
@@ -285,11 +306,11 @@ func runServer(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	playlists, err := loadPlaylists(cfg.playlistPath)
+	playlistState, err := loadPlaylists(cfg.playlistPath)
 	if err != nil {
 		return err
 	}
-	s := &server{cfg: cfg, ctx: ctx, sessions: map[string]*session{}, states: map[string]time.Time{}, catalog: catalog, playlists: playlists}
+	s := &server{cfg: cfg, ctx: ctx, sessions: map[string]*session{}, states: map[string]time.Time{}, catalog: catalog, playlists: playlistMap(playlistState.Playlists), playlistsFinalized: playlistState.Finalized}
 	if cfg.indexerAppKey != "" && cfg.indexerAppSecret != "" && cfg.indexerRefresh != "" {
 		s.indexerTokens = &dropboxTokenSource{appKey: cfg.indexerAppKey, appSecret: cfg.indexerAppSecret, refreshToken: cfg.indexerRefresh}
 	}
@@ -304,6 +325,8 @@ func runServer(ctx context.Context, cfg config) error {
 	mux.HandleFunc("/api/playlists/import", s.playlistImport)
 	mux.HandleFunc("/api/playlists/import/status", s.playlistImportState)
 	mux.HandleFunc("/api/index", s.indexTrack)
+	mux.HandleFunc("/api/index/playlists", s.indexPlaylists)
+	mux.HandleFunc("/api/index/playlists/finalize", s.finalizePlaylists)
 	mux.HandleFunc("/api/stream/", s.stream)
 	mux.HandleFunc("/", s.index)
 	handler := securityHeaders(mux)
@@ -472,9 +495,13 @@ func playlistKey(item playlist) string {
 	return strings.ToLower(strings.TrimSpace(item.Source)) + "\x00" + strings.TrimSpace(item.URI)
 }
 
-func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
+func (s *server) indexerAuthenticated(r *http.Request) bool {
 	provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if s.cfg.indexerAppSecret == "" || len(provided) != len(s.cfg.indexerAppSecret) || subtle.ConstantTimeCompare([]byte(provided), []byte(s.cfg.indexerAppSecret)) != 1 {
+	return s.cfg.indexerAppSecret != "" && len(provided) == len(s.cfg.indexerAppSecret) && subtle.ConstantTimeCompare([]byte(provided), []byte(s.cfg.indexerAppSecret)) == 1
+}
+
+func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
+	if !s.indexerAuthenticated(r) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
@@ -500,10 +527,32 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid index record", http.StatusBadRequest)
 		return
 	}
-	if item.ID == "" || item.Rev == "" || item.Path == "" || item.Name == "" {
+	if item.ID == "" || item.Rev == "" || item.Path == "" || item.Name == "" || strings.TrimSpace(item.Artist) == "" {
 		http.Error(w, "incomplete index record", http.StatusBadRequest)
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(item.Artist), "unknown") || (item.Artist != "?" && item.Artist != "N/A" && !strings.ContainsFunc(item.Artist, unicode.IsLetter)) {
+		http.Error(w, "invalid artist", http.StatusBadRequest)
+		return
+	}
+	membershipKeys := make(map[string]struct{}, len(item.Playlists))
+	uniqueMemberships := make([]playlistMembership, 0, len(item.Playlists))
+	for _, membership := range item.Playlists {
+		membership.Source = strings.TrimSpace(membership.Source)
+		membership.PlaylistURI = strings.TrimSpace(membership.PlaylistURI)
+		membership.PlaylistName = strings.TrimSpace(membership.PlaylistName)
+		if !playlistSourceAllowed(membership.Source) || membership.PlaylistURI == "" || membership.PlaylistName == "" {
+			http.Error(w, "invalid playlist membership", http.StatusBadRequest)
+			return
+		}
+		key := membership.Source + "\x00" + membership.PlaylistURI + "\x00" + strconv.Itoa(membership.Position) + "\x00" + normalizeName(membership.Artist) + "\x00" + normalizeName(membership.Album) + "\x00" + normalizeName(membership.Track)
+		if _, exists := membershipKeys[key]; exists {
+			continue
+		}
+		membershipKeys[key] = struct{}{}
+		uniqueMemberships = append(uniqueMemberships, membership)
+	}
+	item.Playlists = uniqueMemberships
 	item = applyPathIdentity(item)
 	if err := appendTrack(s.cfg.dataPath, item); err != nil {
 		http.Error(w, "catalog write failed", http.StatusInternalServerError)
@@ -515,16 +564,33 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) playlistList(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.authenticated(r); !ok {
-		http.Error(w, "authentication required", http.StatusUnauthorized)
-		return
+var playlistSourceFolders = []string{
+	"Spotify",
+	"YouTube",
+	"Holdy_ Last.fm",
+	"References in composing repo",
+	"Dropbox audio/music*",
+	"Foobar2000 legacy",
+}
+
+func playlistSourceAllowed(source string) bool {
+	for _, allowed := range playlistSourceFolders {
+		if source == allowed {
+			return true
+		}
 	}
-	items, err := loadPlaylists(s.cfg.playlistPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	return false
+}
+
+func playlistMap(items []playlist) map[string]playlist {
+	result := make(map[string]playlist, len(items))
+	for _, item := range items {
+		result[playlistKey(item)] = item
 	}
+	return result
+}
+
+func playlistSlice(items map[string]playlist) []playlist {
 	result := make([]playlist, 0, len(items))
 	for _, item := range items {
 		result = append(result, item)
@@ -532,10 +598,256 @@ func (s *server) playlistList(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(result, func(i, j int) bool {
 		return strings.ToLower(result[i].Source+"\x00"+result[i].Name+"\x00"+result[i].URI) < strings.ToLower(result[j].Source+"\x00"+result[j].Name+"\x00"+result[j].URI)
 	})
+	return result
+}
+
+func materializePlaylists(definitions map[string]playlist, catalog map[string]track) map[string]playlist {
+	items := make(map[string]playlist, len(definitions))
+	for key, definition := range definitions {
+		copyOfDefinition := definition
+		copyOfDefinition.Items = append([]playlistItem(nil), definition.Items...)
+		for i := range copyOfDefinition.Items {
+			copyOfDefinition.Items[i].TrackID = ""
+		}
+		items[key] = copyOfDefinition
+	}
+	for _, indexed := range catalog {
+		for _, membership := range indexed.Playlists {
+			candidate := playlist{Source: membership.Source, URI: membership.PlaylistURI, Name: membership.PlaylistName}
+			key := playlistKey(candidate)
+			current := items[key]
+			if current.Source == "" {
+				current = candidate
+			}
+			found := false
+			for i := range current.Items {
+				if current.Items[i].Position == membership.Position && missingKey(current.Items[i]) == missingKey(playlistItem{Artist: membership.Artist, Album: membership.Album, Track: membership.Track}) {
+					current.Items[i].TrackID = indexed.ID
+					found = true
+					break
+				}
+			}
+			if !found {
+				current.Items = append(current.Items, playlistItem{URI: membership.ItemURI, Artist: membership.Artist, Album: membership.Album, Track: membership.Track, Position: membership.Position, TrackID: indexed.ID})
+			}
+			sort.SliceStable(current.Items, func(i, j int) bool { return current.Items[i].Position < current.Items[j].Position })
+			items[key] = current
+		}
+	}
+	return items
+}
+
+func playlistFolders(items map[string]playlist) []playlistFolder {
+	bySource := make(map[string][]playlist, len(playlistSourceFolders))
+	for _, item := range items {
+		bySource[item.Source] = append(bySource[item.Source], item)
+	}
+	result := make([]playlistFolder, 0, len(playlistSourceFolders))
+	for _, source := range playlistSourceFolders {
+		playlists := bySource[source]
+		sort.Slice(playlists, func(i, j int) bool {
+			return strings.ToLower(playlists[i].Name+"\x00"+playlists[i].URI) < strings.ToLower(playlists[j].Name+"\x00"+playlists[j].URI)
+		})
+		result = append(result, playlistFolder{Source: source, Playlists: playlists})
+	}
+	return result
+}
+
+func (s *server) playlistList(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.authenticated(r); !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	state, err := loadPlaylists(s.cfg.playlistPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !state.Finalized {
+		writeJSON(w, []playlistFolder{})
+		return
+	}
+	catalog, err := loadTracks(s.cfg.dataPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	definitions := playlistMap(state.Playlists)
 	s.mu.Lock()
-	s.playlists = items
+	s.playlists = definitions
+	s.playlistsFinalized = true
+	s.catalog = catalog
 	s.mu.Unlock()
-	writeJSON(w, result)
+	writeJSON(w, playlistFolders(materializePlaylists(definitions, catalog)))
+}
+
+func normalizePlaylistDefinitions(input playlistImport, existing playlistStore) (playlistStore, error) {
+	items := playlistMap(existing.Playlists)
+	for _, candidate := range input.Playlists {
+		candidate.Source = strings.TrimSpace(candidate.Source)
+		candidate.URI = strings.TrimSpace(candidate.URI)
+		candidate.Name = strings.TrimSpace(candidate.Name)
+		if !playlistSourceAllowed(candidate.Source) || candidate.URI == "" || candidate.Name == "" {
+			return playlistStore{}, fmt.Errorf("invalid playlist definition")
+		}
+		for i := range candidate.Items {
+			candidate.Items[i].Position = i
+			candidate.Items[i].TrackID = ""
+			if strings.TrimSpace(candidate.Items[i].Track) == "" {
+				return playlistStore{}, fmt.Errorf("playlist %q has an empty track", candidate.Name)
+			}
+		}
+		items[playlistKey(candidate)] = candidate
+	}
+	return playlistStore{Finalized: false, Playlists: playlistSlice(items)}, nil
+}
+
+func (s *server) storePlaylistDefinitions(input playlistImport) (playlistStore, error) {
+	state, err := loadPlaylists(s.cfg.playlistPath)
+	if err != nil {
+		return playlistStore{}, err
+	}
+	state, err = normalizePlaylistDefinitions(input, state)
+	if err != nil {
+		return playlistStore{}, err
+	}
+	if err := writePlaylists(s.cfg.playlistPath, state); err != nil {
+		return playlistStore{}, err
+	}
+	s.mu.Lock()
+	s.playlists = playlistMap(state.Playlists)
+	s.playlistsFinalized = false
+	s.mu.Unlock()
+	return state, nil
+}
+
+func (s *server) indexPlaylists(w http.ResponseWriter, r *http.Request) {
+	if !s.indexerAuthenticated(r) {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if r.Method == http.MethodGet {
+		state, err := loadPlaylists(s.cfg.playlistPath)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, state)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "GET, POST")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var input playlistImport
+	reader := http.MaxBytesReader(w, r.Body, 64<<20)
+	if err := json.NewDecoder(reader).Decode(&input); err != nil {
+		http.Error(w, "invalid playlist definitions", http.StatusBadRequest)
+		return
+	}
+	state, err := s.storePlaylistDefinitions(input)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, map[string]int{"playlists": len(state.Playlists)})
+}
+
+func remotePathMayContain(item playlistItem, entries map[string]remoteEntry) bool {
+	trackName := normalizeName(item.Track)
+	artistName := normalizeName(item.Artist)
+	albumName := normalizeName(item.Album)
+	for _, entry := range entries {
+		pathName := normalizeName(entry.PathDisplay)
+		if trackName == "" || !strings.Contains(pathName, trackName) {
+			continue
+		}
+		if artistName != "" && !strings.Contains(pathName, artistName) {
+			continue
+		}
+		if albumName != "" && !strings.Contains(pathName, albumName) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func materializedItem(current playlist, source playlistItem) playlistItem {
+	for _, item := range current.Items {
+		if item.Position == source.Position && missingKey(item) == missingKey(source) {
+			return item
+		}
+	}
+	return source
+}
+
+func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
+	if !s.indexerAuthenticated(r) {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.indexerTokens == nil {
+		http.Error(w, "playlist writer unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	state, err := loadPlaylists(s.cfg.playlistPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	catalog, err := loadTracks(s.cfg.dataPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	accessToken, err := s.indexerTokens.token(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	remoteFiles, err := listRemoteFiles(r.Context(), accessToken, s.cfg.dropboxRoot)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	definitions := playlistMap(state.Playlists)
+	materialized := materializePlaylists(definitions, catalog)
+	missing := map[string]playlistItem{}
+	for key, definition := range definitions {
+		current := materialized[key]
+		for _, sourceItem := range definition.Items {
+			item := materializedItem(current, sourceItem)
+			if item.TrackID != "" {
+				continue
+			}
+			if remotePathMayContain(sourceItem, remoteFiles) {
+				http.Error(w, "playlist track has a Dropbox path candidate but no indexed membership", http.StatusConflict)
+				return
+			}
+			missing[missingKey(sourceItem)] = sourceItem
+		}
+	}
+	if err := uploadDropboxFile(r.Context(), accessToken, s.cfg.missingPath, encodeMissingYAML(missing)); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	state.Finalized = true
+	if err := writePlaylists(s.cfg.playlistPath, state); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.mu.Lock()
+	s.playlists = definitions
+	s.playlistsFinalized = true
+	s.catalog = catalog
+	s.mu.Unlock()
+	writeJSON(w, map[string]int{"playlists": len(definitions), "missing": len(missing)})
 }
 
 func (s *server) playlistImport(w http.ResponseWriter, r *http.Request) {
@@ -589,63 +901,30 @@ func (s *server) processPlaylistImport(input playlistImport) {
 		s.importStatus = status
 		s.mu.Unlock()
 	}()
-	items, err := loadPlaylists(s.cfg.playlistPath)
+	state, err := s.storePlaylistDefinitions(input)
 	if err != nil {
 		status.Error = err.Error()
 		return
 	}
-	accessToken, err := s.indexerTokens.token(s.ctx)
-	if err != nil {
-		status.Error = err.Error()
-		return
-	}
-	remoteFileIDs, err := listRemoteFileIDs(s.ctx, accessToken, s.cfg.dropboxRoot)
-	if err != nil {
-		status.Error = err.Error()
-		return
-	}
-	for _, candidate := range input.Playlists {
-		candidate.Source = strings.TrimSpace(candidate.Source)
-		candidate.URI = strings.TrimSpace(candidate.URI)
-		candidate.Name = strings.TrimSpace(candidate.Name)
-		for i := range candidate.Items {
-			candidate.Items[i].Position = i
-			if _, present := remoteFileIDs[candidate.Items[i].TrackID]; !present {
-				candidate.Items[i].TrackID = ""
-			}
-		}
-		items[playlistKey(candidate)] = candidate
-	}
-
-	missing := map[string]playlistItem{}
-	for _, current := range items {
-		for _, currentItem := range current.Items {
-			if currentItem.TrackID != "" {
-				continue
-			}
-			missing[missingKey(currentItem)] = currentItem
-		}
-	}
-	missingYAML := encodeMissingYAML(missing)
-	if err := uploadDropboxFile(s.ctx, accessToken, s.cfg.missingPath, missingYAML); err != nil {
-		status.Error = err.Error()
-		return
-	}
-	if err := writePlaylists(s.cfg.playlistPath, items); err != nil {
-		status.Error = err.Error()
-		return
-	}
-	s.mu.Lock()
-	s.playlists = items
-	s.mu.Unlock()
-	status.Playlists = len(items)
-	status.Missing = len(missing)
+	status.Playlists = len(state.Playlists)
 }
 
 func listRemoteFileIDs(ctx context.Context, token, root string) (map[string]struct{}, error) {
+	files, err := listRemoteFiles(ctx, token, root)
+	if err != nil {
+		return nil, err
+	}
+	items := make(map[string]struct{}, len(files))
+	for id := range files {
+		items[id] = struct{}{}
+	}
+	return items, nil
+}
+
+func listRemoteFiles(ctx context.Context, token, root string) (map[string]remoteEntry, error) {
 	requestBody := map[string]any{"path": root, "recursive": true, "include_deleted": false, "limit": 2000}
 	endpoint := dropboxAPI + "/files/list_folder"
-	items := make(map[string]struct{}, 1024)
+	items := make(map[string]remoteEntry, 1024)
 	for {
 		var page listFolderResponse
 		if err := dropboxJSON(ctx, token, endpoint, requestBody, &page); err != nil {
@@ -653,7 +932,7 @@ func listRemoteFileIDs(ctx context.Context, token, root string) (map[string]stru
 		}
 		for _, entry := range page.Entries {
 			if entry.Tag == "file" {
-				items[entry.ID] = struct{}{}
+				items[entry.ID] = entry
 			}
 		}
 		if !page.HasMore {

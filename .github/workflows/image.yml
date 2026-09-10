@@ -2,7 +2,7 @@ name: radio image
 
 on:
   push:
-    branches: [master]
+    branches: [codex/tuna]
     paths:
       - main.go
       - catalog_linux.go
@@ -19,7 +19,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: radio-image
+  group: radio-tuna-image
   cancel-in-progress: false
 
 jobs:
@@ -40,4 +40,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/decisionpreneur/radio:${{ github.sha }}
-            ghcr.io/decisionpreneur/radio:master
+            ghcr.io/decisionpreneur/radio:tuna

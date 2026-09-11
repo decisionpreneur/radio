@@ -1433,6 +1433,9 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 		return nil, fmt.Errorf("truncated FPL header")
 	}
 	headerEnd := int64(19)
+	if entry.Size >= 64 {
+		headerEnd = 63
+	}
 	if entry.Size == 68 {
 		headerEnd = 67
 	}
@@ -1440,17 +1443,21 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	if err != nil {
 		return nil, err
 	}
-	if bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic) {
-		if entry.Size == 68 && bytes.Equal(header[60:68], make([]byte, 8)) {
+	stringStart := int64(20)
+	stringTableSize := int64(0)
+	switch {
+	case bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic):
+		stringStart = 64
+		stringTableSize = int64(binary.LittleEndian.Uint32(header[60:64]))
+		if entry.Size == 68 && stringTableSize == 0 && bytes.Equal(header[64:68], make([]byte, 4)) {
 			return []playlistItem{}, nil
 		}
-		return nil, fmt.Errorf("unsupported populated FPL v1.3 layout")
-	}
-	if !bytes.Equal(header[:len(fplMagic)], fplMagic) {
+	case bytes.Equal(header[:len(fplMagic)], fplMagic):
+		stringTableSize = int64(binary.LittleEndian.Uint32(header[16:20]))
+	default:
 		return nil, fmt.Errorf("unsupported FPL signature")
 	}
-	stringTableSize := int64(binary.LittleEndian.Uint32(header[16:20]))
-	stringEnd := int64(20) + stringTableSize
+	stringEnd := stringStart + stringTableSize
 	if stringEnd+4 > entry.Size {
 		return nil, fmt.Errorf("invalid FPL string table")
 	}
@@ -1516,7 +1523,7 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	pathsByOffset := make(map[uint32]string, len(uniqueOffsets))
 	if len(uniqueOffsets) > 0 {
 		err = func() error {
-			body, err := openDropboxDownload(ctx, token, entry.ID, fmt.Sprintf("bytes=20-%d", stringEnd-1))
+			body, err := openDropboxDownload(ctx, token, entry.ID, fmt.Sprintf("bytes=%d-%d", stringStart, stringEnd-1))
 			if err != nil {
 				return err
 			}

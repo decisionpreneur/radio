@@ -45,6 +45,7 @@ spec:
             - {name: PUBLIC_URL, value: {{ .Values.publicURL | quote }}}
             - {name: DROPBOX_ROOT, value: {{ .Values.dropboxRoot | quote }}}
             - {name: GOMAXPROCS, value: "1"}
+            - {name: GOMEMLIMIT, value: "128MiB"}
             - name: TUNA_DROPBOX_APP_KEY
               valueFrom: {secretKeyRef: {name: {{ .Values.secrets.tuna }}, key: app-key}}
             - name: TUNA_DROPBOX_APP_SECRET

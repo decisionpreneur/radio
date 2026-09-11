@@ -623,14 +623,15 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item = applyPathIdentity(item)
-	item.Playlists = append(item.Playlists, s.exactPlaylistMemberships(item)...)
+	definitions := s.playlistDefinitions()
+	item.Playlists = append(item.Playlists, exactPlaylistMemberships(definitions, item)...)
 	membershipKeys := make(map[string]struct{}, len(item.Playlists))
 	uniqueMemberships := make([]playlistMembership, 0, len(item.Playlists))
 	for _, membership := range item.Playlists {
 		membership.Source = strings.TrimSpace(membership.Source)
 		membership.PlaylistURI = strings.TrimSpace(membership.PlaylistURI)
 		membership.PlaylistName = strings.TrimSpace(membership.PlaylistName)
-		if !playlistSourceAllowed(membership.Source) || membership.PlaylistURI == "" || membership.PlaylistName == "" {
+		if !playlistSourceAllowed(membership.Source) || membership.PlaylistURI == "" || membership.PlaylistName == "" || !playlistMembershipDefined(definitions, membership, item) {
 			http.Error(w, "invalid playlist membership", http.StatusBadRequest)
 			return
 		}
@@ -672,6 +673,10 @@ func playlistSourceAllowed(source string) bool {
 
 func playlistMembershipKey(membership playlistMembership) string {
 	return membership.Source + "\x00" + membership.PlaylistURI + "\x00" + strconv.Itoa(membership.Position) + "\x00" + normalizeName(membership.Artist) + "\x00" + normalizeName(membership.Album) + "\x00" + normalizeName(membership.Track)
+}
+
+func playlistRowKey(source, uri string, position int) string {
+	return playlistKey(playlist{Source: source, URI: uri}) + "\x00" + strconv.Itoa(position)
 }
 
 func playlistMembershipFromItem(definition playlist, source playlistItem, indexed track) playlistMembership {
@@ -750,9 +755,9 @@ func (s *server) playlistDefinitions() []playlist {
 	return definitions
 }
 
-func (s *server) exactPlaylistMemberships(indexed track) []playlistMembership {
+func exactPlaylistMemberships(definitions []playlist, indexed track) []playlistMembership {
 	memberships := []playlistMembership{}
-	for _, definition := range s.playlistDefinitions() {
+	for _, definition := range definitions {
 		for _, source := range definition.Items {
 			if playlistItemExactMatch(source, indexed) {
 				memberships = append(memberships, playlistMembershipFromItem(definition, source, indexed))
@@ -763,6 +768,31 @@ func (s *server) exactPlaylistMemberships(indexed track) []playlistMembership {
 		return playlistMembershipKey(memberships[i]) < playlistMembershipKey(memberships[j])
 	})
 	return memberships
+}
+
+func playlistMembershipDefined(definitions []playlist, membership playlistMembership, indexed track) bool {
+	for _, definition := range definitions {
+		if definition.Source != membership.Source || definition.URI != membership.PlaylistURI || definition.Name != membership.PlaylistName {
+			continue
+		}
+		if membership.Position >= 0 && membership.Position < len(definition.Items) {
+			source := definition.Items[membership.Position]
+			return !source.AllTracksByArtist && source.Position == membership.Position && source.URI == membership.ItemURI &&
+				normalizeName(source.Artist) == normalizeName(membership.Artist) &&
+				normalizeName(source.Album) == normalizeName(membership.Album) &&
+				normalizeName(source.Track) == normalizeName(membership.Track)
+		}
+		if membership.Position == -1 && normalizeName(membership.Artist) == normalizeName(indexed.Artist) &&
+			normalizeName(membership.Album) == normalizeName(indexed.Album) && normalizeName(membership.Track) == normalizeName(indexed.Title) {
+			for _, source := range definition.Items {
+				if source.AllTracksByArtist && source.URI == membership.ItemURI && normalizeName(source.Artist) == normalizeName(indexed.Artist) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return false
 }
 
 func (s *server) indexPlaylistCandidates(w http.ResponseWriter, r *http.Request) {
@@ -815,6 +845,23 @@ func playlistSlice(items map[string]playlist) []playlist {
 		return strings.ToLower(result[i].Source+"\x00"+result[i].Name+"\x00"+result[i].URI) < strings.ToLower(result[j].Source+"\x00"+result[j].Name+"\x00"+result[j].URI)
 	})
 	return result
+}
+
+func (s *server) snapshotPlaylists() playlistStore {
+	s.mu.RLock()
+	state := playlistStore{Finalized: s.playlistsFinalized, Playlists: playlistSlice(s.playlists)}
+	s.mu.RUnlock()
+	return state
+}
+
+func (s *server) snapshotCatalog() map[string]track {
+	s.mu.RLock()
+	catalog := make(map[string]track, len(s.catalog))
+	for id, item := range s.catalog {
+		catalog[id] = item
+	}
+	s.mu.RUnlock()
+	return catalog
 }
 
 func materializePlaylists(definitions map[string]playlist, catalog map[string]track) map[string]playlist {
@@ -888,20 +935,12 @@ func (s *server) playlistList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	state, err := loadPlaylists(s.cfg.playlistPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	state := s.snapshotPlaylists()
 	if !state.Finalized {
 		writeJSON(w, []playlistFolder{})
 		return
 	}
-	catalog, err := loadTracks(s.cfg.dataPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	catalog := s.snapshotCatalog()
 	definitions := playlistMap(state.Playlists)
 	s.mu.Lock()
 	s.playlists = definitions
@@ -946,9 +985,7 @@ func normalizePlaylistDefinitions(input playlistImport, existing playlistStore) 
 func (s *server) storePlaylistDefinitions(input playlistImport) (playlistStore, error) {
 	s.importMu.Lock()
 	defer s.importMu.Unlock()
-	s.mu.RLock()
-	state := playlistStore{Finalized: s.playlistsFinalized, Playlists: playlistSlice(s.playlists)}
-	s.mu.RUnlock()
+	state := s.snapshotPlaylists()
 	var err error
 	state, err = normalizePlaylistDefinitions(input, state)
 	if err != nil {
@@ -970,12 +1007,7 @@ func (s *server) indexPlaylists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodGet {
-		state, err := loadPlaylists(s.cfg.playlistPath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, state)
+		writeJSON(w, s.snapshotPlaylists())
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -1123,9 +1155,7 @@ func (s *server) clearPlaylistSources(sources ...string) error {
 	for _, source := range sources {
 		selected[source] = struct{}{}
 	}
-	s.mu.RLock()
-	state := playlistStore{Finalized: s.playlistsFinalized, Playlists: playlistSlice(s.playlists)}
-	s.mu.RUnlock()
+	state := s.snapshotPlaylists()
 	kept := state.Playlists[:0]
 	for _, item := range state.Playlists {
 		if _, remove := selected[item.Source]; !remove {
@@ -1467,15 +1497,6 @@ func normalizePlaylistPath(value string) string {
 	return strings.TrimRight(value, "/")
 }
 
-func materializedItem(current playlist, source playlistItem) playlistItem {
-	for _, item := range current.Items {
-		if item.Position == source.Position && missingKey(item) == missingKey(source) {
-			return item
-		}
-	}
-	return source
-}
-
 func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
 	if !s.indexerAuthenticated(r) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
@@ -1489,16 +1510,8 @@ func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "playlist writer unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	state, err := loadPlaylists(s.cfg.playlistPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	catalog, err := loadTracks(s.cfg.dataPath)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	state := s.snapshotPlaylists()
+	catalog := s.snapshotCatalog()
 	accessToken, err := s.indexerTokens.token(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -1510,16 +1523,21 @@ func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	definitions := playlistMap(state.Playlists)
-	materialized := materializePlaylists(definitions, catalog)
+	matched := make(map[string]struct{})
+	for _, indexed := range catalog {
+		for _, membership := range indexed.Playlists {
+			if membership.Position >= 0 {
+				matched[playlistRowKey(membership.Source, membership.PlaylistURI, membership.Position)] = struct{}{}
+			}
+		}
+	}
 	missing := map[string]playlistItem{}
-	for key, definition := range definitions {
-		current := materialized[key]
+	for _, definition := range definitions {
 		for _, sourceItem := range definition.Items {
 			if sourceItem.AllTracksByArtist {
 				continue
 			}
-			item := materializedItem(current, sourceItem)
-			if item.TrackID != "" {
+			if _, present := matched[playlistRowKey(definition.Source, definition.URI, sourceItem.Position)]; present {
 				continue
 			}
 			if remotePathMayContain(sourceItem, remoteFiles) {
@@ -1539,9 +1557,7 @@ func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
-	s.playlists = definitions
 	s.playlistsFinalized = true
-	s.catalog = catalog
 	s.mu.Unlock()
 	writeJSON(w, map[string]int{"playlists": len(definitions), "missing": len(missing)})
 }

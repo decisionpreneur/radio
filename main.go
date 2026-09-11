@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -9,7 +10,9 @@ import (
 	"crypto/subtle"
 	"embed"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -93,6 +97,7 @@ type remoteEntry struct {
 
 type playlistItem struct {
 	URI               string `json:"uri"`
+	Path              string `json:"path,omitempty"`
 	Artist            string `json:"artist"`
 	Album             string `json:"album"`
 	Track             string `json:"track"`
@@ -138,6 +143,15 @@ type playlistImportStatus struct {
 	Error     string `json:"error,omitempty"`
 	Playlists int    `json:"playlists,omitempty"`
 	Missing   int    `json:"missing,omitempty"`
+}
+
+type playlistSourceScanStatus struct {
+	Running    bool   `json:"running"`
+	Pages      int    `json:"pages"`
+	Candidates int    `json:"candidates"`
+	Playlists  int    `json:"playlists"`
+	Tracks     int    `json:"tracks"`
+	Error      string `json:"error,omitempty"`
 }
 
 type listFolderResponse struct {
@@ -186,6 +200,7 @@ type server struct {
 	playlistsFinalized bool
 	indexerTokens      *dropboxTokenSource
 	importStatus       playlistImportStatus
+	sourceScanStatus   playlistSourceScanStatus
 }
 
 func main() {
@@ -348,6 +363,7 @@ func runServer(ctx context.Context, cfg config) error {
 	mux.HandleFunc("/api/playlists/import/status", s.playlistImportState)
 	mux.HandleFunc("/api/index", s.indexTrack)
 	mux.HandleFunc("/api/index/playlists", s.indexPlaylists)
+	mux.HandleFunc("/api/index/playlists/dropbox", s.indexDropboxPlaylists)
 	mux.HandleFunc("/api/index/playlists/finalize", s.finalizePlaylists)
 	mux.HandleFunc("/api/stream/", s.stream)
 	mux.HandleFunc("/", s.index)
@@ -770,8 +786,10 @@ func normalizePlaylistDefinitions(input playlistImport, existing playlistStore) 
 		for i := range candidate.Items {
 			candidate.Items[i].Position = i
 			candidate.Items[i].TrackID = ""
+			candidate.Items[i].Path = strings.TrimSpace(candidate.Items[i].Path)
 			candidate.Items[i].Artist = strings.TrimSpace(candidate.Items[i].Artist)
 			if candidate.Items[i].AllTracksByArtist {
+				candidate.Items[i].Path = ""
 				candidate.Items[i].Album = ""
 				candidate.Items[i].Track = ""
 				if candidate.Items[i].Artist == "" {
@@ -840,7 +858,435 @@ func (s *server) indexPlaylists(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]int{"playlists": len(state.Playlists)})
 }
 
+var playlistFileExtensions = map[string]struct{}{
+	".asx": {}, ".fpl": {}, ".fplite": {}, ".m3u": {}, ".m3u8": {},
+	".pls": {}, ".wax": {}, ".wpl": {}, ".wvx": {}, ".xspf": {}, ".zpl": {},
+}
+
+func (s *server) indexDropboxPlaylists(w http.ResponseWriter, r *http.Request) {
+	if !s.indexerAuthenticated(r) {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if r.Method == http.MethodGet {
+		s.mu.RLock()
+		status := s.sourceScanStatus
+		s.mu.RUnlock()
+		writeJSON(w, status)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", "GET, POST")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.indexerTokens == nil {
+		http.Error(w, "playlist reader unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	s.mu.Lock()
+	if s.sourceScanStatus.Running {
+		status := s.sourceScanStatus
+		s.mu.Unlock()
+		writeJSON(w, status)
+		return
+	}
+	s.sourceScanStatus = playlistSourceScanStatus{Running: true}
+	s.mu.Unlock()
+	go s.scanDropboxPlaylists()
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (s *server) setSourceScanStatus(status playlistSourceScanStatus) {
+	s.mu.Lock()
+	s.sourceScanStatus = status
+	s.mu.Unlock()
+}
+
+func (s *server) scanDropboxPlaylists() {
+	status := playlistSourceScanStatus{Running: true}
+	s.importMu.Lock()
+	err := s.runDropboxPlaylistScan(&status)
+	s.importMu.Unlock()
+	status.Running = false
+	if err != nil {
+		status.Error = err.Error()
+	}
+	s.setSourceScanStatus(status)
+}
+
+func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error {
+	if err := s.clearPlaylistSources("Dropbox audio/music*", "Foobar2000 legacy"); err != nil {
+		return err
+	}
+	accessToken, err := s.indexerTokens.token(s.ctx)
+	if err != nil {
+		return err
+	}
+	requestBody := map[string]any{"path": "", "recursive": true, "include_deleted": false, "limit": 2000}
+	endpoint := dropboxAPI + "/files/list_folder"
+	for {
+		var page listFolderResponse
+		if err := dropboxJSON(s.ctx, accessToken, endpoint, requestBody, &page); err != nil {
+			return err
+		}
+		pageDefinitions := playlistImport{}
+		pageCandidates := 0
+		pageTracks := 0
+		for _, entry := range page.Entries {
+			sources := playlistSourcesForPath(entry)
+			if len(sources) == 0 {
+				continue
+			}
+			content, err := downloadDropboxFile(s.ctx, accessToken, entry.ID)
+			if err != nil {
+				return fmt.Errorf("%s: %w", entry.PathDisplay, err)
+			}
+			items, err := parsePlaylistItems(entry, content)
+			if err != nil {
+				return fmt.Errorf("%s: %w", entry.PathDisplay, err)
+			}
+			pageCandidates++
+			for _, source := range sources {
+				pageDefinitions.Playlists = append(pageDefinitions.Playlists, playlist{
+					Source: source,
+					URI:    "dropbox:" + entry.ID,
+					Name:   entry.Name,
+					Items:  items,
+				})
+				pageTracks += len(items)
+			}
+		}
+		if len(pageDefinitions.Playlists) > 0 {
+			if _, err := s.storePlaylistDefinitions(pageDefinitions); err != nil {
+				return err
+			}
+		}
+		status.Candidates += pageCandidates
+		status.Playlists += len(pageDefinitions.Playlists)
+		status.Tracks += pageTracks
+		status.Pages++
+		s.setSourceScanStatus(*status)
+		if !page.HasMore {
+			return nil
+		}
+		requestBody = map[string]any{"cursor": page.Cursor}
+		endpoint = dropboxAPI + "/files/list_folder/continue"
+	}
+}
+
+func (s *server) clearPlaylistSources(sources ...string) error {
+	selected := make(map[string]struct{}, len(sources))
+	for _, source := range sources {
+		selected[source] = struct{}{}
+	}
+	state, err := loadPlaylists(s.cfg.playlistPath)
+	if err != nil {
+		return err
+	}
+	kept := state.Playlists[:0]
+	for _, item := range state.Playlists {
+		if _, remove := selected[item.Source]; !remove {
+			kept = append(kept, item)
+		}
+	}
+	state.Playlists = kept
+	state.Finalized = false
+	if err := writePlaylists(s.cfg.playlistPath, state); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.playlists = playlistMap(state.Playlists)
+	s.playlistsFinalized = false
+	s.mu.Unlock()
+	return nil
+}
+
+func playlistSourcesForPath(entry remoteEntry) []string {
+	if entry.Tag != "file" {
+		return nil
+	}
+	lower := strings.ToLower(strings.ReplaceAll(entry.PathLower, "\\", "/"))
+	_, knownExtension := playlistFileExtensions[strings.ToLower(path.Ext(lower))]
+	parts := strings.Split(strings.TrimPrefix(lower, "/"), "/")
+	underAudioMusic := len(parts) > 1 && parts[0] == "audio" && strings.HasPrefix(parts[1], "music")
+	playlistNamed := strings.Contains(lower, "playlist")
+	foobarNamed := strings.Contains(lower, "foobar")
+	result := make([]string, 0, 2)
+	if underAudioMusic && (knownExtension || playlistNamed) {
+		result = append(result, "Dropbox audio/music*")
+	}
+	if knownExtension || (foobarNamed && playlistNamed) {
+		result = append(result, "Foobar2000 legacy")
+	}
+	return result
+}
+
+func parsePlaylistItems(entry remoteEntry, content []byte) ([]playlistItem, error) {
+	extension := strings.ToLower(path.Ext(entry.Name))
+	switch extension {
+	case ".fpl":
+		return parseFPLPlaylist(entry, content)
+	case ".pls":
+		return parsePLSPlaylist(entry, content)
+	case ".asx", ".wax", ".wpl", ".wvx", ".xspf", ".zpl":
+		return parseXMLPlaylist(entry, content)
+	case ".m3u", ".m3u8":
+		return parseM3UPlaylist(entry, content)
+	}
+	trimmed := bytes.TrimSpace(content)
+	if len(trimmed) >= len(fplMagic) && bytes.Equal(trimmed[:len(fplMagic)], fplMagic) {
+		return parseFPLPlaylist(entry, trimmed)
+	}
+	if len(trimmed) > 0 && trimmed[0] == '<' {
+		return parseXMLPlaylist(entry, trimmed)
+	}
+	if len(trimmed) > 0 && trimmed[0] == '[' && bytes.Contains(bytes.ToLower(trimmed), []byte("file1=")) {
+		return parsePLSPlaylist(entry, trimmed)
+	}
+	if bytes.IndexByte(trimmed, 0) >= 0 {
+		return nil, fmt.Errorf("unsupported binary playlist format")
+	}
+	return parseM3UPlaylist(entry, trimmed)
+}
+
+func parseM3UPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error) {
+	lines := strings.Split(strings.TrimPrefix(strings.ReplaceAll(string(content), "\r\n", "\n"), "\ufeff"), "\n")
+	items := make([]playlistItem, 0, len(lines))
+	label := ""
+	for _, line := range lines {
+		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
+		if strings.HasPrefix(strings.ToUpper(line), "#EXTINF:") {
+			if comma := strings.IndexByte(line, ','); comma >= 0 {
+				label = strings.TrimSpace(line[comma+1:])
+			}
+			continue
+		}
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		item, err := playlistItemFromReference(entry, line, label, len(items))
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+		label = ""
+	}
+	return items, nil
+}
+
+func parsePLSPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error) {
+	type plsItem struct{ path, title string }
+	values := map[int]plsItem{}
+	for _, line := range strings.Split(strings.ReplaceAll(string(content), "\r\n", "\n"), "\n") {
+		key, value, found := strings.Cut(strings.TrimSpace(strings.TrimSuffix(line, "\r")), "=")
+		if !found {
+			continue
+		}
+		lower := strings.ToLower(strings.TrimSpace(key))
+		value = strings.TrimSpace(value)
+		var prefix string
+		switch {
+		case strings.HasPrefix(lower, "file"):
+			prefix = "file"
+		case strings.HasPrefix(lower, "title"):
+			prefix = "title"
+		default:
+			continue
+		}
+		index, err := strconv.Atoi(strings.TrimPrefix(lower, prefix))
+		if err != nil || index < 1 {
+			continue
+		}
+		current := values[index]
+		if prefix == "file" {
+			current.path = value
+		} else {
+			current.title = value
+		}
+		values[index] = current
+	}
+	positions := make([]int, 0, len(values))
+	for index, item := range values {
+		if item.path != "" {
+			positions = append(positions, index)
+		}
+	}
+	sort.Ints(positions)
+	items := make([]playlistItem, 0, len(positions))
+	for _, index := range positions {
+		current := values[index]
+		item, err := playlistItemFromReference(entry, current.path, current.title, len(items))
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func parseXMLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error) {
+	decoder := xml.NewDecoder(bytes.NewReader(content))
+	items := []playlistItem{}
+	captureLocation := false
+	var location strings.Builder
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return items, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			name := strings.ToLower(value.Name.Local)
+			if name == "location" {
+				captureLocation = true
+				location.Reset()
+			}
+			for _, attribute := range value.Attr {
+				attributeName := strings.ToLower(attribute.Name.Local)
+				if attributeName != "href" && attributeName != "src" {
+					continue
+				}
+				item, err := playlistItemFromReference(entry, attribute.Value, "", len(items))
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, item)
+			}
+		case xml.CharData:
+			if captureLocation {
+				location.Write([]byte(value))
+			}
+		case xml.EndElement:
+			if captureLocation && strings.EqualFold(value.Name.Local, "location") {
+				item, err := playlistItemFromReference(entry, location.String(), "", len(items))
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, item)
+				captureLocation = false
+			}
+		}
+	}
+}
+
+var fplMagic = []byte{0xE1, 0xA0, 0x9C, 0x91, 0xF8, 0x3C, 0x77, 0x42, 0x85, 0x2C, 0x3B, 0xCC, 0x14, 0x01, 0xD3, 0xF2}
+
+func parseFPLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error) {
+	if len(content) < 24 || !bytes.Equal(content[:len(fplMagic)], fplMagic) {
+		return nil, fmt.Errorf("unsupported FPL signature")
+	}
+	dataSize := int(binary.LittleEndian.Uint32(content[16:20]))
+	stringEnd := 20 + dataSize
+	if dataSize < 0 || stringEnd+4 > len(content) {
+		return nil, fmt.Errorf("invalid FPL string table")
+	}
+	stringTable := content[20:stringEnd]
+	trackCount := int(binary.LittleEndian.Uint32(content[stringEnd : stringEnd+4]))
+	offset := stringEnd + 4
+	items := make([]playlistItem, 0, trackCount)
+	for index := 0; index < trackCount; index++ {
+		if offset+68 > len(content) {
+			return nil, fmt.Errorf("truncated FPL track %d", index)
+		}
+		fileOffset := int(binary.LittleEndian.Uint32(content[offset+4 : offset+8]))
+		keysDex := int(binary.LittleEndian.Uint32(content[offset+52 : offset+56]))
+		if fileOffset < 0 || fileOffset >= len(stringTable) || keysDex < 3 {
+			return nil, fmt.Errorf("invalid FPL track %d", index)
+		}
+		end := bytes.IndexByte(stringTable[fileOffset:], 0)
+		if end < 0 {
+			return nil, fmt.Errorf("unterminated FPL path %d", index)
+		}
+		reference := strings.ToValidUTF8(string(stringTable[fileOffset:fileOffset+end]), "�")
+		item, err := playlistItemFromReference(entry, reference, "", len(items))
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+		realKeys := keysDex - 3
+		if realKeys > (len(content)-offset-68)/4 {
+			return nil, fmt.Errorf("invalid FPL key table %d", index)
+		}
+		offset += 68 + realKeys*4
+	}
+	return items, nil
+}
+
+func playlistItemFromReference(entry remoteEntry, reference, label string, position int) (playlistItem, error) {
+	reference = strings.TrimSpace(reference)
+	if reference == "" {
+		return playlistItem{}, fmt.Errorf("empty playlist path")
+	}
+	resolved := reference
+	if parsed, err := url.Parse(reference); err == nil && parsed.Scheme != "" {
+		if decoded, decodeErr := url.PathUnescape(parsed.Path); decodeErr == nil && decoded != "" {
+			resolved = decoded
+		}
+	}
+	resolved = strings.ReplaceAll(resolved, "\\", "/")
+	if !strings.HasPrefix(resolved, "/") && !(len(resolved) > 1 && resolved[1] == ':') && !strings.Contains(resolved, "://") {
+		resolved = path.Join(path.Dir(entry.PathDisplay), resolved)
+	}
+	clean := strings.TrimSpace(strings.SplitN(strings.SplitN(resolved, "?", 2)[0], "#", 2)[0])
+	base := path.Base(clean)
+	trackName := strings.TrimSpace(strings.TrimSuffix(base, path.Ext(base)))
+	if trackName == "" {
+		trackName = strings.TrimSpace(label)
+	}
+	if trackName == "" {
+		return playlistItem{}, fmt.Errorf("playlist path %q has no track name", reference)
+	}
+	parts := strings.Split(strings.Trim(clean, "/"), "/")
+	artist, album := "", ""
+	if len(parts) >= 2 {
+		album = strings.TrimSpace(parts[len(parts)-2])
+	}
+	if len(parts) >= 3 {
+		artist = strings.TrimSpace(parts[len(parts)-3])
+	}
+	return playlistItem{
+		URI:      fmt.Sprintf("dropbox:%s#%d", entry.ID, position),
+		Path:     resolved,
+		Artist:   artist,
+		Album:    album,
+		Track:    trackName,
+		Position: position,
+	}, nil
+}
+
+func downloadDropboxFile(ctx context.Context, token, fileID string) ([]byte, error) {
+	argument, _ := json.Marshal(map[string]string{"path": fileID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dropboxContent+"/files/download", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Dropbox-API-Arg", string(argument))
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode/100 != 2 {
+		failure, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+		return nil, fmt.Errorf("Dropbox download: %s: %s", response.Status, strings.TrimSpace(string(failure)))
+	}
+	return io.ReadAll(response.Body)
+}
+
 func remotePathMayContain(item playlistItem, entries map[string]remoteEntry) bool {
+	if referencePath := normalizePlaylistPath(item.Path); referencePath != "" {
+		for _, entry := range entries {
+			remotePath := normalizePlaylistPath(entry.PathDisplay)
+			if remotePath == referencePath || strings.HasSuffix(remotePath, "/"+strings.TrimPrefix(referencePath, "/")) || strings.HasSuffix(referencePath, "/"+strings.TrimPrefix(remotePath, "/")) {
+				return true
+			}
+		}
+	}
 	trackName := normalizeName(item.Track)
 	artistName := normalizeName(item.Artist)
 	albumName := normalizeName(item.Album)
@@ -858,6 +1304,23 @@ func remotePathMayContain(item playlistItem, entries map[string]remoteEntry) boo
 		return true
 	}
 	return false
+}
+
+func normalizePlaylistPath(value string) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if value == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Path != "" {
+		if decoded, decodeErr := url.PathUnescape(parsed.Path); decodeErr == nil {
+			value = decoded
+		}
+	}
+	value = strings.ToLower(strings.SplitN(strings.SplitN(value, "?", 2)[0], "#", 2)[0])
+	if audio := strings.Index(value, "/audio/"); audio >= 0 {
+		value = value[audio:]
+	}
+	return strings.TrimRight(value, "/")
 }
 
 func materializedItem(current playlist, source playlistItem) playlistItem {

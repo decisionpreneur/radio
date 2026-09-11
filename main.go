@@ -1102,10 +1102,18 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 	}
 	requestBody := map[string]any{"path": "", "recursive": true, "include_deleted": false, "limit": 2000}
 	endpoint := dropboxAPI + "/files/list_folder"
+	playlistIndexes := map[string]remoteEntry{}
+	playlistNames := map[string]map[string]string{}
 	for {
 		var page listFolderResponse
 		if err := dropboxJSON(s.ctx, accessToken, endpoint, requestBody, &page); err != nil {
 			return err
+		}
+		for _, entry := range page.Entries {
+			directory := strings.ToLower(path.Dir(strings.ReplaceAll(entry.PathDisplay, "\\", "/")))
+			if entry.Tag == "file" && strings.EqualFold(entry.Name, "index.dat") && strings.HasPrefix(path.Base(directory), "playlists") {
+				playlistIndexes[directory] = entry
+			}
 		}
 		pageDefinitions := playlistImport{}
 		pageCandidates := 0
@@ -1117,8 +1125,24 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 			}
 			var items []playlistItem
 			extension := strings.ToLower(path.Ext(entry.Name))
+			playlistName := entry.Name
 			if extension == ".fpl" || extension == ".fplite" {
 				items, err = parseRemoteFPLPlaylist(s.ctx, accessToken, entry)
+				directory := strings.ToLower(path.Dir(strings.ReplaceAll(entry.PathDisplay, "\\", "/")))
+				if indexEntry, found := playlistIndexes[directory]; found && err == nil {
+					names, loaded := playlistNames[directory]
+					if !loaded {
+						var indexContent []byte
+						indexContent, err = downloadDropboxFile(s.ctx, accessToken, indexEntry.ID)
+						if err == nil {
+							names, err = parsePlaylistIndex(indexContent)
+							playlistNames[directory] = names
+						}
+					}
+					if indexedName := names[strings.ToLower(strings.TrimSuffix(entry.Name, path.Ext(entry.Name)))]; indexedName != "" {
+						playlistName = indexedName
+					}
+				}
 			} else {
 				var content []byte
 				content, err = downloadDropboxFile(s.ctx, accessToken, entry.ID)
@@ -1134,7 +1158,7 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 				pageDefinitions.Playlists = append(pageDefinitions.Playlists, playlist{
 					Source: source,
 					URI:    "dropbox:" + entry.ID,
-					Name:   entry.Name,
+					Name:   playlistName,
 					Items:  items,
 				})
 				pageTracks += len(items)
@@ -1359,6 +1383,8 @@ func parseXMLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 }
 
 var fplMagic = []byte{0xE1, 0xA0, 0x9C, 0x91, 0xF8, 0x3C, 0x77, 0x42, 0x85, 0x2C, 0x3B, 0xCC, 0x14, 0x01, 0xD3, 0xF2}
+var legacyFPLMagic = []byte{0x00, 0x37, 0x59, 0xDB, 0x44, 0x4D, 0x56, 0x4E, 0x80, 0x34, 0xC6, 0x2A, 0xBA, 0x89, 0xA6, 0xB9}
+var playlistIndexMagic = []byte{0x9B, 0x27, 0xCE, 0xF0, 0xF7, 0xB2, 0xB6, 0x46, 0x9A, 0xCA, 0x0F, 0x02, 0x2B, 0x2D, 0x9C, 0x78}
 
 func parseFPLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error) {
 	if len(content) < 24 || !bytes.Equal(content[:len(fplMagic)], fplMagic) {
@@ -1408,6 +1434,18 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	header, err := downloadDropboxRange(ctx, token, entry.ID, 0, 19)
 	if err != nil {
 		return nil, err
+	}
+	if bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic) {
+		if entry.Size == 68 {
+			tail, err := downloadDropboxRange(ctx, token, entry.ID, 60, 67)
+			if err != nil {
+				return nil, err
+			}
+			if bytes.Equal(tail, make([]byte, len(tail))) {
+				return []playlistItem{}, nil
+			}
+		}
+		return nil, fmt.Errorf("unsupported populated FPL v1.3 layout")
 	}
 	if !bytes.Equal(header[:len(fplMagic)], fplMagic) {
 		return nil, fmt.Errorf("unsupported FPL signature")
@@ -1521,6 +1559,50 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 		items = append(items, item)
 	}
 	return items, nil
+}
+
+func parsePlaylistIndex(content []byte) (map[string]string, error) {
+	if len(content) < 24 || !bytes.Equal(content[:len(playlistIndexMagic)], playlistIndexMagic) {
+		return nil, fmt.Errorf("unsupported playlist index signature")
+	}
+	count := int(binary.LittleEndian.Uint32(content[16:20]))
+	offset := 24
+	names := make(map[string]string, count)
+	for index := 0; index < count; index++ {
+		if offset+8 > len(content) {
+			return nil, fmt.Errorf("truncated playlist index entry %d", index)
+		}
+		offset += 4
+		idSize := int(binary.LittleEndian.Uint32(content[offset : offset+4]))
+		offset += 4
+		if idSize < 1 || idSize > len(content)-offset {
+			return nil, fmt.Errorf("invalid playlist index id %d", index)
+		}
+		id := string(content[offset : offset+idSize])
+		offset += idSize
+		if offset+4 > len(content) {
+			return nil, fmt.Errorf("truncated playlist index name %d", index)
+		}
+		nameSize := int(binary.LittleEndian.Uint32(content[offset : offset+4]))
+		offset += 4
+		if nameSize < 1 || nameSize > len(content)-offset {
+			return nil, fmt.Errorf("invalid playlist index name %d", index)
+		}
+		name := strings.ToValidUTF8(string(content[offset:offset+nameSize]), "�")
+		offset += nameSize
+		if offset+8 > len(content) {
+			return nil, fmt.Errorf("truncated playlist index metadata %d", index)
+		}
+		offset += 4
+		metadataSize := int(binary.LittleEndian.Uint32(content[offset : offset+4]))
+		offset += 4
+		if metadataSize < 0 || metadataSize > len(content)-offset {
+			return nil, fmt.Errorf("invalid playlist index metadata %d", index)
+		}
+		offset += metadataSize
+		names[strings.ToLower(id)] = name
+	}
+	return names, nil
 }
 
 func playlistItemFromReference(entry remoteEntry, reference, label string, position int) (playlistItem, error) {

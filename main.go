@@ -1427,6 +1427,9 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	if trackCount > recordBytes/68 {
 		return nil, fmt.Errorf("invalid FPL track count")
 	}
+	if trackCount == 0 {
+		return []playlistItem{}, nil
+	}
 	fileOffsets := make([]uint32, 0, int(trackCount))
 	err = func() error {
 		body, err := openDropboxDownload(ctx, token, entry.ID, fmt.Sprintf("bytes=%d-", recordStart))

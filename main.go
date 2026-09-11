@@ -80,6 +80,7 @@ type track struct {
 	Bitrate     int64                `json:"bitrate"`
 	Tags        map[string]string    `json:"tags,omitempty"`
 	Playlists   []playlistMembership `json:"playlists,omitempty"`
+	Smarttag    string               `json:"smarttagDisposition"`
 	IndexedAt   string               `json:"indexedAt"`
 	Deleted     bool                 `json:"deleted,omitempty"`
 }
@@ -614,7 +615,7 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid index record", http.StatusBadRequest)
 		return
 	}
-	if item.ID == "" || item.Rev == "" || item.Path == "" || item.Name == "" || strings.TrimSpace(item.Artist) == "" {
+	if item.ID == "" || item.Rev == "" || item.Path == "" || item.Name == "" || strings.TrimSpace(item.Artist) == "" || strings.TrimSpace(item.Smarttag) == "" {
 		http.Error(w, "incomplete index record", http.StatusBadRequest)
 		return
 	}
@@ -650,6 +651,8 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.catalog[item.ID] = item
 	s.mu.Unlock()
+	memberships, _ := json.Marshal(item.Playlists)
+	log.Printf("FILE_INDEXED path=%q smarttag=%q rev=%q memberships=%s", item.Path, item.Smarttag, item.Rev, memberships)
 	w.WriteHeader(http.StatusNoContent)
 }
 

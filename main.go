@@ -124,6 +124,13 @@ type playlistMembership struct {
 	Position     int    `json:"position"`
 }
 
+type playlistCandidate struct {
+	Source       string       `json:"source"`
+	PlaylistURI  string       `json:"playlistUri"`
+	PlaylistName string       `json:"playlistName"`
+	Item         playlistItem `json:"item"`
+}
+
 type playlistStore struct {
 	Finalized bool       `json:"finalized"`
 	Playlists []playlist `json:"playlists"`
@@ -363,6 +370,7 @@ func runServer(ctx context.Context, cfg config) error {
 	mux.HandleFunc("/api/playlists/import/status", s.playlistImportState)
 	mux.HandleFunc("/api/index", s.indexTrack)
 	mux.HandleFunc("/api/index/playlists", s.indexPlaylists)
+	mux.HandleFunc("/api/index/playlists/candidates", s.indexPlaylistCandidates)
 	mux.HandleFunc("/api/index/playlists/dropbox", s.indexDropboxPlaylists)
 	mux.HandleFunc("/api/index/playlists/finalize", s.finalizePlaylists)
 	mux.HandleFunc("/api/stream/", s.stream)
@@ -614,6 +622,8 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid artist", http.StatusBadRequest)
 		return
 	}
+	item = applyPathIdentity(item)
+	item.Playlists = append(item.Playlists, s.exactPlaylistMemberships(item)...)
 	membershipKeys := make(map[string]struct{}, len(item.Playlists))
 	uniqueMemberships := make([]playlistMembership, 0, len(item.Playlists))
 	for _, membership := range item.Playlists {
@@ -624,7 +634,7 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid playlist membership", http.StatusBadRequest)
 			return
 		}
-		key := membership.Source + "\x00" + membership.PlaylistURI + "\x00" + strconv.Itoa(membership.Position) + "\x00" + normalizeName(membership.Artist) + "\x00" + normalizeName(membership.Album) + "\x00" + normalizeName(membership.Track)
+		key := playlistMembershipKey(membership)
 		if _, exists := membershipKeys[key]; exists {
 			continue
 		}
@@ -632,7 +642,6 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 		uniqueMemberships = append(uniqueMemberships, membership)
 	}
 	item.Playlists = uniqueMemberships
-	item = applyPathIdentity(item)
 	if err := appendTrack(s.cfg.dataPath, item); err != nil {
 		http.Error(w, "catalog write failed", http.StatusInternalServerError)
 		return
@@ -659,6 +668,134 @@ func playlistSourceAllowed(source string) bool {
 		}
 	}
 	return false
+}
+
+func playlistMembershipKey(membership playlistMembership) string {
+	return membership.Source + "\x00" + membership.PlaylistURI + "\x00" + strconv.Itoa(membership.Position) + "\x00" + normalizeName(membership.Artist) + "\x00" + normalizeName(membership.Album) + "\x00" + normalizeName(membership.Track)
+}
+
+func playlistMembershipFromItem(definition playlist, source playlistItem, indexed track) playlistMembership {
+	membership := playlistMembership{
+		Source:       definition.Source,
+		PlaylistURI:  definition.URI,
+		PlaylistName: definition.Name,
+		ItemURI:      source.URI,
+		Artist:       source.Artist,
+		Album:        source.Album,
+		Track:        source.Track,
+		Position:     source.Position,
+	}
+	if source.AllTracksByArtist {
+		membership.Artist = indexed.Artist
+		membership.Album = indexed.Album
+		membership.Track = indexed.Title
+		membership.Position = -1
+	}
+	return membership
+}
+
+func playlistPathsMatch(left, right string) bool {
+	left = normalizePlaylistPath(left)
+	right = normalizePlaylistPath(right)
+	if left == "" || right == "" {
+		return false
+	}
+	return left == right
+}
+
+func playlistItemExactMatch(source playlistItem, indexed track) bool {
+	if playlistPathsMatch(source.Path, indexed.Path) {
+		return true
+	}
+	if source.AllTracksByArtist {
+		return normalizeName(source.Artist) != "" && normalizeName(source.Artist) == normalizeName(indexed.Artist)
+	}
+	if normalizeName(source.Artist) == "" || normalizeName(source.Album) == "" || normalizeName(source.Track) == "" {
+		return false
+	}
+	return normalizeName(source.Artist) == normalizeName(indexed.Artist) &&
+		normalizeName(source.Album) == normalizeName(indexed.Album) &&
+		normalizeName(source.Track) == normalizeName(indexed.Title)
+}
+
+func playlistItemMayMatch(source playlistItem, indexed track) bool {
+	if playlistItemExactMatch(source, indexed) {
+		return true
+	}
+	pathName := normalizeName(indexed.Path)
+	if source.AllTracksByArtist {
+		artistName := normalizeName(source.Artist)
+		return artistName != "" && strings.Contains(pathName, artistName)
+	}
+	trackName := normalizeName(source.Track)
+	indexedTrack := normalizeName(indexed.Title)
+	if trackName == "" || !(strings.Contains(pathName, trackName) || strings.Contains(trackName, indexedTrack) || strings.Contains(indexedTrack, trackName)) {
+		return false
+	}
+	artistName := normalizeName(source.Artist)
+	if artistName != "" && artistName != normalizeName(indexed.Artist) && !strings.Contains(pathName, artistName) {
+		return false
+	}
+	albumName := normalizeName(source.Album)
+	return albumName == "" || albumName == normalizeName(indexed.Album) || strings.Contains(pathName, albumName)
+}
+
+func (s *server) playlistDefinitions() []playlist {
+	s.mu.RLock()
+	definitions := make([]playlist, 0, len(s.playlists))
+	for _, definition := range s.playlists {
+		definitions = append(definitions, definition)
+	}
+	s.mu.RUnlock()
+	return definitions
+}
+
+func (s *server) exactPlaylistMemberships(indexed track) []playlistMembership {
+	memberships := []playlistMembership{}
+	for _, definition := range s.playlistDefinitions() {
+		for _, source := range definition.Items {
+			if playlistItemExactMatch(source, indexed) {
+				memberships = append(memberships, playlistMembershipFromItem(definition, source, indexed))
+			}
+		}
+	}
+	sort.Slice(memberships, func(i, j int) bool {
+		return playlistMembershipKey(memberships[i]) < playlistMembershipKey(memberships[j])
+	})
+	return memberships
+}
+
+func (s *server) indexPlaylistCandidates(w http.ResponseWriter, r *http.Request) {
+	if !s.indexerAuthenticated(r) {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST required", http.StatusMethodNotAllowed)
+		return
+	}
+	var indexed track
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&indexed); err != nil || strings.TrimSpace(indexed.Path) == "" || strings.TrimSpace(indexed.Artist) == "" {
+		http.Error(w, "invalid path identity", http.StatusBadRequest)
+		return
+	}
+	indexed = applyPathIdentity(indexed)
+	candidates := []playlistCandidate{}
+	for _, definition := range s.playlistDefinitions() {
+		for _, source := range definition.Items {
+			if playlistItemMayMatch(source, indexed) {
+				candidates = append(candidates, playlistCandidate{Source: definition.Source, PlaylistURI: definition.URI, PlaylistName: definition.Name, Item: source})
+			}
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		left := candidates[i].Source + "\x00" + candidates[i].PlaylistURI + "\x00" + strconv.Itoa(candidates[i].Item.Position)
+		right := candidates[j].Source + "\x00" + candidates[j].PlaylistURI + "\x00" + strconv.Itoa(candidates[j].Item.Position)
+		return left < right
+	})
+	writeJSON(w, candidates)
 }
 
 func playlistMap(items []playlist) map[string]playlist {

@@ -1385,6 +1385,7 @@ func parseXMLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 var fplMagic = []byte{0xE1, 0xA0, 0x9C, 0x91, 0xF8, 0x3C, 0x77, 0x42, 0x85, 0x2C, 0x3B, 0xCC, 0x14, 0x01, 0xD3, 0xF2}
 var legacyFPLMagic = []byte{0x00, 0x37, 0x59, 0xDB, 0x44, 0x4D, 0x56, 0x4E, 0x80, 0x34, 0xC6, 0x2A, 0xBA, 0x89, 0xA6, 0xB9}
 var playlistIndexMagic = []byte{0x9B, 0x27, 0xCE, 0xF0, 0xF7, 0xB2, 0xB6, 0x46, 0x9A, 0xCA, 0x0F, 0x02, 0x2B, 0x2D, 0x9C, 0x78}
+var oldPlaylistIndexMagic = []byte{0x40, 0xAB, 0x5C, 0x42, 0x61, 0x5F, 0x34, 0x4E, 0xA6, 0x0D, 0xCA, 0x40, 0x81, 0x23, 0xF6, 0xAD}
 
 func parseFPLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error) {
 	if len(content) < 24 || !bytes.Equal(content[:len(fplMagic)], fplMagic) {
@@ -1562,7 +1563,13 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 }
 
 func parsePlaylistIndex(content []byte) (map[string]string, error) {
-	if len(content) < 24 || !bytes.Equal(content[:len(playlistIndexMagic)], playlistIndexMagic) {
+	if len(content) < 24 {
+		return nil, fmt.Errorf("truncated playlist index")
+	}
+	if bytes.Equal(content[:len(oldPlaylistIndexMagic)], oldPlaylistIndexMagic) {
+		return parseOldPlaylistIndex(content)
+	}
+	if !bytes.Equal(content[:len(playlistIndexMagic)], playlistIndexMagic) {
 		return nil, fmt.Errorf("unsupported playlist index signature")
 	}
 	count := int(binary.LittleEndian.Uint32(content[16:20]))
@@ -1603,6 +1610,57 @@ func parsePlaylistIndex(content []byte) (map[string]string, error) {
 		names[strings.ToLower(id)] = name
 	}
 	return names, nil
+}
+
+func parseOldPlaylistIndex(content []byte) (map[string]string, error) {
+	count := int(binary.LittleEndian.Uint32(content[16:20]))
+	names := make(map[string]string, count)
+	for offset := 24; offset+8 <= len(content) && len(names) < count; {
+		filenameSize := int(binary.LittleEndian.Uint32(content[offset : offset+4]))
+		filenameStart := offset + 4
+		filenameEnd := filenameStart + filenameSize
+		if filenameSize < 12 || filenameSize > 32 || filenameEnd+4 > len(content) {
+			offset++
+			continue
+		}
+		filename := string(content[filenameStart:filenameEnd])
+		if !validInternalPlaylistFilename(filename) {
+			offset++
+			continue
+		}
+		nameSize := int(binary.LittleEndian.Uint32(content[filenameEnd : filenameEnd+4]))
+		nameStart := filenameEnd + 4
+		nameEnd := nameStart + nameSize
+		if nameSize < 1 || nameEnd > len(content) {
+			return nil, fmt.Errorf("invalid old playlist index name for %s", filename)
+		}
+		name := strings.ToValidUTF8(string(content[nameStart:nameEnd]), "�")
+		names[strings.ToLower(strings.TrimSuffix(filename, path.Ext(filename)))] = name
+		offset = nameEnd
+	}
+	if len(names) != count {
+		return nil, fmt.Errorf("old playlist index declared %d entries but contained %d", count, len(names))
+	}
+	return names, nil
+}
+
+func validInternalPlaylistFilename(filename string) bool {
+	if !strings.EqualFold(path.Ext(filename), ".fpl") {
+		return false
+	}
+	stem := strings.TrimSuffix(filename, path.Ext(filename))
+	if len(stem) != 8 && !(len(stem) == 13 && stem[8] == '-') {
+		return false
+	}
+	for index, character := range stem {
+		if index == 8 && len(stem) == 13 {
+			continue
+		}
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func playlistItemFromReference(entry remoteEntry, reference, label string, position int) (playlistItem, error) {

@@ -1432,19 +1432,17 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	if entry.Size < 24 {
 		return nil, fmt.Errorf("truncated FPL header")
 	}
-	header, err := downloadDropboxRange(ctx, token, entry.ID, 0, 19)
+	headerEnd := int64(19)
+	if entry.Size == 68 {
+		headerEnd = 67
+	}
+	header, err := downloadDropboxRange(ctx, token, entry.ID, 0, headerEnd)
 	if err != nil {
 		return nil, err
 	}
 	if bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic) {
-		if entry.Size == 68 {
-			tail, err := downloadDropboxRange(ctx, token, entry.ID, 60, 67)
-			if err != nil {
-				return nil, err
-			}
-			if bytes.Equal(tail, make([]byte, len(tail))) {
-				return []playlistItem{}, nil
-			}
+		if entry.Size == 68 && bytes.Equal(header[60:68], make([]byte, 8)) {
+			return []playlistItem{}, nil
 		}
 		return nil, fmt.Errorf("unsupported populated FPL v1.3 layout")
 	}

@@ -1018,7 +1018,7 @@ func playlistSourcesForPath(entry remoteEntry) []string {
 	_, probeExtension := playlistProbeExtensions[extension]
 	parts := strings.Split(strings.TrimPrefix(lower, "/"), "/")
 	underAudioMusic := len(parts) > 1 && parts[0] == "audio" && strings.HasPrefix(parts[1], "music")
-	playlistNamed := strings.Contains(lower, "playlist")
+	playlistNamed := strings.Contains(path.Base(lower), "playlist") || strings.Contains(path.Base(path.Dir(lower)), "playlist")
 	foobarNamed := strings.Contains(lower, "foobar")
 	result := make([]string, 0, 2)
 	if underAudioMusic && (knownExtension || (playlistNamed && probeExtension)) {

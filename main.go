@@ -92,12 +92,13 @@ type remoteEntry struct {
 }
 
 type playlistItem struct {
-	URI      string `json:"uri"`
-	Artist   string `json:"artist"`
-	Album    string `json:"album"`
-	Track    string `json:"track"`
-	Position int    `json:"position"`
-	TrackID  string `json:"trackId,omitempty"`
+	URI               string `json:"uri"`
+	Artist            string `json:"artist"`
+	Album             string `json:"album"`
+	Track             string `json:"track"`
+	Position          int    `json:"position"`
+	TrackID           string `json:"trackId,omitempty"`
+	AllTracksByArtist bool   `json:"allTracksByArtist,omitempty"`
 }
 
 type playlist struct {
@@ -667,9 +668,13 @@ func materializePlaylists(definitions map[string]playlist, catalog map[string]tr
 	items := make(map[string]playlist, len(definitions))
 	for key, definition := range definitions {
 		copyOfDefinition := definition
-		copyOfDefinition.Items = append([]playlistItem(nil), definition.Items...)
-		for i := range copyOfDefinition.Items {
-			copyOfDefinition.Items[i].TrackID = ""
+		copyOfDefinition.Items = make([]playlistItem, 0, len(definition.Items))
+		for _, item := range definition.Items {
+			if item.AllTracksByArtist {
+				continue
+			}
+			item.TrackID = ""
+			copyOfDefinition.Items = append(copyOfDefinition.Items, item)
 		}
 		items[key] = copyOfDefinition
 	}
@@ -692,7 +697,17 @@ func materializePlaylists(definitions map[string]playlist, catalog map[string]tr
 			if !found {
 				current.Items = append(current.Items, playlistItem{URI: membership.ItemURI, Artist: membership.Artist, Album: membership.Album, Track: membership.Track, Position: membership.Position, TrackID: indexed.ID})
 			}
-			sort.SliceStable(current.Items, func(i, j int) bool { return current.Items[i].Position < current.Items[j].Position })
+			sort.SliceStable(current.Items, func(i, j int) bool {
+				leftDynamic := current.Items[i].Position < 0
+				rightDynamic := current.Items[j].Position < 0
+				if leftDynamic != rightDynamic {
+					return !leftDynamic
+				}
+				if leftDynamic {
+					return missingKey(current.Items[i]) < missingKey(current.Items[j])
+				}
+				return current.Items[i].Position < current.Items[j].Position
+			})
 			items[key] = current
 		}
 	}
@@ -755,6 +770,15 @@ func normalizePlaylistDefinitions(input playlistImport, existing playlistStore) 
 		for i := range candidate.Items {
 			candidate.Items[i].Position = i
 			candidate.Items[i].TrackID = ""
+			candidate.Items[i].Artist = strings.TrimSpace(candidate.Items[i].Artist)
+			if candidate.Items[i].AllTracksByArtist {
+				candidate.Items[i].Album = ""
+				candidate.Items[i].Track = ""
+				if candidate.Items[i].Artist == "" {
+					return playlistStore{}, fmt.Errorf("playlist %q has an all-tracks rule without an artist", candidate.Name)
+				}
+				continue
+			}
 			if strings.TrimSpace(candidate.Items[i].Track) == "" {
 				return playlistStore{}, fmt.Errorf("playlist %q has an empty track", candidate.Name)
 			}
@@ -884,6 +908,9 @@ func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
 	for key, definition := range definitions {
 		current := materialized[key]
 		for _, sourceItem := range definition.Items {
+			if sourceItem.AllTracksByArtist {
+				continue
+			}
 			item := materializedItem(current, sourceItem)
 			if item.TrackID != "" {
 				continue

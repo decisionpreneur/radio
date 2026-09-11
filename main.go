@@ -807,6 +807,8 @@ func normalizePlaylistDefinitions(input playlistImport, existing playlistStore) 
 }
 
 func (s *server) storePlaylistDefinitions(input playlistImport) (playlistStore, error) {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
 	state, err := loadPlaylists(s.cfg.playlistPath)
 	if err != nil {
 		return playlistStore{}, err
@@ -863,6 +865,10 @@ var playlistFileExtensions = map[string]struct{}{
 	".pls": {}, ".wax": {}, ".wpl": {}, ".wvx": {}, ".xspf": {}, ".zpl": {},
 }
 
+var playlistProbeExtensions = map[string]struct{}{
+	"": {}, ".cfg": {}, ".dat": {}, ".json": {}, ".txt": {}, ".xml": {},
+}
+
 func (s *server) indexDropboxPlaylists(w http.ResponseWriter, r *http.Request) {
 	if !s.indexerAuthenticated(r) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
@@ -905,9 +911,7 @@ func (s *server) setSourceScanStatus(status playlistSourceScanStatus) {
 
 func (s *server) scanDropboxPlaylists() {
 	status := playlistSourceScanStatus{Running: true}
-	s.importMu.Lock()
 	err := s.runDropboxPlaylistScan(&status)
-	s.importMu.Unlock()
 	status.Running = false
 	if err != nil {
 		status.Error = err.Error()
@@ -976,6 +980,8 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 }
 
 func (s *server) clearPlaylistSources(sources ...string) error {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
 	selected := make(map[string]struct{}, len(sources))
 	for _, source := range sources {
 		selected[source] = struct{}{}
@@ -1007,16 +1013,18 @@ func playlistSourcesForPath(entry remoteEntry) []string {
 		return nil
 	}
 	lower := strings.ToLower(strings.ReplaceAll(entry.PathLower, "\\", "/"))
-	_, knownExtension := playlistFileExtensions[strings.ToLower(path.Ext(lower))]
+	extension := strings.ToLower(path.Ext(lower))
+	_, knownExtension := playlistFileExtensions[extension]
+	_, probeExtension := playlistProbeExtensions[extension]
 	parts := strings.Split(strings.TrimPrefix(lower, "/"), "/")
 	underAudioMusic := len(parts) > 1 && parts[0] == "audio" && strings.HasPrefix(parts[1], "music")
 	playlistNamed := strings.Contains(lower, "playlist")
 	foobarNamed := strings.Contains(lower, "foobar")
 	result := make([]string, 0, 2)
-	if underAudioMusic && (knownExtension || playlistNamed) {
+	if underAudioMusic && (knownExtension || (playlistNamed && probeExtension)) {
 		result = append(result, "Dropbox audio/music*")
 	}
-	if knownExtension || (foobarNamed && playlistNamed) {
+	if knownExtension || (foobarNamed && playlistNamed && probeExtension) {
 		result = append(result, "Foobar2000 legacy")
 	}
 	return result
@@ -1445,8 +1453,6 @@ func (s *server) playlistImportState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) processPlaylistImport(input playlistImport) {
-	s.importMu.Lock()
-	defer s.importMu.Unlock()
 	status := playlistImportStatus{}
 	defer func() {
 		s.mu.Lock()

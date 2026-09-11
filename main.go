@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/aes"
@@ -1114,11 +1115,17 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 			if len(sources) == 0 {
 				continue
 			}
-			content, err := downloadDropboxFile(s.ctx, accessToken, entry.ID)
-			if err != nil {
-				return fmt.Errorf("%s: %w", entry.PathDisplay, err)
+			var items []playlistItem
+			extension := strings.ToLower(path.Ext(entry.Name))
+			if extension == ".fpl" || extension == ".fplite" {
+				items, err = parseRemoteFPLPlaylist(s.ctx, accessToken, entry)
+			} else {
+				var content []byte
+				content, err = downloadDropboxFile(s.ctx, accessToken, entry.ID)
+				if err == nil {
+					items, err = parsePlaylistItems(entry, content)
+				}
 			}
-			items, err := parsePlaylistItems(entry, content)
 			if err != nil {
 				return fmt.Errorf("%s: %w", entry.PathDisplay, err)
 			}
@@ -1187,7 +1194,8 @@ func playlistSourcesForPath(entry remoteEntry) []string {
 	_, probeExtension := playlistProbeExtensions[extension]
 	parts := strings.Split(strings.TrimPrefix(lower, "/"), "/")
 	underAudioMusic := len(parts) > 1 && parts[0] == "audio" && strings.HasPrefix(parts[1], "music")
-	playlistNamed := strings.Contains(path.Base(lower), "playlist") || strings.Contains(path.Base(path.Dir(lower)), "playlist")
+	parentName := path.Base(path.Dir(lower))
+	playlistNamed := strings.Contains(path.Base(lower), "playlist") || parentName == "playlists" || strings.HasPrefix(parentName, "playlists-")
 	foobarNamed := strings.Contains(lower, "foobar")
 	result := make([]string, 0, 2)
 	if underAudioMusic && (knownExtension || (playlistNamed && probeExtension)) {
@@ -1393,6 +1401,125 @@ func parseFPLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 	return items, nil
 }
 
+func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry) ([]playlistItem, error) {
+	if entry.Size < 24 {
+		return nil, fmt.Errorf("truncated FPL header")
+	}
+	header, err := downloadDropboxRange(ctx, token, entry.ID, 0, 19)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(header[:len(fplMagic)], fplMagic) {
+		return nil, fmt.Errorf("unsupported FPL signature")
+	}
+	stringTableSize := int64(binary.LittleEndian.Uint32(header[16:20]))
+	stringEnd := int64(20) + stringTableSize
+	if stringEnd+4 > entry.Size {
+		return nil, fmt.Errorf("invalid FPL string table")
+	}
+	countBytes, err := downloadDropboxRange(ctx, token, entry.ID, stringEnd, stringEnd+3)
+	if err != nil {
+		return nil, err
+	}
+	trackCount := int64(binary.LittleEndian.Uint32(countBytes))
+	recordStart := stringEnd + 4
+	recordBytes := entry.Size - recordStart
+	if trackCount > recordBytes/68 {
+		return nil, fmt.Errorf("invalid FPL track count")
+	}
+	fileOffsets := make([]uint32, 0, int(trackCount))
+	err = func() error {
+		body, err := openDropboxDownload(ctx, token, entry.ID, fmt.Sprintf("bytes=%d-", recordStart))
+		if err != nil {
+			return err
+		}
+		defer body.Close()
+		reader := bufio.NewReaderSize(body, 64<<10)
+		remaining := recordBytes
+		fixed := make([]byte, 68)
+		for index := int64(0); index < trackCount; index++ {
+			if remaining < int64(len(fixed)) {
+				return fmt.Errorf("truncated FPL track %d", index)
+			}
+			if _, err := io.ReadFull(reader, fixed); err != nil {
+				return err
+			}
+			remaining -= int64(len(fixed))
+			fileOffset := binary.LittleEndian.Uint32(fixed[4:8])
+			keysDex := binary.LittleEndian.Uint32(fixed[52:56])
+			if int64(fileOffset) >= stringTableSize || keysDex < 3 {
+				return fmt.Errorf("invalid FPL track %d", index)
+			}
+			keyBytes := int64(keysDex-3) * 4
+			if keyBytes > remaining {
+				return fmt.Errorf("invalid FPL key table %d", index)
+			}
+			if _, err := io.CopyN(io.Discard, reader, keyBytes); err != nil {
+				return err
+			}
+			remaining -= keyBytes
+			fileOffsets = append(fileOffsets, fileOffset)
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, err
+	}
+	orderedOffsets := append([]uint32(nil), fileOffsets...)
+	sort.Slice(orderedOffsets, func(i, j int) bool { return orderedOffsets[i] < orderedOffsets[j] })
+	uniqueOffsets := orderedOffsets[:0]
+	for _, offset := range orderedOffsets {
+		if len(uniqueOffsets) == 0 || uniqueOffsets[len(uniqueOffsets)-1] != offset {
+			uniqueOffsets = append(uniqueOffsets, offset)
+		}
+	}
+	pathsByOffset := make(map[uint32]string, len(uniqueOffsets))
+	if len(uniqueOffsets) > 0 {
+		err = func() error {
+			body, err := openDropboxDownload(ctx, token, entry.ID, fmt.Sprintf("bytes=20-%d", stringEnd-1))
+			if err != nil {
+				return err
+			}
+			defer body.Close()
+			reader := bufio.NewReaderSize(body, 64<<10)
+			position := int64(0)
+			for _, offset := range uniqueOffsets {
+				target := int64(offset)
+				if target < position {
+					return fmt.Errorf("overlapping FPL string offset %d", offset)
+				}
+				if _, err := io.CopyN(io.Discard, reader, target-position); err != nil {
+					return err
+				}
+				position = target
+				value, err := reader.ReadString(0)
+				if err != nil {
+					return fmt.Errorf("unterminated FPL path %d", offset)
+				}
+				position += int64(len(value))
+				pathsByOffset[offset] = strings.ToValidUTF8(strings.TrimSuffix(value, "\x00"), "�")
+			}
+			return nil
+		}()
+		if err != nil {
+			return nil, err
+		}
+	}
+	items := make([]playlistItem, 0, len(fileOffsets))
+	for index, offset := range fileOffsets {
+		reference, found := pathsByOffset[offset]
+		if !found {
+			return nil, fmt.Errorf("missing FPL path %d", offset)
+		}
+		item, err := playlistItemFromReference(entry, reference, "", len(items))
+		if err != nil {
+			return nil, fmt.Errorf("FPL track %d: %w", index, err)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
 func playlistItemFromReference(entry remoteEntry, reference, label string, position int) (playlistItem, error) {
 	reference = strings.TrimSpace(reference)
 	if reference == "" {
@@ -1435,7 +1562,7 @@ func playlistItemFromReference(entry remoteEntry, reference, label string, posit
 	}, nil
 }
 
-func downloadDropboxFile(ctx context.Context, token, fileID string) ([]byte, error) {
+func openDropboxDownload(ctx context.Context, token, fileID, byteRange string) (io.ReadCloser, error) {
 	argument, _ := json.Marshal(map[string]string{"path": fileID})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dropboxContent+"/files/download", nil)
 	if err != nil {
@@ -1443,16 +1570,41 @@ func downloadDropboxFile(ctx context.Context, token, fileID string) ([]byte, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Dropbox-API-Arg", string(argument))
+	if byteRange != "" {
+		req.Header.Set("Range", byteRange)
+	}
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
-	if response.StatusCode/100 != 2 {
+	if response.StatusCode/100 != 2 || (byteRange != "" && response.StatusCode != http.StatusPartialContent) {
 		failure, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+		response.Body.Close()
 		return nil, fmt.Errorf("Dropbox download: %s: %s", response.Status, strings.TrimSpace(string(failure)))
 	}
-	return io.ReadAll(response.Body)
+	return response.Body, nil
+}
+
+func downloadDropboxFile(ctx context.Context, token, fileID string) ([]byte, error) {
+	body, err := openDropboxDownload(ctx, token, fileID, "")
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+	return io.ReadAll(body)
+}
+
+func downloadDropboxRange(ctx context.Context, token, fileID string, start, end int64) ([]byte, error) {
+	body, err := openDropboxDownload(ctx, token, fileID, fmt.Sprintf("bytes=%d-%d", start, end))
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+	content := make([]byte, end-start+1)
+	if _, err := io.ReadFull(body, content); err != nil {
+		return nil, err
+	}
+	return content, nil
 }
 
 func remotePathMayContain(item playlistItem, entries map[string]remoteEntry) bool {

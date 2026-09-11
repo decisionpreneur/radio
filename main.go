@@ -946,10 +946,10 @@ func normalizePlaylistDefinitions(input playlistImport, existing playlistStore) 
 func (s *server) storePlaylistDefinitions(input playlistImport) (playlistStore, error) {
 	s.importMu.Lock()
 	defer s.importMu.Unlock()
-	state, err := loadPlaylists(s.cfg.playlistPath)
-	if err != nil {
-		return playlistStore{}, err
-	}
+	s.mu.RLock()
+	state := playlistStore{Finalized: s.playlistsFinalized, Playlists: playlistSlice(s.playlists)}
+	s.mu.RUnlock()
+	var err error
 	state, err = normalizePlaylistDefinitions(input, state)
 	if err != nil {
 		return playlistStore{}, err
@@ -1123,10 +1123,9 @@ func (s *server) clearPlaylistSources(sources ...string) error {
 	for _, source := range sources {
 		selected[source] = struct{}{}
 	}
-	state, err := loadPlaylists(s.cfg.playlistPath)
-	if err != nil {
-		return err
-	}
+	s.mu.RLock()
+	state := playlistStore{Finalized: s.playlistsFinalized, Playlists: playlistSlice(s.playlists)}
+	s.mu.RUnlock()
 	kept := state.Playlists[:0]
 	for _, item := range state.Playlists {
 		if _, remove := selected[item.Source]; !remove {

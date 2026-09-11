@@ -866,7 +866,7 @@ var playlistFileExtensions = map[string]struct{}{
 }
 
 var playlistProbeExtensions = map[string]struct{}{
-	"": {}, ".cfg": {}, ".dat": {}, ".json": {}, ".txt": {}, ".xml": {},
+	"": {}, ".json": {}, ".txt": {}, ".xml": {},
 }
 
 func (s *server) indexDropboxPlaylists(w http.ResponseWriter, r *http.Request) {

@@ -178,14 +178,6 @@ func openPlaylistDatabase(databasePath, legacyPath string) (*bolt.DB, error) {
 		database.Close()
 		return nil, err
 	}
-	if err := discardIncompletePlaylistScan(database); err != nil {
-		database.Close()
-		return nil, err
-	}
-	if err := ensurePlaylistIndexes(database); err != nil {
-		database.Close()
-		return nil, err
-	}
 	return database, nil
 }
 
@@ -857,6 +849,7 @@ type server struct {
 	tokenCache       map[[sha256.Size]byte]*dropboxTokenSource
 	catalog          map[string]track
 	playlists        *bolt.DB
+	playlistReady    bool
 	indexerTokens    *dropboxTokenSource
 	importStatus     playlistImportStatus
 	sourceScanStatus playlistSourceScanStatus
@@ -1011,10 +1004,11 @@ func runServer(ctx context.Context, cfg config) error {
 	if err != nil {
 		return err
 	}
-	s := &server{cfg: cfg, ctx: ctx, states: map[string]time.Time{}, sessionAEAD: sessionAEAD, tokenCache: map[[sha256.Size]byte]*dropboxTokenSource{}, catalog: catalog, playlists: playlists}
+	s := &server{cfg: cfg, ctx: ctx, states: map[string]time.Time{}, sessionAEAD: sessionAEAD, tokenCache: map[[sha256.Size]byte]*dropboxTokenSource{}, catalog: catalog, playlists: playlists, sourceScanStatus: playlistSourceScanStatus{Running: true}}
 	if cfg.indexerAppKey != "" && cfg.indexerAppSecret != "" && cfg.indexerRefresh != "" {
 		s.indexerTokens = &dropboxTokenSource{appKey: cfg.indexerAppKey, appSecret: cfg.indexerAppSecret, refreshToken: cfg.indexerRefresh}
 	}
+	go s.preparePlaylistCatalog()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("/auth/dropbox", s.login)
@@ -1265,7 +1259,7 @@ func (s *server) indexTrack(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	sourcesComplete, err := playlistSourceScanCompleted(s.playlists)
+	sourcesComplete, err := s.playlistSourcesAvailable()
 	if err != nil {
 		http.Error(w, "playlist catalog read failed", http.StatusInternalServerError)
 		return
@@ -1623,7 +1617,7 @@ func (s *server) indexPlaylistCandidates(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "POST required", http.StatusMethodNotAllowed)
 		return
 	}
-	sourcesComplete, err := playlistSourceScanCompleted(s.playlists)
+	sourcesComplete, err := s.playlistSourcesAvailable()
 	if err != nil {
 		http.Error(w, "playlist catalog read failed", http.StatusInternalServerError)
 		return
@@ -1922,10 +1916,6 @@ func (s *server) indexDropboxPlaylists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "playlist reader unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if err := markPlaylistSourceScanIncomplete(s.playlists); err != nil {
-		http.Error(w, "playlist catalog write failed", http.StatusInternalServerError)
-		return
-	}
 	s.mu.Lock()
 	if s.sourceScanStatus.Running {
 		status := s.sourceScanStatus
@@ -1933,8 +1923,22 @@ func (s *server) indexDropboxPlaylists(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, status)
 		return
 	}
+	if !s.playlistReady {
+		message := s.sourceScanStatus.Error
+		s.mu.Unlock()
+		if message == "" {
+			message = "playlist catalog preparation incomplete"
+		}
+		http.Error(w, message, http.StatusServiceUnavailable)
+		return
+	}
 	s.sourceScanStatus = playlistSourceScanStatus{Running: true}
 	s.mu.Unlock()
+	if err := markPlaylistSourceScanIncomplete(s.playlists); err != nil {
+		s.setSourceScanStatus(playlistSourceScanStatus{Error: err.Error()})
+		http.Error(w, "playlist catalog write failed", http.StatusInternalServerError)
+		return
+	}
 	go s.scanDropboxPlaylists()
 	w.WriteHeader(http.StatusAccepted)
 }
@@ -1943,6 +1947,33 @@ func (s *server) setSourceScanStatus(status playlistSourceScanStatus) {
 	s.mu.Lock()
 	s.sourceScanStatus = status
 	s.mu.Unlock()
+}
+
+func (s *server) preparePlaylistCatalog() {
+	status := playlistSourceScanStatus{Running: true}
+	err := discardIncompletePlaylistScan(s.playlists)
+	if err == nil {
+		err = ensurePlaylistIndexes(s.playlists)
+	}
+	status.Running = false
+	if err != nil {
+		status.Error = err.Error()
+	}
+	s.mu.Lock()
+	s.playlistReady = err == nil
+	s.sourceScanStatus = status
+	s.mu.Unlock()
+}
+
+func (s *server) playlistSourcesAvailable() (bool, error) {
+	s.mu.RLock()
+	prepared := s.playlistReady
+	running := s.sourceScanStatus.Running
+	s.mu.RUnlock()
+	if !prepared || running {
+		return false, nil
+	}
+	return playlistSourceScanCompleted(s.playlists)
 }
 
 func (s *server) scanDropboxPlaylists() {
@@ -2801,7 +2832,7 @@ func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "playlist writer unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	sourcesComplete, err := playlistSourceScanCompleted(s.playlists)
+	sourcesComplete, err := s.playlistSourcesAvailable()
 	if err != nil {
 		http.Error(w, "playlist catalog read failed", http.StatusInternalServerError)
 		return

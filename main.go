@@ -2852,45 +2852,45 @@ func normalizedPathSuffixes(value string) []string {
 	return result
 }
 
-func buildRemotePathEvidence(entries map[string]remoteEntry) remotePathEvidence {
-	evidence := remotePathEvidence{
-		exact:        make(map[string]struct{}, len(entries)),
-		exactTrimmed: make(map[string]struct{}, len(entries)),
-		suffixes:     make(map[string]struct{}, len(entries)*3),
-		identities:   make(map[string]struct{}, len(entries)),
+func newRemotePathEvidence() remotePathEvidence {
+	return remotePathEvidence{
+		exact:        map[string]struct{}{},
+		exactTrimmed: map[string]struct{}{},
+		suffixes:     map[string]struct{}{},
+		identities:   map[string]struct{}{},
 		tracks:       map[string][]int{},
-		normalized:   make([]string, 0, len(entries)),
+		normalized:   []string{},
 		trigrams:     map[string][]int{},
 	}
-	for _, entry := range entries {
-		remotePath := normalizePlaylistPath(entry.PathDisplay)
-		evidence.exact[remotePath] = struct{}{}
-		evidence.exactTrimmed[strings.TrimPrefix(remotePath, "/")] = struct{}{}
-		for _, suffix := range normalizedPathSuffixes(remotePath) {
-			evidence.suffixes[suffix] = struct{}{}
-		}
-		if identity := playlistPathIdentity(entry.PathDisplay); identity != "" {
-			evidence.identities[identity] = struct{}{}
-		}
-		pathName := normalizeName(entry.PathDisplay)
-		pathIndex := len(evidence.normalized)
-		evidence.normalized = append(evidence.normalized, pathName)
-		filename := path.Base(strings.ReplaceAll(entry.PathDisplay, "\\", "/"))
-		stem := strings.TrimSuffix(filename, path.Ext(filename))
-		for _, trackName := range playlistTrackIndexValues(playlistItem{Track: stem}) {
-			evidence.tracks[trackName] = append(evidence.tracks[trackName], pathIndex)
-		}
-		seenTrigrams := map[string]struct{}{}
-		for start := 0; start+3 <= len(pathName); start++ {
-			trigram := pathName[start : start+3]
-			if _, exists := seenTrigrams[trigram]; exists {
-				continue
-			}
-			seenTrigrams[trigram] = struct{}{}
-			evidence.trigrams[trigram] = append(evidence.trigrams[trigram], pathIndex)
-		}
+}
+
+func (evidence *remotePathEvidence) add(entry remoteEntry) {
+	remotePath := normalizePlaylistPath(entry.PathDisplay)
+	evidence.exact[remotePath] = struct{}{}
+	evidence.exactTrimmed[strings.TrimPrefix(remotePath, "/")] = struct{}{}
+	for _, suffix := range normalizedPathSuffixes(remotePath) {
+		evidence.suffixes[suffix] = struct{}{}
 	}
-	return evidence
+	if identity := playlistPathIdentity(entry.PathDisplay); identity != "" {
+		evidence.identities[identity] = struct{}{}
+	}
+	pathName := normalizeName(entry.PathDisplay)
+	pathIndex := len(evidence.normalized)
+	evidence.normalized = append(evidence.normalized, pathName)
+	filename := path.Base(strings.ReplaceAll(entry.PathDisplay, "\\", "/"))
+	stem := strings.TrimSuffix(filename, path.Ext(filename))
+	for _, trackName := range playlistTrackIndexValues(playlistItem{Track: stem}) {
+		evidence.tracks[trackName] = append(evidence.tracks[trackName], pathIndex)
+	}
+	seenTrigrams := map[string]struct{}{}
+	for start := 0; start+3 <= len(pathName); start++ {
+		trigram := pathName[start : start+3]
+		if _, exists := seenTrigrams[trigram]; exists {
+			continue
+		}
+		seenTrigrams[trigram] = struct{}{}
+		evidence.trigrams[trigram] = append(evidence.trigrams[trigram], pathIndex)
+	}
 }
 
 func (evidence remotePathEvidence) pathCandidates(pattern string) []int {
@@ -3023,13 +3023,14 @@ func (s *server) finalizePlaylists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	remoteFiles, err := listRemoteFiles(r.Context(), accessToken, s.cfg.dropboxRoot)
-	if err != nil {
+	remoteEvidence := newRemotePathEvidence()
+	if err := visitRemoteFiles(r.Context(), accessToken, s.cfg.dropboxRoot, func(entry remoteEntry) error {
+		remoteEvidence.add(entry)
+		return nil
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	remoteEvidence := buildRemotePathEvidence(remoteFiles)
-	remoteFiles = nil
 	matched := make(map[string]struct{})
 	for _, indexed := range catalog {
 		for _, membership := range indexed.Playlists {
@@ -3132,33 +3133,31 @@ func (s *server) processPlaylistImport(input playlistImport) {
 }
 
 func listRemoteFileIDs(ctx context.Context, token, root string) (map[string]struct{}, error) {
-	files, err := listRemoteFiles(ctx, token, root)
-	if err != nil {
-		return nil, err
-	}
-	items := make(map[string]struct{}, len(files))
-	for id := range files {
-		items[id] = struct{}{}
-	}
-	return items, nil
+	items := map[string]struct{}{}
+	err := visitRemoteFiles(ctx, token, root, func(entry remoteEntry) error {
+		items[entry.ID] = struct{}{}
+		return nil
+	})
+	return items, err
 }
 
-func listRemoteFiles(ctx context.Context, token, root string) (map[string]remoteEntry, error) {
+func visitRemoteFiles(ctx context.Context, token, root string, visitor func(remoteEntry) error) error {
 	requestBody := map[string]any{"path": root, "recursive": true, "include_deleted": false, "limit": 2000}
 	endpoint := dropboxAPI + "/files/list_folder"
-	items := make(map[string]remoteEntry, 1024)
 	for {
 		var page listFolderResponse
 		if err := dropboxJSON(ctx, token, endpoint, requestBody, &page); err != nil {
-			return nil, err
+			return err
 		}
 		for _, entry := range page.Entries {
 			if entry.Tag == "file" {
-				items[entry.ID] = entry
+				if err := visitor(entry); err != nil {
+					return err
+				}
 			}
 		}
 		if !page.HasMore {
-			return items, nil
+			return nil
 		}
 		requestBody = map[string]any{"cursor": page.Cursor}
 		endpoint = dropboxAPI + "/files/list_folder/continue"

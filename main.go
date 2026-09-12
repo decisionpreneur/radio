@@ -204,6 +204,7 @@ var playlistSourceScanIndexesBucket = []byte("source-scan-indexes")
 
 const playlistIndexVersion byte = 3
 const playlistBatchSize = 32768
+const fplRecordLayoutVersion = 1
 
 func openPlaylistDatabase(databasePath, legacyPath string) (*bolt.DB, error) {
 	database, err := bolt.Open(databasePath, 0o600, &bolt.Options{FreelistType: bolt.FreelistMapType, NoFreelistSync: true})
@@ -964,13 +965,15 @@ type playlistSourceScanStatus struct {
 }
 
 type playlistSourceScanCheckpoint struct {
-	Phase       string `json:"phase"`
-	Cursor      string `json:"cursor,omitempty"`
-	EntryOffset int    `json:"entryOffset,omitempty"`
-	Pages       int    `json:"pages"`
-	Candidates  int    `json:"candidates"`
-	Playlists   int    `json:"playlists"`
-	Tracks      int    `json:"tracks"`
+	Phase                 string `json:"phase"`
+	Cursor                string `json:"cursor,omitempty"`
+	EntryOffset           int    `json:"entryOffset,omitempty"`
+	FPLRecordLayout       int    `json:"fplRecordLayout,omitempty"`
+	ReprocessCurrentEntry bool   `json:"reprocessCurrentEntry,omitempty"`
+	Pages                 int    `json:"pages"`
+	Candidates            int    `json:"candidates"`
+	Playlists             int    `json:"playlists"`
+	Tracks                int    `json:"tracks"`
 }
 
 type listFolderResponse struct {
@@ -2209,6 +2212,14 @@ func (s *server) setSourceScanStatus(status playlistSourceScanStatus) {
 func (s *server) preparePlaylistCatalog() {
 	status := playlistSourceScanStatus{Running: true}
 	checkpoint, resume, err := loadPlaylistSourceScanCheckpoint(s.playlists)
+	if err == nil && resume && checkpoint.FPLRecordLayout < fplRecordLayoutVersion {
+		if checkpoint.Phase == "playlists" && checkpoint.EntryOffset > 0 {
+			checkpoint.EntryOffset--
+			checkpoint.ReprocessCurrentEntry = true
+		}
+		checkpoint.FPLRecordLayout = fplRecordLayoutVersion
+		err = savePlaylistSourceScanCheckpoint(s.playlists, checkpoint)
+	}
 	if err == nil && !resume {
 		err = discardIncompletePlaylistScan(s.playlists)
 	}
@@ -2265,7 +2276,7 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 		if err := s.clearPlaylistSources("Dropbox audio/music*", "Foobar2000 legacy"); err != nil {
 			return err
 		}
-		checkpoint = playlistSourceScanCheckpoint{Phase: "indexes"}
+		checkpoint = playlistSourceScanCheckpoint{Phase: "indexes", FPLRecordLayout: fplRecordLayoutVersion}
 		if err := s.playlists.Update(func(transaction *bolt.Tx) error {
 			if err := transaction.DeleteBucket(playlistSourceScanIndexesBucket); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
 				return err
@@ -2376,9 +2387,13 @@ func (s *server) scanDropboxPlaylistIndexes(accessToken string, checkpoint *play
 }
 
 func (s *server) advancePlaylistSourceCandidate(checkpoint *playlistSourceScanCheckpoint, status *playlistSourceScanStatus, entryIndex, playlistCount, trackCount int) error {
-	checkpoint.Candidates++
-	checkpoint.Playlists += playlistCount
-	checkpoint.Tracks += trackCount
+	if checkpoint.ReprocessCurrentEntry {
+		checkpoint.ReprocessCurrentEntry = false
+	} else {
+		checkpoint.Candidates++
+		checkpoint.Playlists += playlistCount
+		checkpoint.Tracks += trackCount
+	}
 	checkpoint.EntryOffset = entryIndex + 1
 	if err := savePlaylistSourceScanCheckpoint(s.playlists, *checkpoint); err != nil {
 		return err
@@ -2741,7 +2756,6 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 	stringStart := int64(20)
 	stringTableSize := int64(0)
 	recordFixedSize := int64(68)
-	fileOffsetStart := 4
 	switch {
 	case bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic):
 		payloadOffset := bytes.Index(header[len(legacyFPLMagic):], legacyFPLPayloadMagic)
@@ -2757,7 +2771,6 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 		stringTableSize = int64(binary.LittleEndian.Uint32(header[sizeOffset : sizeOffset+4]))
 		if stringStart == 88 {
 			recordFixedSize = 76
-			fileOffsetStart = 0
 		}
 		if stringStart+4 == entry.Size && stringTableSize == 0 && bytes.Equal(header[stringStart:stringStart+4], make([]byte, 4)) {
 			return 0, nil
@@ -2802,7 +2815,7 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 				return err
 			}
 			remaining -= int64(len(fixed))
-			fileOffset := binary.LittleEndian.Uint32(fixed[fileOffsetStart : fileOffsetStart+4])
+			fileOffset := binary.LittleEndian.Uint32(fixed[4:8])
 			keysDex := binary.LittleEndian.Uint32(fixed[52:56])
 			if int64(fileOffset) >= stringTableSize || keysDex < 3 {
 				return fmt.Errorf("invalid FPL track %d", index)

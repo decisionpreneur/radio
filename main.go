@@ -2755,7 +2755,8 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 	}
 	stringStart := int64(20)
 	stringTableSize := int64(0)
-	recordFixedSize := int64(68)
+	recordMinimumSize := int64(68)
+	legacyV14 := false
 	switch {
 	case bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic):
 		payloadOffset := bytes.Index(header[len(legacyFPLMagic):], legacyFPLPayloadMagic)
@@ -2770,7 +2771,8 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 		stringStart = int64(sizeOffset + 4)
 		stringTableSize = int64(binary.LittleEndian.Uint32(header[sizeOffset : sizeOffset+4]))
 		if stringStart == 88 {
-			recordFixedSize = 76
+			legacyV14 = true
+			recordMinimumSize = 12
 		}
 		if stringStart+4 == entry.Size && stringTableSize == 0 && bytes.Equal(header[stringStart:stringStart+4], make([]byte, 4)) {
 			return 0, nil
@@ -2791,7 +2793,7 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 	trackCount := int64(binary.LittleEndian.Uint32(countBytes))
 	recordStart := stringEnd + 4
 	recordBytes := entry.Size - recordStart
-	if trackCount > recordBytes/recordFixedSize {
+	if trackCount > recordBytes/recordMinimumSize {
 		return 0, fmt.Errorf("invalid FPL track count")
 	}
 	if trackCount == 0 {
@@ -2806,29 +2808,53 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 		defer body.Close()
 		reader := bufio.NewReaderSize(body, 64<<10)
 		remaining := recordBytes
-		fixed := make([]byte, recordFixedSize)
 		for index := int64(0); index < trackCount; index++ {
-			if remaining < int64(len(fixed)) {
+			if remaining < recordMinimumSize {
 				return fmt.Errorf("truncated FPL track %d", index)
 			}
-			if _, err := io.ReadFull(reader, fixed); err != nil {
+			peekSize := int(recordMinimumSize)
+			if legacyV14 && remaining >= 76 {
+				peekSize = 76
+			}
+			fixed, err := reader.Peek(peekSize)
+			if err != nil {
 				return err
 			}
-			remaining -= int64(len(fixed))
 			fileOffset := binary.LittleEndian.Uint32(fixed[4:8])
-			keysDex := binary.LittleEndian.Uint32(fixed[52:56])
-			if int64(fileOffset) >= stringTableSize || keysDex < 3 {
+			if int64(fileOffset) >= stringTableSize {
 				return fmt.Errorf("invalid FPL track %d", index)
 			}
-			keyBytes := int64(keysDex-3) * 4
-			if keyBytes > remaining {
+			recordSize := int64(68)
+			keyBytes := int64(0)
+			if legacyV14 {
+				recordSize = 12
+				if len(fixed) == 76 {
+					keysDex := binary.LittleEndian.Uint32(fixed[52:56])
+					keySecond := binary.LittleEndian.Uint32(fixed[60:64])
+					keySecondOffset := binary.LittleEndian.Uint32(fixed[64:68])
+					if keysDex >= 3 && uint64(keySecondOffset)+2*uint64(keySecond) == uint64(keysDex-3) {
+						recordSize = 76
+						keyBytes = int64(keysDex-3) * 4
+					}
+				}
+			} else {
+				keysDex := binary.LittleEndian.Uint32(fixed[52:56])
+				if keysDex < 3 {
+					return fmt.Errorf("invalid FPL track %d", index)
+				}
+				keyBytes = int64(keysDex-3) * 4
+			}
+			if recordSize+keyBytes > remaining {
 				return fmt.Errorf("invalid FPL key table %d", index)
 			}
-			if _, err := io.CopyN(io.Discard, reader, keyBytes); err != nil {
+			if _, err := io.CopyN(io.Discard, reader, recordSize+keyBytes); err != nil {
 				return err
 			}
-			remaining -= keyBytes
+			remaining -= recordSize + keyBytes
 			fileOffsets = append(fileOffsets, fileOffset)
+		}
+		if remaining != 0 {
+			return fmt.Errorf("trailing FPL record data")
 		}
 		return nil
 	}()

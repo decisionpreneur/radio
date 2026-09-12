@@ -161,7 +161,7 @@ var playlistSourceScanIndexesBucket = []byte("source-scan-indexes")
 const playlistIndexVersion byte = 2
 
 func openPlaylistDatabase(databasePath, legacyPath string) (*bolt.DB, error) {
-	database, err := bolt.Open(databasePath, 0o600, nil)
+	database, err := bolt.Open(databasePath, 0o600, &bolt.Options{FreelistType: bolt.FreelistMapType})
 	if err != nil {
 		return nil, err
 	}

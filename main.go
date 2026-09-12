@@ -197,6 +197,7 @@ var playlistPathlessFallbackIndexBucket = []byte("pathless-fallback-index")
 var playlistFinalizedKey = []byte("finalized")
 var playlistMigrationKey = []byte("legacy-migration-complete")
 var playlistIndexVersionKey = []byte("index-version")
+var playlistIndexResetRequiredKey = []byte("index-reset-required")
 var playlistSourceScanCompleteKey = []byte("source-scan-complete")
 var playlistSourceScanStateKey = []byte("source-scan-state")
 var playlistSourceScanIndexesBucket = []byte("source-scan-indexes")
@@ -793,6 +794,13 @@ func resetPlaylistIndexes(transaction *bolt.Tx) error {
 	return transaction.Bucket(playlistMetaBucket).Delete(playlistIndexVersionKey)
 }
 
+func resetPlaylistIndexesIfRequired(transaction *bolt.Tx) error {
+	if !bytes.Equal(transaction.Bucket(playlistMetaBucket).Get(playlistIndexResetRequiredKey), []byte{1}) {
+		return nil
+	}
+	return resetPlaylistIndexes(transaction)
+}
+
 func deletePlaylistSources(database *bolt.DB, selected map[string]struct{}) error {
 	keys := [][]byte{}
 	if err := database.View(func(transaction *bolt.Tx) error {
@@ -808,6 +816,13 @@ func deletePlaylistSources(database *bolt.DB, selected map[string]struct{}) erro
 		})
 	}); err != nil {
 		return err
+	}
+	if len(keys) > 0 {
+		if err := database.Update(func(transaction *bolt.Tx) error {
+			return transaction.Bucket(playlistMetaBucket).Put(playlistIndexResetRequiredKey, []byte{1})
+		}); err != nil {
+			return err
+		}
 	}
 	for _, key := range keys {
 		if err := database.Update(func(transaction *bolt.Tx) error {
@@ -833,7 +848,7 @@ func discardIncompletePlaylistScan(database *bolt.DB) error {
 		return err
 	}
 	return database.Update(func(transaction *bolt.Tx) error {
-		if err := resetPlaylistIndexes(transaction); err != nil {
+		if err := resetPlaylistIndexesIfRequired(transaction); err != nil {
 			return err
 		}
 		return transaction.Bucket(playlistMetaBucket).Put(playlistFinalizedKey, []byte{0})
@@ -843,7 +858,8 @@ func discardIncompletePlaylistScan(database *bolt.DB) error {
 func ensurePlaylistIndexes(database *bolt.DB) error {
 	current := false
 	if err := database.View(func(transaction *bolt.Tx) error {
-		current = bytes.Equal(transaction.Bucket(playlistMetaBucket).Get(playlistIndexVersionKey), []byte{playlistIndexVersion})
+		metadata := transaction.Bucket(playlistMetaBucket)
+		current = bytes.Equal(metadata.Get(playlistIndexVersionKey), []byte{playlistIndexVersion}) && !bytes.Equal(metadata.Get(playlistIndexResetRequiredKey), []byte{1})
 		return nil
 	}); err != nil {
 		return err
@@ -913,7 +929,11 @@ func ensurePlaylistIndexes(database *bolt.DB) error {
 		}
 	}
 	return database.Update(func(transaction *bolt.Tx) error {
-		return transaction.Bucket(playlistMetaBucket).Put(playlistIndexVersionKey, []byte{playlistIndexVersion})
+		metadata := transaction.Bucket(playlistMetaBucket)
+		if err := metadata.Put(playlistIndexVersionKey, []byte{playlistIndexVersion}); err != nil {
+			return err
+		}
+		return metadata.Delete(playlistIndexResetRequiredKey)
 	})
 }
 
@@ -2397,7 +2417,7 @@ func (s *server) clearPlaylistSources(sources ...string) error {
 		return err
 	}
 	if err := s.playlists.Update(func(transaction *bolt.Tx) error {
-		if err := resetPlaylistIndexes(transaction); err != nil {
+		if err := resetPlaylistIndexesIfRequired(transaction); err != nil {
 			return err
 		}
 		return nil

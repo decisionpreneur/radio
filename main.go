@@ -1781,6 +1781,7 @@ func parseXMLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 
 var fplMagic = []byte{0xE1, 0xA0, 0x9C, 0x91, 0xF8, 0x3C, 0x77, 0x42, 0x85, 0x2C, 0x3B, 0xCC, 0x14, 0x01, 0xD3, 0xF2}
 var legacyFPLMagic = []byte{0x00, 0x37, 0x59, 0xDB, 0x44, 0x4D, 0x56, 0x4E, 0x80, 0x34, 0xC6, 0x2A, 0xBA, 0x89, 0xA6, 0xB9}
+var legacyFPLPayloadMagic = []byte{0xF6, 0x41, 0x59, 0xF9, 0x8B, 0xC8, 0x6E, 0x43, 0x9D, 0x3E, 0xC4, 0x67, 0x87, 0x85, 0xD6, 0x49}
 var playlistIndexMagic = []byte{0x9B, 0x27, 0xCE, 0xF0, 0xF7, 0xB2, 0xB6, 0x46, 0x9A, 0xCA, 0x0F, 0x02, 0x2B, 0x2D, 0x9C, 0x78}
 var oldPlaylistIndexMagic = []byte{0x40, 0xAB, 0x5C, 0x42, 0x61, 0x5F, 0x34, 0x4E, 0xA6, 0x0D, 0xCA, 0x40, 0x81, 0x23, 0xF6, 0xAD}
 
@@ -1829,12 +1830,9 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	if entry.Size < 24 {
 		return nil, fmt.Errorf("truncated FPL header")
 	}
-	headerEnd := int64(19)
-	if entry.Size >= 64 {
-		headerEnd = 63
-	}
-	if entry.Size == 68 {
-		headerEnd = 67
+	headerEnd := entry.Size - 1
+	if headerEnd > 255 {
+		headerEnd = 255
 	}
 	header, err := downloadDropboxRange(ctx, token, entry.ID, 0, headerEnd)
 	if err != nil {
@@ -1844,9 +1842,18 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	stringTableSize := int64(0)
 	switch {
 	case bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic):
-		stringStart = 64
-		stringTableSize = int64(binary.LittleEndian.Uint32(header[60:64]))
-		if entry.Size == 68 && stringTableSize == 0 && bytes.Equal(header[64:68], make([]byte, 4)) {
+		payloadOffset := bytes.Index(header[len(legacyFPLMagic):], legacyFPLPayloadMagic)
+		if payloadOffset < 0 {
+			return nil, fmt.Errorf("missing FPL payload signature")
+		}
+		payloadOffset += len(legacyFPLMagic)
+		sizeOffset := payloadOffset + len(legacyFPLPayloadMagic)
+		if sizeOffset+4 > len(header) {
+			return nil, fmt.Errorf("truncated FPL payload header")
+		}
+		stringStart = int64(sizeOffset + 4)
+		stringTableSize = int64(binary.LittleEndian.Uint32(header[sizeOffset : sizeOffset+4]))
+		if stringStart+4 == entry.Size && stringTableSize == 0 && bytes.Equal(header[stringStart:stringStart+4], make([]byte, 4)) {
 			return []playlistItem{}, nil
 		}
 	case bytes.Equal(header[:len(fplMagic)], fplMagic):

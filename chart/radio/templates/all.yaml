@@ -61,7 +61,6 @@ spec:
               valueFrom: {secretKeyRef: {name: {{ .Values.secrets.indexer }}, key: refresh-token}}
           ports:
             - {name: http, containerPort: 8080}
-          readinessProbe: {httpGet: {path: /health, port: http}, initialDelaySeconds: 2, periodSeconds: 10}
           resources:
             requests: {cpu: 20m, memory: 32Mi}
             limits: {cpu: 250m, memory: 1Gi}

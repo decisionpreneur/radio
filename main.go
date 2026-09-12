@@ -203,9 +203,10 @@ var playlistSourceScanStateKey = []byte("source-scan-state")
 var playlistSourceScanIndexesBucket = []byte("source-scan-indexes")
 
 const playlistIndexVersion byte = 3
+const playlistBatchSize = 32768
 
 func openPlaylistDatabase(databasePath, legacyPath string) (*bolt.DB, error) {
-	database, err := bolt.Open(databasePath, 0o600, &bolt.Options{FreelistType: bolt.FreelistMapType})
+	database, err := bolt.Open(databasePath, 0o600, &bolt.Options{FreelistType: bolt.FreelistMapType, NoFreelistSync: true})
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +332,7 @@ func migrateLegacyPlaylistDefinition(decoder *json.Decoder, database *bolt.DB) e
 	definition := playlist{}
 	initialized := false
 	position := 0
-	batch := make([]playlistItem, 0, 1024)
+	batch := make([]playlistItem, 0, playlistBatchSize)
 	for decoder.More() {
 		keyToken, err := decoder.Token()
 		if err != nil {
@@ -592,9 +593,8 @@ func replacePlaylistDefinition(database *bolt.DB, definition playlist) error {
 	if err != nil {
 		return err
 	}
-	const itemBatchSize = 1024
-	for start := 0; start < len(definition.Items); start += itemBatchSize {
-		end := start + itemBatchSize
+	for start := 0; start < len(definition.Items); start += playlistBatchSize {
+		end := start + playlistBatchSize
 		if end > len(definition.Items) {
 			end = len(definition.Items)
 		}
@@ -881,7 +881,6 @@ func ensurePlaylistIndexes(database *bolt.DB) error {
 	}); err != nil {
 		return err
 	}
-	const indexBatchSize = 1024
 	for _, definitionKey := range definitionKeys {
 		itemCount := 0
 		if err := database.View(func(transaction *bolt.Tx) error {
@@ -893,8 +892,8 @@ func ensurePlaylistIndexes(database *bolt.DB) error {
 		}); err != nil {
 			return err
 		}
-		for start := 0; start < itemCount; start += indexBatchSize {
-			end := start + indexBatchSize
+		for start := 0; start < itemCount; start += playlistBatchSize {
+			end := start + playlistBatchSize
 			if end > itemCount {
 				end = itemCount
 			}

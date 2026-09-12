@@ -616,6 +616,16 @@ func playlistSourceScanCompleted(database *bolt.DB) (bool, error) {
 	return complete, err
 }
 
+func markPlaylistSourceScanIncomplete(database *bolt.DB) error {
+	return database.Update(func(transaction *bolt.Tx) error {
+		metadata := transaction.Bucket(playlistMetaBucket)
+		if err := metadata.Put(playlistSourceScanCompleteKey, []byte{0}); err != nil {
+			return err
+		}
+		return metadata.Put(playlistFinalizedKey, []byte{0})
+	})
+}
+
 func completePlaylistSourceScan(database *bolt.DB) error {
 	return database.Update(func(transaction *bolt.Tx) error {
 		present := make(map[string]struct{}, len(playlistSourceFolders))
@@ -654,22 +664,30 @@ func resetPlaylistIndexes(transaction *bolt.Tx) error {
 	return transaction.Bucket(playlistMetaBucket).Delete(playlistIndexVersionKey)
 }
 
-func deletePlaylistSources(transaction *bolt.Tx, selected map[string]struct{}) error {
-	definitions := transaction.Bucket(playlistDefinitionsBucket)
-	items := transaction.Bucket(playlistItemsBucket)
-	cursor := definitions.Cursor()
-	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-		var definition playlist
-		if err := json.Unmarshal(value, &definition); err != nil {
-			return err
-		}
-		if _, remove := selected[definition.Source]; !remove {
-			continue
-		}
-		if err := items.DeleteBucket(key); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
-			return err
-		}
-		if err := cursor.Delete(); err != nil {
+func deletePlaylistSources(database *bolt.DB, selected map[string]struct{}) error {
+	keys := [][]byte{}
+	if err := database.View(func(transaction *bolt.Tx) error {
+		return transaction.Bucket(playlistDefinitionsBucket).ForEach(func(key, value []byte) error {
+			var definition playlist
+			if err := json.Unmarshal(value, &definition); err != nil {
+				return err
+			}
+			if _, remove := selected[definition.Source]; remove {
+				keys = append(keys, bytes.Clone(key))
+			}
+			return nil
+		})
+	}); err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := database.Update(func(transaction *bolt.Tx) error {
+			items := transaction.Bucket(playlistItemsBucket)
+			if err := items.DeleteBucket(key); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
+				return err
+			}
+			return transaction.Bucket(playlistDefinitionsBucket).Delete(key)
+		}); err != nil {
 			return err
 		}
 	}
@@ -677,19 +695,19 @@ func deletePlaylistSources(transaction *bolt.Tx, selected map[string]struct{}) e
 }
 
 func discardIncompletePlaylistScan(database *bolt.DB) error {
+	complete, err := playlistSourceScanCompleted(database)
+	if err != nil || complete {
+		return err
+	}
+	selected := map[string]struct{}{"Dropbox audio/music*": {}, "Foobar2000 legacy": {}}
+	if err := deletePlaylistSources(database, selected); err != nil {
+		return err
+	}
 	return database.Update(func(transaction *bolt.Tx) error {
-		metadata := transaction.Bucket(playlistMetaBucket)
-		if bytes.Equal(metadata.Get(playlistSourceScanCompleteKey), []byte{1}) {
-			return nil
-		}
-		selected := map[string]struct{}{"Dropbox audio/music*": {}, "Foobar2000 legacy": {}}
-		if err := deletePlaylistSources(transaction, selected); err != nil {
-			return err
-		}
 		if err := resetPlaylistIndexes(transaction); err != nil {
 			return err
 		}
-		return metadata.Put(playlistFinalizedKey, []byte{0})
+		return transaction.Bucket(playlistMetaBucket).Put(playlistFinalizedKey, []byte{0})
 	})
 }
 
@@ -1904,6 +1922,10 @@ func (s *server) indexDropboxPlaylists(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "playlist reader unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	if err := markPlaylistSourceScanIncomplete(s.playlists); err != nil {
+		http.Error(w, "playlist catalog write failed", http.StatusInternalServerError)
+		return
+	}
 	s.mu.Lock()
 	if s.sourceScanStatus.Running {
 		status := s.sourceScanStatus
@@ -2030,18 +2052,17 @@ func (s *server) clearPlaylistSources(sources ...string) error {
 	for _, source := range sources {
 		selected[source] = struct{}{}
 	}
+	if err := markPlaylistSourceScanIncomplete(s.playlists); err != nil {
+		return err
+	}
+	if err := deletePlaylistSources(s.playlists, selected); err != nil {
+		return err
+	}
 	if err := s.playlists.Update(func(transaction *bolt.Tx) error {
-		if err := deletePlaylistSources(transaction, selected); err != nil {
-			return err
-		}
 		if err := resetPlaylistIndexes(transaction); err != nil {
 			return err
 		}
-		metadata := transaction.Bucket(playlistMetaBucket)
-		if err := metadata.Put(playlistSourceScanCompleteKey, []byte{0}); err != nil {
-			return err
-		}
-		return metadata.Put(playlistFinalizedKey, []byte{0})
+		return nil
 	}); err != nil {
 		return err
 	}

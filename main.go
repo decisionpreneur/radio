@@ -238,9 +238,7 @@ func migrateLegacyPlaylistDatabase(database *bolt.DB, legacyPath string) error {
 				if err := decoder.Decode(&definition); err != nil {
 					return err
 				}
-				if err := database.Update(func(transaction *bolt.Tx) error {
-					return putPlaylistDefinition(transaction, definition)
-				}); err != nil {
+				if err := replacePlaylistDefinition(database, definition); err != nil {
 					return err
 				}
 			}
@@ -279,7 +277,7 @@ func playlistPositionKey(position int) []byte {
 	return key
 }
 
-func putPlaylistDefinition(transaction *bolt.Tx, definition playlist) error {
+func replacePlaylistDefinition(database *bolt.DB, definition playlist) error {
 	key := []byte(playlistKey(definition))
 	metadata := definition
 	metadata.Items = nil
@@ -287,25 +285,40 @@ func putPlaylistDefinition(transaction *bolt.Tx, definition playlist) error {
 	if err != nil {
 		return err
 	}
-	if err := transaction.Bucket(playlistDefinitionsBucket).Put(key, value); err != nil {
-		return err
-	}
-	items := transaction.Bucket(playlistItemsBucket)
-	if err := items.DeleteBucket(key); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
-		return err
-	}
-	itemBucket, err := items.CreateBucket(key)
-	if err != nil {
-		return err
-	}
-	for position := range definition.Items {
-		definition.Items[position].Position = position
-		definition.Items[position].TrackID = ""
-		value, err := json.Marshal(definition.Items[position])
-		if err != nil {
+	if err := database.Update(func(transaction *bolt.Tx) error {
+		if err := transaction.Bucket(playlistDefinitionsBucket).Put(key, value); err != nil {
 			return err
 		}
-		if err := itemBucket.Put(playlistPositionKey(position), value); err != nil {
+		items := transaction.Bucket(playlistItemsBucket)
+		if err := items.DeleteBucket(key); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
+			return err
+		}
+		_, err := items.CreateBucket(key)
+		return err
+	}); err != nil {
+		return err
+	}
+	const itemBatchSize = 1024
+	for start := 0; start < len(definition.Items); start += itemBatchSize {
+		end := start + itemBatchSize
+		if end > len(definition.Items) {
+			end = len(definition.Items)
+		}
+		if err := database.Update(func(transaction *bolt.Tx) error {
+			itemBucket := transaction.Bucket(playlistItemsBucket).Bucket(key)
+			for position := start; position < end; position++ {
+				definition.Items[position].Position = position
+				definition.Items[position].TrackID = ""
+				value, err := json.Marshal(definition.Items[position])
+				if err != nil {
+					return err
+				}
+				if err := itemBucket.Put(playlistPositionKey(position), value); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
 	}
@@ -1270,14 +1283,14 @@ func (s *server) storePlaylistDefinitions(input playlistImport) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if err := s.playlists.Update(func(transaction *bolt.Tx) error {
-			if err := putPlaylistDefinition(transaction, definition); err != nil {
-				return err
-			}
-			return transaction.Bucket(playlistMetaBucket).Put(playlistFinalizedKey, []byte{0})
-		}); err != nil {
+		if err := replacePlaylistDefinition(s.playlists, definition); err != nil {
 			return 0, err
 		}
+	}
+	if err := s.playlists.Update(func(transaction *bolt.Tx) error {
+		return transaction.Bucket(playlistMetaBucket).Put(playlistFinalizedKey, []byte{0})
+	}); err != nil {
+		return 0, err
 	}
 	count := 0
 	err := s.playlists.View(func(transaction *bolt.Tx) error {

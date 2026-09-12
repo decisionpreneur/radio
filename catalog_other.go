@@ -8,6 +8,8 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sort"
+	"strings"
 )
 
 func loadTracks(path string) (map[string]track, error) {
@@ -29,11 +31,43 @@ func loadTracks(path string) (map[string]track, error) {
 		}
 		if item.Deleted {
 			delete(items, item.ID)
-		} else {
-			items[item.ID] = item
+		} else if strings.TrimSpace(item.Smarttag) != "" {
+			items[item.ID] = applyPathIdentity(item)
 		}
 	}
 	return items, scanner.Err()
+}
+
+func replaceTrackIndex(path string, items map[string]track) error {
+	if len(items) == 0 {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	file, err := os.OpenFile(path, os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if err := file.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	ids := make([]string, 0, len(items))
+	for id := range items {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	encoder := json.NewEncoder(file)
+	for _, id := range ids {
+		if err := encoder.Encode(items[id]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func appendTrack(path string, item track) error {

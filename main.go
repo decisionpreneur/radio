@@ -16,6 +16,9 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"log"
 	"net/http"
@@ -44,6 +47,44 @@ const (
 	dropboxToken   = "https://api.dropboxapi.com/oauth2/token"
 	sessionMaxAge  = 400 * 24 * 60 * 60
 )
+
+var appIcon192 = renderAppIcon(192)
+var appIcon512 = renderAppIcon(512)
+
+const appManifest = `{"id":"/","name":"Vandrowka Radio","short_name":"Radio","description":"Your Dropbox-backed phonoteca.","start_url":"/","scope":"/","display":"standalone","background_color":"#090a0d","theme_color":"#1ed760","icons":[{"src":"/app-icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},{"src":"/app-icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}`
+
+func renderAppIcon(size int) []byte {
+	canvas := image.NewRGBA(image.Rect(0, 0, size, size))
+	background := color.RGBA{R: 9, G: 10, B: 13, A: 255}
+	accent := color.RGBA{R: 30, G: 215, B: 96, A: 255}
+	foreground := color.RGBA{R: 6, G: 17, B: 8, A: 255}
+	center := size / 2
+	radius := size * 42 / 100
+	for y := 0; y < size; y++ {
+		for x := 0; x < size; x++ {
+			canvas.SetRGBA(x, y, background)
+			dx, dy := x-center, y-center
+			if dx*dx+dy*dy <= radius*radius {
+				canvas.SetRGBA(x, y, accent)
+			}
+		}
+	}
+	start, end := size*29/100, size*72/100
+	thickness := size * 4 / 100
+	for y := start; y <= end; y++ {
+		offset := (y - start) * (size * 21 / 100) / (end - start)
+		left, right := size*29/100+offset, size*71/100-offset
+		for x := left - thickness; x <= left+thickness; x++ {
+			canvas.SetRGBA(x, y, foreground)
+		}
+		for x := right - thickness; x <= right+thickness; x++ {
+			canvas.SetRGBA(x, y, foreground)
+		}
+	}
+	var output bytes.Buffer
+	_ = png.Encode(&output, canvas)
+	return output.Bytes()
+}
 
 type config struct {
 	listenAddr         string
@@ -1132,6 +1173,9 @@ func runServer(ctx context.Context, cfg config) error {
 	mux.HandleFunc("/api/index/playlists/dropbox", s.indexDropboxPlaylists)
 	mux.HandleFunc("/api/index/playlists/finalize", s.finalizePlaylists)
 	mux.HandleFunc("/api/stream/", s.stream)
+	mux.HandleFunc("/manifest.webmanifest", serveAppManifest)
+	mux.HandleFunc("/app-icon-192.png", serveAppIcon(appIcon192))
+	mux.HandleFunc("/app-icon-512.png", serveAppIcon(appIcon512))
 	mux.HandleFunc("/", s.index)
 	handler := securityHeaders(mux)
 	httpServer := &http.Server{Addr: cfg.listenAddr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
@@ -1148,6 +1192,20 @@ func runServer(ctx context.Context, cfg config) error {
 			return nil
 		}
 		return err
+	}
+}
+
+func serveAppManifest(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = io.WriteString(w, appManifest)
+}
+
+func serveAppIcon(icon []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(icon)
 	}
 }
 

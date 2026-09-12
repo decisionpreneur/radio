@@ -2739,6 +2739,8 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 	}
 	stringStart := int64(20)
 	stringTableSize := int64(0)
+	recordFixedSize := int64(68)
+	fileOffsetStart := 4
 	switch {
 	case bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic):
 		payloadOffset := bytes.Index(header[len(legacyFPLMagic):], legacyFPLPayloadMagic)
@@ -2752,6 +2754,10 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 		}
 		stringStart = int64(sizeOffset + 4)
 		stringTableSize = int64(binary.LittleEndian.Uint32(header[sizeOffset : sizeOffset+4]))
+		if stringStart == 88 {
+			recordFixedSize = 76
+			fileOffsetStart = 0
+		}
 		if stringStart+4 == entry.Size && stringTableSize == 0 && bytes.Equal(header[stringStart:stringStart+4], make([]byte, 4)) {
 			return 0, nil
 		}
@@ -2771,7 +2777,7 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 	trackCount := int64(binary.LittleEndian.Uint32(countBytes))
 	recordStart := stringEnd + 4
 	recordBytes := entry.Size - recordStart
-	if trackCount > recordBytes/68 {
+	if trackCount > recordBytes/recordFixedSize {
 		return 0, fmt.Errorf("invalid FPL track count")
 	}
 	if trackCount == 0 {
@@ -2786,7 +2792,7 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 		defer body.Close()
 		reader := bufio.NewReaderSize(body, 64<<10)
 		remaining := recordBytes
-		fixed := make([]byte, 68)
+		fixed := make([]byte, recordFixedSize)
 		for index := int64(0); index < trackCount; index++ {
 			if remaining < int64(len(fixed)) {
 				return fmt.Errorf("truncated FPL track %d", index)
@@ -2795,7 +2801,7 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 				return err
 			}
 			remaining -= int64(len(fixed))
-			fileOffset := binary.LittleEndian.Uint32(fixed[4:8])
+			fileOffset := binary.LittleEndian.Uint32(fixed[fileOffsetStart : fileOffsetStart+4])
 			keysDex := binary.LittleEndian.Uint32(fixed[52:56])
 			if int64(fileOffset) >= stringTableSize || keysDex < 3 {
 				return fmt.Errorf("invalid FPL track %d", index)

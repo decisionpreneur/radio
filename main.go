@@ -155,6 +155,8 @@ var playlistFinalizedKey = []byte("finalized")
 var playlistMigrationKey = []byte("legacy-migration-complete")
 var playlistIndexVersionKey = []byte("index-version")
 var playlistSourceScanCompleteKey = []byte("source-scan-complete")
+var playlistSourceScanStateKey = []byte("source-scan-state")
+var playlistSourceScanIndexesBucket = []byte("source-scan-indexes")
 
 const playlistIndexVersion byte = 2
 
@@ -608,6 +610,40 @@ func playlistSourceScanCompleted(database *bolt.DB) (bool, error) {
 	return complete, err
 }
 
+func loadPlaylistSourceScanCheckpoint(database *bolt.DB) (playlistSourceScanCheckpoint, bool, error) {
+	checkpoint := playlistSourceScanCheckpoint{}
+	found := false
+	err := database.View(func(transaction *bolt.Tx) error {
+		value := transaction.Bucket(playlistMetaBucket).Get(playlistSourceScanStateKey)
+		if value == nil {
+			return nil
+		}
+		found = true
+		return json.Unmarshal(value, &checkpoint)
+	})
+	return checkpoint, found, err
+}
+
+func savePlaylistSourceScanCheckpoint(database *bolt.DB, checkpoint playlistSourceScanCheckpoint) error {
+	value, err := json.Marshal(checkpoint)
+	if err != nil {
+		return err
+	}
+	return database.Update(func(transaction *bolt.Tx) error {
+		return transaction.Bucket(playlistMetaBucket).Put(playlistSourceScanStateKey, value)
+	})
+}
+
+func playlistSourceScanStatusFromCheckpoint(checkpoint playlistSourceScanCheckpoint) playlistSourceScanStatus {
+	return playlistSourceScanStatus{
+		Running:    true,
+		Pages:      checkpoint.Pages,
+		Candidates: checkpoint.Candidates,
+		Playlists:  checkpoint.Playlists,
+		Tracks:     checkpoint.Tracks,
+	}
+}
+
 func markPlaylistSourceScanIncomplete(database *bolt.DB) error {
 	return database.Update(func(transaction *bolt.Tx) error {
 		metadata := transaction.Bucket(playlistMetaBucket)
@@ -636,7 +672,14 @@ func completePlaylistSourceScan(database *bolt.DB) error {
 				return fmt.Errorf("playlist source %q is empty", source)
 			}
 		}
-		return transaction.Bucket(playlistMetaBucket).Put(playlistSourceScanCompleteKey, []byte{1})
+		if err := transaction.DeleteBucket(playlistSourceScanIndexesBucket); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
+			return err
+		}
+		metadata := transaction.Bucket(playlistMetaBucket)
+		if err := metadata.Delete(playlistSourceScanStateKey); err != nil {
+			return err
+		}
+		return metadata.Put(playlistSourceScanCompleteKey, []byte{1})
 	})
 }
 
@@ -804,6 +847,15 @@ type playlistSourceScanStatus struct {
 	Playlists  int    `json:"playlists"`
 	Tracks     int    `json:"tracks"`
 	Error      string `json:"error,omitempty"`
+}
+
+type playlistSourceScanCheckpoint struct {
+	Phase      string `json:"phase"`
+	Cursor     string `json:"cursor,omitempty"`
+	Pages      int    `json:"pages"`
+	Candidates int    `json:"candidates"`
+	Playlists  int    `json:"playlists"`
+	Tracks     int    `json:"tracks"`
 }
 
 type listFolderResponse struct {
@@ -1951,11 +2003,18 @@ func (s *server) setSourceScanStatus(status playlistSourceScanStatus) {
 
 func (s *server) preparePlaylistCatalog() {
 	status := playlistSourceScanStatus{Running: true}
-	err := discardIncompletePlaylistScan(s.playlists)
+	checkpoint, resume, err := loadPlaylistSourceScanCheckpoint(s.playlists)
+	if err == nil && !resume {
+		err = discardIncompletePlaylistScan(s.playlists)
+	}
 	if err == nil {
 		err = ensurePlaylistIndexes(s.playlists)
 	}
-	status.Running = false
+	if resume && err == nil {
+		status = playlistSourceScanStatusFromCheckpoint(checkpoint)
+	} else {
+		status.Running = false
+	}
 	if err != nil {
 		status.Error = err.Error()
 	}
@@ -1963,6 +2022,9 @@ func (s *server) preparePlaylistCatalog() {
 	s.playlistReady = err == nil
 	s.sourceScanStatus = status
 	s.mu.Unlock()
+	if resume && err == nil {
+		go s.scanDropboxPlaylists()
+	}
 }
 
 func (s *server) playlistSourcesAvailable() (bool, error) {
@@ -1978,6 +2040,9 @@ func (s *server) playlistSourcesAvailable() (bool, error) {
 
 func (s *server) scanDropboxPlaylists() {
 	status := playlistSourceScanStatus{Running: true}
+	if checkpoint, found, err := loadPlaylistSourceScanCheckpoint(s.playlists); err == nil && found {
+		status = playlistSourceScanStatusFromCheckpoint(checkpoint)
+	}
 	err := s.runDropboxPlaylistScan(&status)
 	status.Running = false
 	if err != nil {
@@ -1987,27 +2052,130 @@ func (s *server) scanDropboxPlaylists() {
 }
 
 func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error {
-	if err := s.clearPlaylistSources("Dropbox audio/music*", "Foobar2000 legacy"); err != nil {
+	checkpoint, found, err := loadPlaylistSourceScanCheckpoint(s.playlists)
+	if err != nil {
 		return err
 	}
+	if !found {
+		if err := s.clearPlaylistSources("Dropbox audio/music*", "Foobar2000 legacy"); err != nil {
+			return err
+		}
+		checkpoint = playlistSourceScanCheckpoint{Phase: "indexes"}
+		if err := s.playlists.Update(func(transaction *bolt.Tx) error {
+			if err := transaction.DeleteBucket(playlistSourceScanIndexesBucket); err != nil && !errors.Is(err, bolt.ErrBucketNotFound) {
+				return err
+			}
+			if _, err := transaction.CreateBucket(playlistSourceScanIndexesBucket); err != nil {
+				return err
+			}
+			value, err := json.Marshal(checkpoint)
+			if err != nil {
+				return err
+			}
+			return transaction.Bucket(playlistMetaBucket).Put(playlistSourceScanStateKey, value)
+		}); err != nil {
+			return err
+		}
+	}
+	*status = playlistSourceScanStatusFromCheckpoint(checkpoint)
+	s.setSourceScanStatus(*status)
 	accessToken, err := s.indexerTokens.token(s.ctx)
 	if err != nil {
 		return err
 	}
-	requestBody := map[string]any{"path": "", "recursive": true, "include_deleted": false, "limit": 2000}
-	endpoint := dropboxAPI + "/files/list_folder"
-	playlistIndexes := map[string]remoteEntry{}
-	playlistNames := map[string]map[string]string{}
-	for {
-		var page listFolderResponse
-		if err := dropboxJSON(s.ctx, accessToken, endpoint, requestBody, &page); err != nil {
+	if checkpoint.Phase == "indexes" {
+		if err := s.scanDropboxPlaylistIndexes(accessToken, &checkpoint, status); err != nil {
 			return err
 		}
-		for _, entry := range page.Entries {
+	}
+	if checkpoint.Phase != "playlists" {
+		return fmt.Errorf("invalid playlist source scan phase %q", checkpoint.Phase)
+	}
+	return s.scanDropboxPlaylistFiles(accessToken, &checkpoint, status)
+}
+
+func dropboxSourceScanPage(ctx context.Context, accessToken, cursor string) (listFolderResponse, error) {
+	requestBody := map[string]any{"path": "", "recursive": true, "include_deleted": false, "limit": 2000}
+	endpoint := dropboxAPI + "/files/list_folder"
+	if cursor != "" {
+		requestBody = map[string]any{"cursor": cursor}
+		endpoint = dropboxAPI + "/files/list_folder/continue"
+	}
+	var page listFolderResponse
+	err := dropboxJSON(ctx, accessToken, endpoint, requestBody, &page)
+	return page, err
+}
+
+func storeDropboxPlaylistIndexes(database *bolt.DB, entries []remoteEntry) error {
+	return database.Update(func(transaction *bolt.Tx) error {
+		indexes := transaction.Bucket(playlistSourceScanIndexesBucket)
+		for _, entry := range entries {
 			directory := strings.ToLower(path.Dir(strings.ReplaceAll(entry.PathDisplay, "\\", "/")))
-			if entry.Tag == "file" && strings.EqualFold(entry.Name, "index.dat") && strings.HasPrefix(path.Base(directory), "playlists") {
-				playlistIndexes[directory] = entry
+			if entry.Tag != "file" || !strings.EqualFold(entry.Name, "index.dat") || !strings.HasPrefix(path.Base(directory), "playlists") {
+				continue
 			}
+			value, err := json.Marshal(entry)
+			if err != nil {
+				return err
+			}
+			if err := indexes.Put([]byte(directory), value); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func loadDropboxPlaylistIndex(database *bolt.DB, directory string) (remoteEntry, bool, error) {
+	entry := remoteEntry{}
+	found := false
+	err := database.View(func(transaction *bolt.Tx) error {
+		indexes := transaction.Bucket(playlistSourceScanIndexesBucket)
+		if indexes == nil {
+			return nil
+		}
+		value := indexes.Get([]byte(directory))
+		if value == nil {
+			return nil
+		}
+		found = true
+		return json.Unmarshal(value, &entry)
+	})
+	return entry, found, err
+}
+
+func (s *server) scanDropboxPlaylistIndexes(accessToken string, checkpoint *playlistSourceScanCheckpoint, status *playlistSourceScanStatus) error {
+	for {
+		page, err := dropboxSourceScanPage(s.ctx, accessToken, checkpoint.Cursor)
+		if err != nil {
+			return err
+		}
+		if err := storeDropboxPlaylistIndexes(s.playlists, page.Entries); err != nil {
+			return err
+		}
+		checkpoint.Pages++
+		checkpoint.Cursor = page.Cursor
+		if !page.HasMore {
+			checkpoint.Phase = "playlists"
+			checkpoint.Cursor = ""
+		}
+		if err := savePlaylistSourceScanCheckpoint(s.playlists, *checkpoint); err != nil {
+			return err
+		}
+		*status = playlistSourceScanStatusFromCheckpoint(*checkpoint)
+		s.setSourceScanStatus(*status)
+		if !page.HasMore {
+			return nil
+		}
+	}
+}
+
+func (s *server) scanDropboxPlaylistFiles(accessToken string, checkpoint *playlistSourceScanCheckpoint, status *playlistSourceScanStatus) error {
+	playlistNames := map[string]map[string]string{}
+	for {
+		page, err := dropboxSourceScanPage(s.ctx, accessToken, checkpoint.Cursor)
+		if err != nil {
+			return err
 		}
 		for _, entry := range page.Entries {
 			sources := playlistSourcesForPath(entry)
@@ -2020,7 +2188,11 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 			if extension == ".fpl" || extension == ".fplite" {
 				items, err = parseRemoteFPLPlaylist(s.ctx, accessToken, entry)
 				directory := strings.ToLower(path.Dir(strings.ReplaceAll(entry.PathDisplay, "\\", "/")))
-				if indexEntry, found := playlistIndexes[directory]; found && err == nil {
+				indexEntry, found, indexErr := loadDropboxPlaylistIndex(s.playlists, directory)
+				if indexErr != nil {
+					return indexErr
+				}
+				if found && err == nil {
 					names, loaded := playlistNames[directory]
 					if !loaded {
 						var indexContent []byte
@@ -2056,12 +2228,18 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 			if _, err := s.storePlaylistDefinitions(definitions); err != nil {
 				return err
 			}
-			status.Candidates++
-			status.Playlists += len(definitions.Playlists)
-			status.Tracks += len(items) * len(definitions.Playlists)
+			checkpoint.Candidates++
+			checkpoint.Playlists += len(definitions.Playlists)
+			checkpoint.Tracks += len(items) * len(definitions.Playlists)
+			*status = playlistSourceScanStatusFromCheckpoint(*checkpoint)
 			s.setSourceScanStatus(*status)
 		}
-		status.Pages++
+		checkpoint.Pages++
+		checkpoint.Cursor = page.Cursor
+		if err := savePlaylistSourceScanCheckpoint(s.playlists, *checkpoint); err != nil {
+			return err
+		}
+		*status = playlistSourceScanStatusFromCheckpoint(*checkpoint)
 		s.setSourceScanStatus(*status)
 		if !page.HasMore {
 			if err := completePlaylistSourceScan(s.playlists); err != nil {
@@ -2071,8 +2249,6 @@ func (s *server) runDropboxPlaylistScan(status *playlistSourceScanStatus) error 
 			s.setSourceScanStatus(*status)
 			return nil
 		}
-		requestBody = map[string]any{"cursor": page.Cursor}
-		endpoint = dropboxAPI + "/files/list_folder/continue"
 	}
 }
 

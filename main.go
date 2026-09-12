@@ -234,11 +234,7 @@ func migrateLegacyPlaylistDatabase(database *bolt.DB, legacyPath string) error {
 				return fmt.Errorf("invalid legacy playlist array")
 			}
 			for decoder.More() {
-				var definition playlist
-				if err := decoder.Decode(&definition); err != nil {
-					return err
-				}
-				if err := replacePlaylistDefinition(database, definition); err != nil {
+				if err := migrateLegacyPlaylistDefinition(decoder, database); err != nil {
 					return err
 				}
 			}
@@ -271,6 +267,95 @@ func migrateLegacyPlaylistDatabase(database *bolt.DB, legacyPath string) error {
 	return os.Remove(legacyPath)
 }
 
+func migrateLegacyPlaylistDefinition(decoder *json.Decoder, database *bolt.DB) error {
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return fmt.Errorf("invalid legacy playlist definition")
+	}
+	definition := playlist{}
+	initialized := false
+	position := 0
+	batch := make([]playlistItem, 0, 1024)
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return fmt.Errorf("invalid legacy playlist definition field")
+		}
+		switch key {
+		case "source":
+			if err := decoder.Decode(&definition.Source); err != nil {
+				return err
+			}
+		case "uri":
+			if err := decoder.Decode(&definition.URI); err != nil {
+				return err
+			}
+		case "name":
+			if err := decoder.Decode(&definition.Name); err != nil {
+				return err
+			}
+		case "items":
+			if definition.Source == "" || definition.URI == "" || definition.Name == "" {
+				return fmt.Errorf("legacy playlist items precede identity")
+			}
+			playlistKey, err := beginPlaylistDefinition(database, definition)
+			if err != nil {
+				return err
+			}
+			initialized = true
+			opening, err := decoder.Token()
+			if err != nil || opening != json.Delim('[') {
+				return fmt.Errorf("invalid legacy playlist items")
+			}
+			for decoder.More() {
+				var item playlistItem
+				if err := decoder.Decode(&item); err != nil {
+					return err
+				}
+				batch = append(batch, item)
+				if len(batch) == cap(batch) {
+					if err := appendPlaylistItemBatch(database, playlistKey, batch, position); err != nil {
+						return err
+					}
+					position += len(batch)
+					batch = batch[:0]
+				}
+			}
+			if closing, err := decoder.Token(); err != nil || closing != json.Delim(']') {
+				return fmt.Errorf("invalid legacy playlist items ending")
+			}
+			if len(batch) > 0 {
+				if err := appendPlaylistItemBatch(database, playlistKey, batch, position); err != nil {
+					return err
+				}
+				position += len(batch)
+				batch = batch[:0]
+			}
+		case "itemCount":
+			if err := decoder.Decode(&definition.ItemCount); err != nil {
+				return err
+			}
+		default:
+			var discarded any
+			if err := decoder.Decode(&discarded); err != nil {
+				return err
+			}
+		}
+	}
+	if closing, err := decoder.Token(); err != nil || closing != json.Delim('}') {
+		return fmt.Errorf("invalid legacy playlist definition ending")
+	}
+	if !initialized {
+		_, err := beginPlaylistDefinition(database, definition)
+		return err
+	}
+	return nil
+}
+
 func playlistPositionKey(position int) []byte {
 	key := make([]byte, 8)
 	binary.BigEndian.PutUint64(key, uint64(position))
@@ -278,12 +363,30 @@ func playlistPositionKey(position int) []byte {
 }
 
 func replacePlaylistDefinition(database *bolt.DB, definition playlist) error {
+	key, err := beginPlaylistDefinition(database, definition)
+	if err != nil {
+		return err
+	}
+	const itemBatchSize = 1024
+	for start := 0; start < len(definition.Items); start += itemBatchSize {
+		end := start + itemBatchSize
+		if end > len(definition.Items) {
+			end = len(definition.Items)
+		}
+		if err := appendPlaylistItemBatch(database, key, definition.Items[start:end], start); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func beginPlaylistDefinition(database *bolt.DB, definition playlist) ([]byte, error) {
 	key := []byte(playlistKey(definition))
 	metadata := definition
 	metadata.Items = nil
 	value, err := json.Marshal(metadata)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := database.Update(func(transaction *bolt.Tx) error {
 		if err := transaction.Bucket(playlistDefinitionsBucket).Put(key, value); err != nil {
@@ -296,33 +399,28 @@ func replacePlaylistDefinition(database *bolt.DB, definition playlist) error {
 		_, err := items.CreateBucket(key)
 		return err
 	}); err != nil {
-		return err
+		return nil, err
 	}
-	const itemBatchSize = 1024
-	for start := 0; start < len(definition.Items); start += itemBatchSize {
-		end := start + itemBatchSize
-		if end > len(definition.Items) {
-			end = len(definition.Items)
-		}
-		if err := database.Update(func(transaction *bolt.Tx) error {
-			itemBucket := transaction.Bucket(playlistItemsBucket).Bucket(key)
-			for position := start; position < end; position++ {
-				definition.Items[position].Position = position
-				definition.Items[position].TrackID = ""
-				value, err := json.Marshal(definition.Items[position])
-				if err != nil {
-					return err
-				}
-				if err := itemBucket.Put(playlistPositionKey(position), value); err != nil {
-					return err
-				}
+	return key, nil
+}
+
+func appendPlaylistItemBatch(database *bolt.DB, key []byte, batch []playlistItem, start int) error {
+	return database.Update(func(transaction *bolt.Tx) error {
+		itemBucket := transaction.Bucket(playlistItemsBucket).Bucket(key)
+		for index := range batch {
+			position := start + index
+			batch[index].Position = position
+			batch[index].TrackID = ""
+			value, err := json.Marshal(batch[index])
+			if err != nil {
+				return err
 			}
-			return nil
-		}); err != nil {
-			return err
+			if err := itemBucket.Put(playlistPositionKey(position), value); err != nil {
+				return err
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 func loadPlaylistMetadata(database *bolt.DB) (playlistStore, error) {

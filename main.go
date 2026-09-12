@@ -2050,6 +2050,60 @@ func (s *server) storePlaylistDefinitions(input playlistImport) (int, error) {
 	return count, err
 }
 
+func (s *server) storeRemoteFPLDefinitions(accessToken string, entry remoteEntry, sources []string, playlistName string) (int, error) {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	keys := make([][]byte, 0, len(sources))
+	for _, source := range sources {
+		definition, err := normalizePlaylistDefinition(playlist{
+			Source: source,
+			URI:    "dropbox:" + entry.ID,
+			Name:   playlistName,
+		})
+		if err != nil {
+			return 0, err
+		}
+		key, err := beginPlaylistDefinition(s.playlists, definition)
+		if err != nil {
+			return 0, err
+		}
+		keys = append(keys, key)
+	}
+	batch := make([]playlistItem, 0, playlistBatchSize)
+	start := 0
+	flush := func() error {
+		for _, key := range keys {
+			if err := appendPlaylistItemBatch(s.playlists, key, batch, start); err != nil {
+				return err
+			}
+		}
+		start += len(batch)
+		batch = batch[:0]
+		return nil
+	}
+	itemCount, err := streamRemoteFPLPlaylist(s.ctx, accessToken, entry, func(item playlistItem) error {
+		batch = append(batch, item)
+		if len(batch) == cap(batch) {
+			return flush()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if len(batch) > 0 {
+		if err := flush(); err != nil {
+			return 0, err
+		}
+	}
+	if err := s.playlists.Update(func(transaction *bolt.Tx) error {
+		return transaction.Bucket(playlistMetaBucket).Put(playlistFinalizedKey, []byte{0})
+	}); err != nil {
+		return 0, err
+	}
+	return itemCount, nil
+}
+
 func (s *server) indexPlaylists(w http.ResponseWriter, r *http.Request) {
 	if !s.indexerAuthenticated(r) {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
@@ -2321,6 +2375,19 @@ func (s *server) scanDropboxPlaylistIndexes(accessToken string, checkpoint *play
 	}
 }
 
+func (s *server) advancePlaylistSourceCandidate(checkpoint *playlistSourceScanCheckpoint, status *playlistSourceScanStatus, entryIndex, playlistCount, trackCount int) error {
+	checkpoint.Candidates++
+	checkpoint.Playlists += playlistCount
+	checkpoint.Tracks += trackCount
+	checkpoint.EntryOffset = entryIndex + 1
+	if err := savePlaylistSourceScanCheckpoint(s.playlists, *checkpoint); err != nil {
+		return err
+	}
+	*status = playlistSourceScanStatusFromCheckpoint(*checkpoint)
+	s.setSourceScanStatus(*status)
+	return nil
+}
+
 func (s *server) scanDropboxPlaylistFiles(accessToken string, checkpoint *playlistSourceScanCheckpoint, status *playlistSourceScanStatus) error {
 	playlistNames := map[string]map[string]string{}
 	for {
@@ -2336,17 +2403,15 @@ func (s *server) scanDropboxPlaylistFiles(accessToken string, checkpoint *playli
 			if len(sources) == 0 {
 				continue
 			}
-			var items []playlistItem
 			extension := strings.ToLower(path.Ext(entry.Name))
 			playlistName := entry.Name
 			if extension == ".fpl" || extension == ".fplite" {
-				items, err = parseRemoteFPLPlaylist(s.ctx, accessToken, entry)
 				directory := strings.ToLower(path.Dir(strings.ReplaceAll(entry.PathDisplay, "\\", "/")))
 				indexEntry, found, indexErr := loadDropboxPlaylistIndex(s.playlists, directory)
 				if indexErr != nil {
 					return indexErr
 				}
-				if found && err == nil {
+				if found {
 					names, loaded := playlistNames[directory]
 					if !loaded {
 						var indexContent []byte
@@ -2360,13 +2425,23 @@ func (s *server) scanDropboxPlaylistFiles(accessToken string, checkpoint *playli
 						playlistName = indexedName
 					}
 				}
-			} else {
-				var content []byte
-				content, err = downloadDropboxFile(s.ctx, accessToken, entry.ID)
-				if err == nil {
-					items, err = parsePlaylistItems(entry, content)
+				if err != nil {
+					return fmt.Errorf("%s: %w", entry.PathDisplay, err)
 				}
+				itemCount, err := s.storeRemoteFPLDefinitions(accessToken, entry, sources, playlistName)
+				if err != nil {
+					return fmt.Errorf("%s: %w", entry.PathDisplay, err)
+				}
+				if err := s.advancePlaylistSourceCandidate(checkpoint, status, entryIndex, len(sources), itemCount*len(sources)); err != nil {
+					return err
+				}
+				continue
 			}
+			content, err := downloadDropboxFile(s.ctx, accessToken, entry.ID)
+			if err != nil {
+				return fmt.Errorf("%s: %w", entry.PathDisplay, err)
+			}
+			items, err := parsePlaylistItems(entry, content)
 			if err != nil {
 				return fmt.Errorf("%s: %w", entry.PathDisplay, err)
 			}
@@ -2382,15 +2457,9 @@ func (s *server) scanDropboxPlaylistFiles(accessToken string, checkpoint *playli
 			if _, err := s.storePlaylistDefinitions(definitions); err != nil {
 				return err
 			}
-			checkpoint.Candidates++
-			checkpoint.Playlists += len(definitions.Playlists)
-			checkpoint.Tracks += len(items) * len(definitions.Playlists)
-			checkpoint.EntryOffset = entryIndex + 1
-			if err := savePlaylistSourceScanCheckpoint(s.playlists, *checkpoint); err != nil {
+			if err := s.advancePlaylistSourceCandidate(checkpoint, status, entryIndex, len(definitions.Playlists), len(items)*len(definitions.Playlists)); err != nil {
 				return err
 			}
-			*status = playlistSourceScanStatusFromCheckpoint(*checkpoint)
-			s.setSourceScanStatus(*status)
 		}
 		checkpoint.Pages++
 		checkpoint.Cursor = page.Cursor
@@ -2656,9 +2725,9 @@ func parseFPLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 	return items, nil
 }
 
-func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry) ([]playlistItem, error) {
+func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry, consume func(playlistItem) error) (int, error) {
 	if entry.Size < 24 {
-		return nil, fmt.Errorf("truncated FPL header")
+		return 0, fmt.Errorf("truncated FPL header")
 	}
 	headerEnd := entry.Size - 1
 	if headerEnd > 255 {
@@ -2666,7 +2735,7 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	}
 	header, err := downloadDropboxRange(ctx, token, entry.ID, 0, headerEnd)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	stringStart := int64(20)
 	stringTableSize := int64(0)
@@ -2674,39 +2743,39 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 	case bytes.Equal(header[:len(legacyFPLMagic)], legacyFPLMagic):
 		payloadOffset := bytes.Index(header[len(legacyFPLMagic):], legacyFPLPayloadMagic)
 		if payloadOffset < 0 {
-			return nil, fmt.Errorf("missing FPL payload signature")
+			return 0, fmt.Errorf("missing FPL payload signature")
 		}
 		payloadOffset += len(legacyFPLMagic)
 		sizeOffset := payloadOffset + len(legacyFPLPayloadMagic)
 		if sizeOffset+4 > len(header) {
-			return nil, fmt.Errorf("truncated FPL payload header")
+			return 0, fmt.Errorf("truncated FPL payload header")
 		}
 		stringStart = int64(sizeOffset + 4)
 		stringTableSize = int64(binary.LittleEndian.Uint32(header[sizeOffset : sizeOffset+4]))
 		if stringStart+4 == entry.Size && stringTableSize == 0 && bytes.Equal(header[stringStart:stringStart+4], make([]byte, 4)) {
-			return []playlistItem{}, nil
+			return 0, nil
 		}
 	case bytes.Equal(header[:len(fplMagic)], fplMagic):
 		stringTableSize = int64(binary.LittleEndian.Uint32(header[16:20]))
 	default:
-		return nil, fmt.Errorf("unsupported FPL signature")
+		return 0, fmt.Errorf("unsupported FPL signature")
 	}
 	stringEnd := stringStart + stringTableSize
 	if stringEnd+4 > entry.Size {
-		return nil, fmt.Errorf("invalid FPL string table")
+		return 0, fmt.Errorf("invalid FPL string table")
 	}
 	countBytes, err := downloadDropboxRange(ctx, token, entry.ID, stringEnd, stringEnd+3)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	trackCount := int64(binary.LittleEndian.Uint32(countBytes))
 	recordStart := stringEnd + 4
 	recordBytes := entry.Size - recordStart
 	if trackCount > recordBytes/68 {
-		return nil, fmt.Errorf("invalid FPL track count")
+		return 0, fmt.Errorf("invalid FPL track count")
 	}
 	if trackCount == 0 {
-		return []playlistItem{}, nil
+		return 0, nil
 	}
 	fileOffsets := make([]uint32, 0, int(trackCount))
 	err = func() error {
@@ -2744,7 +2813,7 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 		return nil
 	}()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	orderedOffsets := append([]uint32(nil), fileOffsets...)
 	sort.Slice(orderedOffsets, func(i, j int) bool { return orderedOffsets[i] < orderedOffsets[j] })
@@ -2783,22 +2852,23 @@ func parseRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntry
 			return nil
 		}()
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 	}
-	items := make([]playlistItem, 0, len(fileOffsets))
 	for index, offset := range fileOffsets {
 		reference, found := pathsByOffset[offset]
 		if !found {
-			return nil, fmt.Errorf("missing FPL path %d", offset)
+			return 0, fmt.Errorf("missing FPL path %d", offset)
 		}
-		item, err := playlistItemFromReference(entry, reference, "", len(items))
+		item, err := playlistItemFromReference(entry, reference, "", index)
 		if err != nil {
-			return nil, fmt.Errorf("FPL track %d: %w", index, err)
+			return 0, fmt.Errorf("FPL track %d: %w", index, err)
 		}
-		items = append(items, item)
+		if err := consume(item); err != nil {
+			return 0, err
+		}
 	}
-	return items, nil
+	return len(fileOffsets), nil
 }
 
 func parsePlaylistIndex(content []byte) (map[string]string, error) {

@@ -414,15 +414,34 @@ func playlistTupleIndexValue(item playlistItem) string {
 	return artist + "\x00" + album + "\x00" + track
 }
 
-func playlistPathIdentity(value string) string {
+func decodedPlaylistPath(value string) string {
 	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	decodedFromURL := false
 	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Path != "" {
-		if decoded, decodeErr := url.PathUnescape(parsed.Path); decodeErr == nil {
+		if decoded, decodeErr := url.PathUnescape(parsed.EscapedPath()); decodeErr == nil {
+			value = decoded
+			decodedFromURL = true
+		}
+	}
+	if !decodedFromURL {
+		if decoded, err := url.PathUnescape(value); err == nil {
 			value = decoded
 		}
 	}
-	value = strings.SplitN(strings.SplitN(value, "?", 2)[0], "#", 2)[0]
+	return strings.SplitN(strings.SplitN(value, "?", 2)[0], "#", 2)[0]
+}
+
+func playlistPathComponents(value string) []string {
+	value = decodedPlaylistPath(value)
 	parts := strings.Split(strings.Trim(value, "/"), "/")
+	if len(parts) > 0 && len(parts[0]) == 2 && parts[0][1] == ':' {
+		parts = parts[1:]
+	}
+	return parts
+}
+
+func playlistPathIdentity(value string) string {
+	parts := playlistPathComponents(value)
 	if len(parts) < 3 {
 		return ""
 	}
@@ -670,6 +689,7 @@ func savePlaylistSourceScanCheckpoint(database *bolt.DB, checkpoint playlistSour
 func playlistSourceScanStatusFromCheckpoint(checkpoint playlistSourceScanCheckpoint) playlistSourceScanStatus {
 	return playlistSourceScanStatus{
 		Running:    true,
+		Phase:      checkpoint.Phase,
 		Pages:      checkpoint.Pages,
 		Candidates: checkpoint.Candidates,
 		Playlists:  checkpoint.Playlists,
@@ -875,6 +895,7 @@ type playlistImportStatus struct {
 type playlistSourceScanStatus struct {
 	Running    bool   `json:"running"`
 	Complete   bool   `json:"complete"`
+	Phase      string `json:"phase,omitempty"`
 	Pages      int    `json:"pages"`
 	Candidates int    `json:"candidates"`
 	Playlists  int    `json:"playlists"`
@@ -2800,17 +2821,11 @@ func playlistItemFromReference(entry remoteEntry, reference, label string, posit
 	if reference == "" {
 		return playlistItem{}, fmt.Errorf("empty playlist path")
 	}
-	resolved := reference
-	if parsed, err := url.Parse(reference); err == nil && parsed.Scheme != "" {
-		if decoded, decodeErr := url.PathUnescape(parsed.Path); decodeErr == nil && decoded != "" {
-			resolved = decoded
-		}
-	}
-	resolved = strings.ReplaceAll(resolved, "\\", "/")
+	resolved := decodedPlaylistPath(reference)
 	if !strings.HasPrefix(resolved, "/") && !(len(resolved) > 1 && resolved[1] == ':') && !strings.Contains(resolved, "://") {
 		resolved = path.Join(path.Dir(entry.PathDisplay), resolved)
 	}
-	clean := strings.TrimSpace(strings.SplitN(strings.SplitN(resolved, "?", 2)[0], "#", 2)[0])
+	clean := strings.TrimSpace(resolved)
 	base := path.Base(clean)
 	trackName := strings.TrimSpace(strings.TrimSuffix(base, path.Ext(base)))
 	if trackName == "" {
@@ -2819,7 +2834,7 @@ func playlistItemFromReference(entry remoteEntry, reference, label string, posit
 	if trackName == "" {
 		return playlistItem{}, fmt.Errorf("playlist path %q has no track name", reference)
 	}
-	parts := strings.Split(strings.Trim(clean, "/"), "/")
+	parts := playlistPathComponents(clean)
 	artist, album := "", ""
 	if len(parts) >= 2 {
 		album = strings.TrimSpace(parts[len(parts)-2])
@@ -3025,16 +3040,11 @@ func remotePathMayContain(item playlistItem, evidence remotePathEvidence) bool {
 }
 
 func normalizePlaylistPath(value string) string {
-	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	value = decodedPlaylistPath(value)
 	if value == "" {
 		return ""
 	}
-	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" && parsed.Path != "" {
-		if decoded, decodeErr := url.PathUnescape(parsed.Path); decodeErr == nil {
-			value = decoded
-		}
-	}
-	value = strings.ToLower(strings.SplitN(strings.SplitN(value, "?", 2)[0], "#", 2)[0])
+	value = strings.ToLower(value)
 	if audio := strings.Index(value, "/audio/"); audio >= 0 {
 		value = value[audio:]
 	}

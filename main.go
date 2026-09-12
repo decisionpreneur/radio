@@ -2828,6 +2828,9 @@ func streamRemoteFPLPlaylist(ctx context.Context, token string, entry remoteEntr
 			keyBytes := int64(0)
 			if legacyV14 {
 				recordSize = 12
+				if binary.LittleEndian.Uint32(fixed[:4])&128 != 0 {
+					recordSize += 8
+				}
 				if len(fixed) == 76 {
 					keysDex := binary.LittleEndian.Uint32(fixed[52:56])
 					keySecond := binary.LittleEndian.Uint32(fixed[60:64])

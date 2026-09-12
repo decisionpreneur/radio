@@ -40,7 +40,8 @@ spec:
           env:
             - {name: LISTEN_ADDR, value: ":8080"}
             - {name: DATA_PATH, value: "/data/radio.db"}
-            - {name: PLAYLIST_PATH, value: "/data/playlists.db"}
+            - {name: PLAYLIST_PATH, value: "/data/playlists.bolt"}
+            - {name: LEGACY_PLAYLIST_PATH, value: "/data/playlists.db"}
             - {name: MISSING_DROPBOX_PATH, value: "/audio/missing.yml"}
             - {name: PUBLIC_URL, value: {{ .Values.publicURL | quote }}}
             - {name: DROPBOX_ROOT, value: {{ .Values.dropboxRoot | quote }}}

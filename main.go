@@ -151,6 +151,8 @@ var playlistTupleIndexBucket = []byte("tuple-index")
 var playlistTrackIndexBucket = []byte("track-index")
 var playlistArtistRuleIndexBucket = []byte("artist-rule-index")
 var playlistPathlessIndexBucket = []byte("pathless-index")
+var playlistPathlessTrigramIndexBucket = []byte("pathless-trigram-index")
+var playlistPathlessFallbackIndexBucket = []byte("pathless-fallback-index")
 var playlistFinalizedKey = []byte("finalized")
 var playlistMigrationKey = []byte("legacy-migration-complete")
 var playlistIndexVersionKey = []byte("index-version")
@@ -158,7 +160,7 @@ var playlistSourceScanCompleteKey = []byte("source-scan-complete")
 var playlistSourceScanStateKey = []byte("source-scan-state")
 var playlistSourceScanIndexesBucket = []byte("source-scan-indexes")
 
-const playlistIndexVersion byte = 2
+const playlistIndexVersion byte = 3
 
 func openPlaylistDatabase(databasePath, legacyPath string) (*bolt.DB, error) {
 	database, err := bolt.Open(databasePath, 0o600, &bolt.Options{FreelistType: bolt.FreelistMapType})
@@ -166,7 +168,7 @@ func openPlaylistDatabase(databasePath, legacyPath string) (*bolt.DB, error) {
 		return nil, err
 	}
 	if err := database.Update(func(transaction *bolt.Tx) error {
-		for _, name := range [][]byte{playlistMetaBucket, playlistDefinitionsBucket, playlistItemsBucket, playlistPathIndexBucket, playlistPathIdentityIndexBucket, playlistTupleIndexBucket, playlistTrackIndexBucket, playlistArtistRuleIndexBucket, playlistPathlessIndexBucket} {
+		for _, name := range [][]byte{playlistMetaBucket, playlistDefinitionsBucket, playlistItemsBucket, playlistPathIndexBucket, playlistPathIdentityIndexBucket, playlistTupleIndexBucket, playlistTrackIndexBucket, playlistArtistRuleIndexBucket, playlistPathlessIndexBucket, playlistPathlessTrigramIndexBucket, playlistPathlessFallbackIndexBucket} {
 			if _, err := transaction.CreateBucketIfNotExists(name); err != nil {
 				return err
 			}
@@ -450,6 +452,23 @@ func playlistTrackIndexValues(item playlistItem) []string {
 	return values
 }
 
+func uniqueTrigrams(value string) []string {
+	if len(value) < 3 {
+		return nil
+	}
+	values := make([]string, 0, len(value)-2)
+	seen := map[string]struct{}{}
+	for start := 0; start+3 <= len(value); start++ {
+		trigram := value[start : start+3]
+		if _, exists := seen[trigram]; exists {
+			continue
+		}
+		seen[trigram] = struct{}{}
+		values = append(values, trigram)
+	}
+	return values
+}
+
 func writePlaylistItemIndexes(transaction *bolt.Tx, definitionKey []byte, item playlistItem, remove bool) error {
 	reference := playlistRowReference(definitionKey, item.Position)
 	operation := func(bucket *bolt.Bucket, key []byte) error {
@@ -467,8 +486,22 @@ func writePlaylistItemIndexes(transaction *bolt.Tx, definitionKey []byte, item p
 				return err
 			}
 		}
-	} else if err := operation(transaction.Bucket(playlistPathlessIndexBucket), reference); err != nil {
-		return err
+	} else {
+		if err := operation(transaction.Bucket(playlistPathlessIndexBucket), reference); err != nil {
+			return err
+		}
+		trackName := normalizeName(item.Track)
+		if item.AllTracksByArtist || len(trackName) < 3 {
+			if err := operation(transaction.Bucket(playlistPathlessFallbackIndexBucket), reference); err != nil {
+				return err
+			}
+		} else {
+			for _, trigram := range uniqueTrigrams(trackName) {
+				if err := operation(transaction.Bucket(playlistPathlessTrigramIndexBucket), playlistIndexedRowKey(trigram, reference)); err != nil {
+					return err
+				}
+			}
+		}
 	}
 	if tuple := playlistTupleIndexValue(item); tuple != "" {
 		if err := operation(transaction.Bucket(playlistTupleIndexBucket), playlistIndexedRowKey(tuple, reference)); err != nil {
@@ -684,7 +717,7 @@ func completePlaylistSourceScan(database *bolt.DB) error {
 }
 
 func playlistIndexBuckets() [][]byte {
-	return [][]byte{playlistPathIndexBucket, playlistPathIdentityIndexBucket, playlistTupleIndexBucket, playlistTrackIndexBucket, playlistArtistRuleIndexBucket, playlistPathlessIndexBucket}
+	return [][]byte{playlistPathIndexBucket, playlistPathIdentityIndexBucket, playlistTupleIndexBucket, playlistTrackIndexBucket, playlistArtistRuleIndexBucket, playlistPathlessIndexBucket, playlistPathlessTrigramIndexBucket, playlistPathlessFallbackIndexBucket}
 }
 
 func resetPlaylistIndexes(transaction *bolt.Tx) error {
@@ -1543,6 +1576,12 @@ func visitPlaylistIndexValue(transaction *bolt.Tx, bucketName []byte, value stri
 	return nil
 }
 
+func visitPlaylistReferenceBucket(transaction *bolt.Tx, bucketName []byte, seen map[string]struct{}, visitor func(playlist, playlistItem) error) error {
+	return transaction.Bucket(bucketName).ForEach(func(reference, _ []byte) error {
+		return visitPlaylistRowReference(transaction, reference, seen, visitor)
+	})
+}
+
 func playlistTrackLookupValues(indexed track) []string {
 	values := make([]string, 0, 4)
 	seen := map[string]struct{}{}
@@ -1584,9 +1623,22 @@ func (s *server) visitIndexedPlaylistRows(indexed track, includePathless bool, v
 			}
 		}
 		if includePathless {
-			if err := transaction.Bucket(playlistPathlessIndexBucket).ForEach(func(reference, _ []byte) error {
-				return visitPlaylistRowReference(transaction, reference, seen, visitor)
-			}); err != nil {
+			indexedTrack := normalizeName(indexed.Title)
+			if len(indexedTrack) < 3 {
+				return visitPlaylistReferenceBucket(transaction, playlistPathlessIndexBucket, seen, visitor)
+			}
+			trigrams := map[string]struct{}{}
+			for _, value := range []string{normalizeName(indexed.Path), indexedTrack} {
+				for _, trigram := range uniqueTrigrams(value) {
+					trigrams[trigram] = struct{}{}
+				}
+			}
+			for trigram := range trigrams {
+				if err := visitPlaylistIndexValue(transaction, playlistPathlessTrigramIndexBucket, trigram, seen, visitor); err != nil {
+					return err
+				}
+			}
+			if err := visitPlaylistReferenceBucket(transaction, playlistPathlessFallbackIndexBucket, seen, visitor); err != nil {
 				return err
 			}
 		}
@@ -2882,13 +2934,7 @@ func (evidence *remotePathEvidence) add(entry remoteEntry) {
 	for _, trackName := range playlistTrackIndexValues(playlistItem{Track: stem}) {
 		evidence.tracks[trackName] = append(evidence.tracks[trackName], pathIndex)
 	}
-	seenTrigrams := map[string]struct{}{}
-	for start := 0; start+3 <= len(pathName); start++ {
-		trigram := pathName[start : start+3]
-		if _, exists := seenTrigrams[trigram]; exists {
-			continue
-		}
-		seenTrigrams[trigram] = struct{}{}
+	for _, trigram := range uniqueTrigrams(pathName) {
 		evidence.trigrams[trigram] = append(evidence.trigrams[trigram], pathIndex)
 	}
 }
@@ -2898,8 +2944,8 @@ func (evidence remotePathEvidence) pathCandidates(pattern string) []int {
 		return nil
 	}
 	var candidates []int
-	for start := 0; start+3 <= len(pattern); start++ {
-		rows := evidence.trigrams[pattern[start:start+3]]
+	for _, trigram := range uniqueTrigrams(pattern) {
+		rows := evidence.trigrams[trigram]
 		if len(rows) == 0 {
 			return []int{}
 		}

@@ -964,12 +964,13 @@ type playlistSourceScanStatus struct {
 }
 
 type playlistSourceScanCheckpoint struct {
-	Phase      string `json:"phase"`
-	Cursor     string `json:"cursor,omitempty"`
-	Pages      int    `json:"pages"`
-	Candidates int    `json:"candidates"`
-	Playlists  int    `json:"playlists"`
-	Tracks     int    `json:"tracks"`
+	Phase       string `json:"phase"`
+	Cursor      string `json:"cursor,omitempty"`
+	EntryOffset int    `json:"entryOffset,omitempty"`
+	Pages       int    `json:"pages"`
+	Candidates  int    `json:"candidates"`
+	Playlists   int    `json:"playlists"`
+	Tracks      int    `json:"tracks"`
 }
 
 type listFolderResponse struct {
@@ -2327,7 +2328,10 @@ func (s *server) scanDropboxPlaylistFiles(accessToken string, checkpoint *playli
 		if err != nil {
 			return err
 		}
-		for _, entry := range page.Entries {
+		for entryIndex, entry := range page.Entries {
+			if entryIndex < checkpoint.EntryOffset {
+				continue
+			}
 			sources := playlistSourcesForPath(entry)
 			if len(sources) == 0 {
 				continue
@@ -2381,11 +2385,16 @@ func (s *server) scanDropboxPlaylistFiles(accessToken string, checkpoint *playli
 			checkpoint.Candidates++
 			checkpoint.Playlists += len(definitions.Playlists)
 			checkpoint.Tracks += len(items) * len(definitions.Playlists)
+			checkpoint.EntryOffset = entryIndex + 1
+			if err := savePlaylistSourceScanCheckpoint(s.playlists, *checkpoint); err != nil {
+				return err
+			}
 			*status = playlistSourceScanStatusFromCheckpoint(*checkpoint)
 			s.setSourceScanStatus(*status)
 		}
 		checkpoint.Pages++
 		checkpoint.Cursor = page.Cursor
+		checkpoint.EntryOffset = 0
 		if err := savePlaylistSourceScanCheckpoint(s.playlists, *checkpoint); err != nil {
 			return err
 		}

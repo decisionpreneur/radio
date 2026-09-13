@@ -2532,11 +2532,15 @@ func playlistSourcesForPath(entry remoteEntry) []string {
 	parentName := path.Base(path.Dir(lower))
 	playlistNamed := strings.Contains(path.Base(lower), "playlist") || parentName == "playlists" || strings.HasPrefix(parentName, "playlists-")
 	foobarNamed := strings.Contains(lower, "foobar")
-	result := make([]string, 0, 2)
+	lastFMNamed := strings.Contains(path.Base(lower), "lastfm") || strings.Contains(path.Base(lower), "lastfrm") || strings.Contains(parentName, "lastfm") || strings.Contains(parentName, "lastfrm")
+	result := make([]string, 0, 3)
+	if lastFMNamed && (knownExtension || (playlistNamed && probeExtension)) {
+		result = append(result, "Holdy_ Last.fm")
+	}
 	if underAudioMusic && (knownExtension || (playlistNamed && probeExtension)) {
 		result = append(result, "Dropbox audio/music*")
 	}
-	if knownExtension || (foobarNamed && playlistNamed && probeExtension) {
+	if foobarNamed && (knownExtension || (playlistNamed && probeExtension)) {
 		result = append(result, "Foobar2000 legacy")
 	}
 	return result
@@ -2646,10 +2650,13 @@ func parsePLSPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 }
 
 func parseXMLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error) {
+	content = bytes.ReplaceAll(content, []byte("<0"), []byte("&lt;0"))
 	decoder := xml.NewDecoder(bytes.NewReader(content))
 	items := []playlistItem{}
-	captureLocation := false
-	var location strings.Builder
+	inTrack := false
+	hasReference := false
+	capture := ""
+	var title, creator, album, location strings.Builder
 	for {
 		token, err := decoder.Token()
 		if errors.Is(err, io.EOF) {
@@ -2661,9 +2668,16 @@ func parseXMLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 		switch value := token.(type) {
 		case xml.StartElement:
 			name := strings.ToLower(value.Name.Local)
-			if name == "location" {
-				captureLocation = true
+			if name == "track" {
+				inTrack = true
+				hasReference = false
+				capture = ""
+				title.Reset()
+				creator.Reset()
+				album.Reset()
 				location.Reset()
+			} else if inTrack && (name == "title" || name == "creator" || name == "album" || name == "location") {
+				capture = name
 			}
 			for _, attribute := range value.Attr {
 				attributeName := strings.ToLower(attribute.Name.Local)
@@ -2675,19 +2689,50 @@ func parseXMLPlaylist(entry remoteEntry, content []byte) ([]playlistItem, error)
 					return nil, err
 				}
 				items = append(items, item)
+				if inTrack {
+					hasReference = true
+				}
 			}
 		case xml.CharData:
-			if captureLocation {
+			switch capture {
+			case "title":
+				title.Write([]byte(value))
+			case "creator":
+				creator.Write([]byte(value))
+			case "album":
+				album.Write([]byte(value))
+			case "location":
 				location.Write([]byte(value))
 			}
 		case xml.EndElement:
-			if captureLocation && strings.EqualFold(value.Name.Local, "location") {
+			name := strings.ToLower(value.Name.Local)
+			if inTrack && name == "location" {
 				item, err := playlistItemFromReference(entry, location.String(), "", len(items))
 				if err != nil {
 					return nil, err
 				}
 				items = append(items, item)
-				captureLocation = false
+				hasReference = true
+			}
+			if capture == name {
+				capture = ""
+			}
+			if inTrack && name == "track" {
+				if !hasReference {
+					trackName := strings.TrimSpace(title.String())
+					if trackName == "" {
+						return nil, fmt.Errorf("XML track %d has no title", len(items))
+					}
+					items = append(items, playlistItem{
+						URI:      fmt.Sprintf("dropbox:%s#%d", entry.ID, len(items)),
+						Artist:   strings.TrimSpace(creator.String()),
+						Album:    strings.TrimSpace(album.String()),
+						Track:    trackName,
+						Position: len(items),
+					})
+				}
+				inTrack = false
+				capture = ""
 			}
 		}
 	}
